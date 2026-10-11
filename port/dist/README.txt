@@ -39,6 +39,9 @@ button or the MENU button (top left) on Android.
   Screen       Original 4:3, Widescreen 16:9 / 16:10, Ultrawide 21:9, or Stretch.
                The widescreen modes show more of the level on the left and right
                instead of stretching the picture.
+  Top (1 player)  In a 1-player game the top of the screen shows the floor above
+               Robo (follows his camera) instead of the "press 2P start" panel.
+               Guards there only appear once the game puts them on screen.
   Scaling      Sharp pixels or smooth.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
                Inverted.

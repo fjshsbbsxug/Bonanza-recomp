@@ -38,7 +38,7 @@ static const uint32_t skin_presets[] = {
 #define PANEL_W (MENU_W - 24)
 #define PANEL_H (MENU_H - 16)
 #define ROW_Y0 34
-#define ROW_H 13
+#define ROW_H 12
 #define VALUE_X 150
 
 #define C_TEXT   0xFFF2F0F7u
@@ -99,11 +99,11 @@ static void slider(uint32_t *buf, int x, int y, int v, int lo, int hi, int selec
 /* ------------------------------------------------------------ items */
 
 enum {
-    IT_RESUME, IT_SCREEN, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
+    IT_RESUME, IT_SCREEN, IT_UPPER, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
     IT_CHARS, IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
 };
 static const char *item_label[IT_COUNT] = {
-    "Resume", "Screen", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
+    "Resume", "Screen", "Top (1 player)", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
     "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
@@ -180,6 +180,7 @@ static int adjust_main(int item, int dir)
     switch (item) {
     case IT_SCREEN: settings.screen = (settings.screen + dir + SCREEN_COUNT) % SCREEN_COUNT; break;
     case IT_SCALING: settings.smooth = !settings.smooth; break;
+    case IT_UPPER: settings.show_2p_panel = !settings.show_2p_panel; break;
     case IT_COLORS: settings.preset = (settings.preset + dir + PRESET_COUNT) % PRESET_COUNT; break;
     case IT_BRIGHT: settings.brightness = clampi(settings.brightness + dir * 5, -100, 100); break;
     case IT_CONTRAST: settings.contrast = clampi(settings.contrast + dir * 5, -100, 100); break;
@@ -395,6 +396,9 @@ void menu_draw(uint32_t *buf)
                 break;
             case IT_SCALING:
                 text(buf, VALUE_X - 16, y, settings.smooth ? "< Smooth >" : "< Sharp >", C_TEXT);
+                break;
+            case IT_UPPER:
+                text(buf, VALUE_X - 16, y, settings.show_2p_panel ? "< 2P panel >" : "< Room above >", C_TEXT);
                 break;
             case IT_COLORS:
                 snprintf(t, sizeof(t), "< %s >", settings_preset_name(settings.preset));

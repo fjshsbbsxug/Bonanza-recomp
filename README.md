@@ -65,8 +65,11 @@ builder/      the HTML builder page
   (MinGW build under Wine), ARM64 and ARMv7.
 * **Widescreen and custom colours.** An in-game menu (Esc, gamepad Back, or MENU on
   touch screens) and the builder's *Screen & colors* step offer:
-  * 4:3, 16:9, 16:10 and 21:9 output. Widescreen draws more of the level from video
-    memory instead of stretching; a few HUD tiles can wrap into the corners.
+  * 4:3, 16:9, 16:10 and 21:9 output. Widescreen draws more of the room from video
+    memory instead of stretching (the game keeps the whole 512-pixel-wide room
+    there); the city backdrop is repeated and the HUD strips extend their edges.
+  * In a 1-player game the top of the screen shows the floor above Robo, following
+    his camera, instead of the "press 2P start" panel (option: Top (1 player)).
   * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
     plus brightness, contrast, saturation and hue.
   * Player characters: separate shirt, pants and skin-tone colours for Robo and Mobo.

@@ -222,6 +222,7 @@ int settings_set(const char *key, const char *value)
         return 0;
     }
     if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
+    if (!strcmp(key, "upper_view")) { settings.show_2p_panel = !strcmp(value, "panel"); return 1; }
     if (!strcmp(key, "brightness")) { settings.brightness = clampi(atoi(value), -100, 100); return 1; }
     if (!strcmp(key, "contrast")) { settings.contrast = clampi(atoi(value), -100, 100); return 1; }
     if (!strcmp(key, "saturation")) { settings.saturation = clampi(atoi(value), -100, 100); return 1; }
@@ -285,6 +286,8 @@ int settings_save(const char *path)
     fprintf(f, "# screen: original, 16:9, 16:10, 21:9, stretch\n");
     fprintf(f, "screen = %s\n", screen_keys[settings.screen]);
     fprintf(f, "smooth = %d\n", settings.smooth);
+    fprintf(f, "# top of the screen in a 1-player game: room (the floor above) or panel (original)\n");
+    fprintf(f, "upper_view = %s\n", settings.show_2p_panel ? "panel" : "room");
     fprintf(f, "# colors: original, vivid, soft, arcade, grayscale, sepia, night, gameboy, inverted\n");
     fprintf(f, "colors = %s\n", preset_keys[settings.preset]);
     fprintf(f, "brightness = %d\ncontrast = %d\nsaturation = %d\nhue = %d\n",

@@ -261,6 +261,9 @@ static inline int tile_pixel(uint16_t entry, int px, int py)
  * drawn on each side from the same VRAM. This only affects the picture, never the
  * emulated machine state. Line buffers are indexed with x + margin. */
 
+static int ovr_hs = -1, ovr_vs = -1;   /* scroll override (room-above view) */
+static int wrap_margins;               /* widescreen: repeat the 4:3 picture's columns (static backdrops) */
+
 static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
 {
     static const int sizes[4] = {32, 64, 32, 128};
@@ -276,8 +279,9 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
     hsa += plane_b ? 2 : 0;
     int hs = ((vdp.vram[hsa & 0xFFFF] << 8) | vdp.vram[(hsa + 1) & 0xFFFF]) & 0x3FF;
     int column_vs = vdp.reg[11] & 4;
+    if (ovr_hs >= 0) { hs = ovr_hs; column_vs = 0; }
     int wmask = pw * 8 - 1, hmask = ph * 8 - 1;
-    int vs = vdp.vsram[plane_b];
+    int vs = ovr_vs >= 0 ? ovr_vs : vdp.vsram[plane_b];
     int last_tile = -1, last_py = -1;
     uint16_t entry = 0;
     for (int x = -m; x < width + m; x++) {
@@ -286,7 +290,10 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
             if (col > (width >> 4) - 1) col = (width >> 4) - 1;
             vs = vdp.vsram[col * 2 + plane_b];
         }
-        int px = (x - hs) & wmask;
+        int sx = x;
+        if (wrap_margins && (x < 0 || x >= width))
+            sx = ((x % width) + width) % width;
+        int px = (sx - hs) & wmask;
         int py = (y + vs) & hmask;
         int tile = px >> 3;
         if (tile != last_tile || py != last_py) {
@@ -493,6 +500,36 @@ int vdp_out_width(void)
     return vdp_width() + 2 * vdp_margin();
 }
 
+#include <stdlib.h>
+
+/* Screen layout used by the game during play: player 2's view (or, in a 1-player game,
+ * the "press 2P start" panel) on lines 7-86, the HUD, then player 1's view on lines
+ * 135-214. */
+#define VIEW_TOP_Y0 7
+#define VIEW_BOT_Y0 135
+#define VIEW_H 80
+static struct { uint32_t frame; int hsA, hsB, vsA, vsB; } bottom_view;
+
+static int line_opaque(const uint8_t *buf, int m, int width)
+{
+    for (int x = m; x < m + width; x++)
+        if (buf[x] & 0x0F)
+            return 1;
+    return 0;
+}
+
+static int line_hscroll(int y, int plane_b)
+{
+    uint32_t hsbase = (vdp.reg[13] & 0x3F) << 10, hsa;
+    switch (vdp.reg[11] & 3) {
+    case 2: hsa = hsbase + (y & ~7) * 4; break;
+    case 3: hsa = hsbase + y * 4; break;
+    default: hsa = hsbase; break;
+    }
+    hsa += plane_b ? 2 : 0;
+    return ((vdp.vram[hsa & 0xFFFF] << 8) | vdp.vram[(hsa + 1) & 0xFFFF]) & 0x3FF;
+}
+
 void vdp_render_line(int y)
 {
     int width = vdp_width();
@@ -509,8 +546,49 @@ void vdp_render_line(int y)
         return;
     }
     uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W], part[VDP_FB_W];
-    draw_plane(b, y, width, m, 1);
+    /* during play (player 1's view seen last frame) tidy up the widescreen margins:
+     * the city backdrop behind the rooms is only one screen wide, so it is repeated,
+     * and the thin HUD strips at the very top and bottom just extend their edges */
+    int playing = bottom_view.frame == md.frame || bottom_view.frame == md.frame + 1;
+    int in_top = y >= VIEW_TOP_Y0 && y < VIEW_TOP_Y0 + VIEW_H;
+    int in_view = in_top || (y >= VIEW_BOT_Y0 && y < VIEW_BOT_Y0 + VIEW_H);
+    int clamp_edges = m && playing && (y < VIEW_TOP_Y0 || y >= VIEW_BOT_Y0 + VIEW_H);
     draw_plane(a, y, width, m, 0);
+    int room_view = line_opaque(a, m, width);   /* a real room is shown on this line */
+    int room_above = 0;
+    if (in_top) {
+        /* in a 1-player game the game shows nothing in plane A here (the 2P panel) */
+        if (!room_view && !settings.show_2p_panel && bottom_view.frame == md.frame)
+            room_above = 1;
+        if (!room_view && !room_above && m && playing)
+            clamp_edges = 1;   /* original 2P panel: extend its edges */
+    } else if (y == VIEW_BOT_Y0) {
+        /* remember player 1's camera for the next frame's room-above view */
+        if (room_view) {
+            bottom_view.frame = md.frame + 1;
+            bottom_view.hsA = line_hscroll(y, 0);
+            bottom_view.hsB = line_hscroll(y, 1);
+            bottom_view.vsA = vdp.vsram[0];
+            bottom_view.vsB = vdp.vsram[1];
+        } else {
+            bottom_view.frame = 0;
+        }
+    }
+    wrap_margins = m && playing && in_view && room_view;
+    draw_plane(b, y, width, m, 1);
+    wrap_margins = 0;
+    if (room_above) {
+        /* the floor above player 1: plane rows directly above the bottom view */
+        ovr_hs = bottom_view.hsB;          /* same sky/city background as below */
+        ovr_vs = (bottom_view.vsB + VIEW_BOT_Y0 - VIEW_TOP_Y0) & 0x3FF;
+        wrap_margins = m != 0;
+        draw_plane(b, y, width, m, 1);
+        wrap_margins = 0;
+        ovr_hs = bottom_view.hsA;          /* the 80 plane rows right above player 1's view */
+        ovr_vs = (bottom_view.vsA + VIEW_BOT_Y0 - VIEW_TOP_Y0 - VIEW_H) & 0x3FF;
+        draw_plane(a, y, width, m, 0);
+        ovr_hs = ovr_vs = -1;
+    }
     /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
     if ((vdp.reg[17] & 0x9F) || (vdp.reg[18] & 0x9F)) {
         draw_window(wbuf, y, width, m, win);
@@ -519,6 +597,10 @@ void vdp_render_line(int y)
                 a[x] = wbuf[x];
     }
     draw_sprites(s, part, y, width, m);
+    if (room_above) { /* the 2P panel's sprites do not belong to the room */
+        memset(s, 0, sizeof(s));
+        memset(part, 0, sizeof(part));
+    }
     for (int x = 0; x < ow; x++) {
         int p;
         int sp = s[x], ap = a[x], bp = b[x];
@@ -530,6 +612,12 @@ void vdp_render_line(int y)
         else if (bp & 0x0F) p = bp;
         else { fb[x] = bg; continue; }
         fb[x] = pal[p & 0x3F];
+    }
+    if (clamp_edges) {
+        for (int x = 0; x < m; x++)
+            fb[x] = fb[m];
+        for (int x = m + width; x < ow; x++)
+            fb[x] = fb[m + width - 1];
     }
     for (int x = ow; x < VDP_FB_W; x++)
         fb[x] = VDP_BLACK;

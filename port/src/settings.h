@@ -26,6 +26,7 @@ enum { PART_SHIRT, PART_PANTS, PART_SKIN, PART_COUNT };
 typedef struct {
     int screen;              /* SCREEN_* */
     int smooth;              /* 1 = smooth scaling, 0 = sharp pixels */
+    int show_2p_panel;       /* 1-player game: 0 = show the room above, 1 = original 2P panel */
     int preset;              /* PRESET_* */
     int brightness;          /* -100..100 */
     int contrast;            /* -100..100 */
