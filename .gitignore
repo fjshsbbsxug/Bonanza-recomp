@@ -1,0 +1,8 @@
+# ROM images and extracted assets are not distributed
+*.md
+!README.md
+*.bin
+*.gen
+assets/
+build/
+__pycache__/
