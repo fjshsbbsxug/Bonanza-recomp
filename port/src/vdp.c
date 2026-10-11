@@ -263,6 +263,9 @@ static inline int tile_pixel(uint16_t entry, int px, int py)
 
 static int ovr_hs = -1, ovr_vs = -1;   /* scroll override (room-above view) */
 static int wrap_margins;               /* widescreen: repeat the 4:3 picture's columns (static backdrops) */
+/* Building edges for plane A (the rooms): pixels whose world x lies outside [0, clip_right)
+ * are left transparent so the city backdrop shows there instead of wrapped plane data. */
+static int clip_on, clip_camx, clip_right;
 
 static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
 {
@@ -303,6 +306,11 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
             last_py = py;
         }
         out[x + m] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
+        if (clip_on && !plane_b) {
+            int wx = clip_camx + x;
+            if (wx < 0 || wx >= clip_right)
+                out[x + m] = 0;
+        }
     }
 }
 
@@ -335,7 +343,10 @@ static void draw_window(uint8_t *out, int y, int width, int m, uint8_t *in_windo
  *   skin  = D/E
  * The analysis is done once per sprite per frame. */
 
-typedef struct { uint32_t frame; uint16_t attr; uint8_t size; int8_t ch; int8_t shirt_end, pants_end; } char_info;
+typedef struct {
+    uint32_t frame; uint16_t attr; uint8_t size; int8_t ch; int8_t shirt_end, pants_end;
+    uint32_t body[32];   /* per row: pixels belonging to the body (largest coloured blob) */
+} char_info;
 static char_info char_cache[8];
 
 static int char_of(uint16_t attr)
@@ -377,20 +388,80 @@ static const char_info *char_analyse(uint16_t attr, int hsz, int vsz, int ch)
         if (c->frame < slot->frame) slot = c;
     }
     int light = ch == CHAR_ROBO ? 9 : 0xB, dark = ch == CHAR_ROBO ? 0xA : 0xC;
-    int rows = vsz * 8, shirt_end = -1, pants_end = -1;
+    int rows = vsz * 8, shirt_end = -1, pants_end = -1, shirt_px = 0;
     for (int r = 0; r < rows; r++)
         for (int x = 0; x < hsz * 8; x++) {
             int c = sprite_index(attr, hsz, vsz, x, r);
-            if (c == light || c == dark) { shirt_end = r; break; }
+            if (c == light || c == dark) { shirt_end = r; shirt_px++; }
         }
+    if (shirt_px < 12)
+        shirt_end = -1;   /* not the body (a prop or a small piece): no pants here */
+    /* The body is the largest blob of non-black colours containing suit pixels; suit
+     * colours outside it (the muzzle flash when shooting) are left alone. */
+    memset(slot->body, 0, sizeof(slot->body));
+    {
+        static int16_t label[32][32];
+        static uint8_t stk[1024][2];
+        int w = hsz * 8, best = 0, best_n = 0, nl = 0;
+        memset(label, 0, sizeof(label));
+        for (int r = 0; r < rows; r++)
+            for (int x = 0; x < w; x++) {
+                if (label[r][x]) continue;
+                int c = sprite_index(attr, hsz, vsz, x, r);
+                if (!c || c == 8) continue;
+                int id = ++nl, n = 0, sp = 0;
+                label[r][x] = (int16_t)id;
+                stk[sp][0] = (uint8_t)r; stk[sp][1] = (uint8_t)x; sp++;
+                while (sp) {
+                    sp--;
+                    int rr = stk[sp][0], xx = stk[sp][1];
+                    int cc = sprite_index(attr, hsz, vsz, xx, rr);
+                    if (cc == light || cc == dark) n++;
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++) {
+                            int ny = rr + dy, nx = xx + dx;
+                            if (ny < 0 || ny >= rows || nx < 0 || nx >= w || label[ny][nx]) continue;
+                            int c2 = sprite_index(attr, hsz, vsz, nx, ny);
+                            if (!c2 || c2 == 8) continue;
+                            label[ny][nx] = (int16_t)id;
+                            stk[sp][0] = (uint8_t)ny; stk[sp][1] = (uint8_t)nx; sp++;
+                        }
+                }
+                if (n > best_n) { best_n = n; best = id; }
+            }
+        for (int r = 0; r < rows; r++)
+            for (int x = 0; x < w; x++)
+                if (best && label[r][x] == best)
+                    slot->body[r] |= 1u << x;
+    }
     if (shirt_end >= 0) {
+        /* pants: at most 4 rows right below the shirt, ending at the gap above the shoes
+         * (in walking frames the shoes touch the legs, so the cap keeps them black) */
         pants_end = shirt_end;
-        for (int r = shirt_end + 1; r < rows; r++) {
+        int last = shirt_end + 4 < rows - 1 ? shirt_end + 4 : rows - 1;
+        for (int r = shirt_end + 1; r <= last; r++) {
             int empty = 1;
             for (int x = 0; x < hsz * 8 && empty; x++)
                 if (sprite_index(attr, hsz, vsz, x, r)) empty = 0;
             if (empty) break;
             pants_end = r;
+        }
+    }
+    {
+        static int dump = -1;
+        if (dump < 0) dump = getenv("CHARDUMP") != NULL;
+        if (dump) {
+            fprintf(stderr, "CHAR %d %dx%d attr %04x shirt_end %d pants_end %d\n", ch, hsz, vsz, attr, shirt_end, pants_end);
+            for (int r = 0; r < rows; r++) {
+                char line[40];
+                int x;
+                for (x = 0; x < hsz * 8; x++) {
+                    int c = sprite_index(attr, hsz, vsz, x, r);
+                    line[x] = c ? "0123456789abcdef"[c] : '.';
+                }
+                line[x] = 0;
+                fprintf(stderr, "  %2d %s\n", r, line);
+            }
         }
     }
     slot->frame = md.frame + 1;
@@ -403,12 +474,13 @@ static const char_info *char_analyse(uint16_t attr, int hsz, int vsz, int ch)
 }
 
 /* returns 0 or 1 + character slot for a player pixel */
-static int char_part(int ch, int c, int row, const char_info *ci)
+static int char_part(int ch, int c, int row, int lx, const char_info *ci)
 {
     int light = ch == CHAR_ROBO ? 9 : 0xB, dark = ch == CHAR_ROBO ? 0xA : 0xC;
     int base = ch * 8 + 1;
-    if (c == light && settings.char_on[ch][PART_SHIRT]) return base + CHAR_SLOT_SHIRT;
-    if (c == dark && settings.char_on[ch][PART_SHIRT]) return base + CHAR_SLOT_SHIRT_DARK;
+    int in_body = row >= 0 && row < 32 && lx >= 0 && lx < 32 && (ci->body[row] >> lx & 1);
+    if (c == light && settings.char_on[ch][PART_SHIRT] && in_body) return base + CHAR_SLOT_SHIRT;
+    if (c == dark && settings.char_on[ch][PART_SHIRT] && in_body) return base + CHAR_SLOT_SHIRT_DARK;
     if (c == 0xD && settings.char_on[ch][PART_SKIN]) return base + CHAR_SLOT_SKIN;
     if (c == 0xE && settings.char_on[ch][PART_SKIN]) return base + CHAR_SLOT_SKIN_DARK;
     if (c == 8 && settings.char_on[ch][PART_PANTS] && row > ci->shirt_end && row <= ci->pants_end)
@@ -462,7 +534,7 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
                     uint16_t e = tile & ~0x1000;
                     out[x + m] = (uint8_t)tile_pixel(e, px, py);
                     if (ci && (out[x + m] & 0x0F))
-                        part[x + m] = (uint8_t)char_part(ch, out[x + m] & 0x0F, row, ci);
+                        part[x + m] = (uint8_t)char_part(ch, out[x + m] & 0x0F, row, cx * 8 + px, ci);
                 }
             }
         }
@@ -509,6 +581,47 @@ int vdp_out_width(void)
 #define VIEW_BOT_Y0 135
 #define VIEW_H 80
 static struct { uint32_t frame; int hsA, hsB, vsA, vsB; } bottom_view;
+/* Vertical camera position of the floor player 1 stands on. While he walks up or down
+ * stairs the camera scrolls between floors; the room-above view stays anchored to the
+ * floor he started from (those plane rows are fully drawn) instead of following the
+ * camera into rows the game has not filled yet. */
+static struct { int vs, last_vs, still; } floor_anchor = {-1, -1, 0};
+
+/* Full camera x of a view: the scroll register only has 10 bits, the game keeps the
+ * whole value at $FF1846 (player 1) / $FF184A (player 2) as a negative scroll. */
+static int view_camx(int hs_line, int ram_addr)
+{
+    int16_t ram_hs = (int16_t)((md.ram[ram_addr] << 8) | md.ram[ram_addr + 1]);
+    int cam_ram = -ram_hs;
+    int cam = (-hs_line) & 0x3FF;
+    while (cam + 512 < cam_ram) cam += 1024;
+    while (cam - 512 > cam_ram) cam -= 1024;
+    return cam;
+}
+
+/* right end of the building in world pixels: the camera stops when its right column
+ * reaches the level width in 16-pixel columns ($FF2CD0) */
+static int level_right(void)
+{
+    int cols = (md.ram[0x2CD0] << 8) | md.ram[0x2CD1];
+    return cols > 17 && cols < 512 ? (cols - 1) * 16 : 0x7FFF;
+}
+
+static void update_floor_anchor(int vs)
+{
+    int d = vs - floor_anchor.last_vs;
+    if (d < 0) d = -d;
+    if (floor_anchor.vs < 0 || floor_anchor.last_vs < 0 || d > 16) {
+        floor_anchor.vs = vs;        /* first view, or the game jumped the camera (new floor) */
+        floor_anchor.still = 0;
+    } else if (d == 0) {
+        if (++floor_anchor.still >= 30)
+            floor_anchor.vs = vs;    /* camera resting: this is the current floor */
+    } else {
+        floor_anchor.still = 0;      /* scrolling between floors: keep the anchor */
+    }
+    floor_anchor.last_vs = vs;
+}
 
 static int line_opaque(const uint8_t *buf, int m, int width)
 {
@@ -552,9 +665,18 @@ void vdp_render_line(int y)
     int playing = bottom_view.frame == md.frame || bottom_view.frame == md.frame + 1;
     int in_top = y >= VIEW_TOP_Y0 && y < VIEW_TOP_Y0 + VIEW_H;
     int in_view = in_top || (y >= VIEW_BOT_Y0 && y < VIEW_BOT_Y0 + VIEW_H);
-    int clamp_edges = m && playing && (y < VIEW_TOP_Y0 || y >= VIEW_BOT_Y0 + VIEW_H);
+    int clamp_edges = m && playing && !in_view;   /* HUD rows: extend their edge colours */
+    int in_bot = y >= VIEW_BOT_Y0 && y < VIEW_BOT_Y0 + VIEW_H;
     draw_plane(a, y, width, m, 0);
     int room_view = line_opaque(a, m, width);   /* a real room is shown on this line */
+    if (m && playing && room_view) {
+        /* widescreen: nothing of the building beyond its left/right walls */
+        clip_on = 1;
+        clip_camx = view_camx(line_hscroll(y, 0), in_bot ? 0x1846 : 0x184A);
+        clip_right = level_right();
+        draw_plane(a, y, width, m, 0);
+        clip_on = 0;
+    }
     int room_above = 0;
     if (in_top) {
         /* in a 1-player game the game shows nothing in plane A here (the 2P panel) */
@@ -570,8 +692,15 @@ void vdp_render_line(int y)
             bottom_view.hsB = line_hscroll(y, 1);
             bottom_view.vsA = vdp.vsram[0];
             bottom_view.vsB = vdp.vsram[1];
+            update_floor_anchor(bottom_view.vsA & 0x3FF);
+            static int vlog_view = -1;
+            if (vlog_view < 0) vlog_view = getenv("VIEWLOG") != NULL;
+            if (vlog_view)
+                fprintf(stderr, "view %u hsA %d vsA %d hsB %d vsB %d\n", md.frame, bottom_view.hsA, bottom_view.vsA,
+                        bottom_view.hsB, bottom_view.vsB);
         } else {
             bottom_view.frame = 0;
+            floor_anchor.vs = floor_anchor.last_vs = -1;
         }
     }
     wrap_margins = m && playing && in_view && room_view;
@@ -585,8 +714,12 @@ void vdp_render_line(int y)
         draw_plane(b, y, width, m, 1);
         wrap_margins = 0;
         ovr_hs = bottom_view.hsA;          /* the 80 plane rows right above player 1's view */
-        ovr_vs = (bottom_view.vsA + VIEW_BOT_Y0 - VIEW_TOP_Y0 - VIEW_H) & 0x3FF;
+        ovr_vs = (floor_anchor.vs + VIEW_BOT_Y0 - VIEW_TOP_Y0 - VIEW_H) & 0x3FF;
+        clip_on = m != 0;
+        clip_camx = view_camx(bottom_view.hsA, 0x1846);
+        clip_right = level_right();
         draw_plane(a, y, width, m, 0);
+        clip_on = 0;
         ovr_hs = ovr_vs = -1;
     }
     /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */

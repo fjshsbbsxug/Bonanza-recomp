@@ -170,6 +170,7 @@ int main(int argc, char **argv)
             fwrite(vdp.cram, 1, sizeof(vdp.cram), d);
             fwrite(vdp.vsram, 1, sizeof(vdp.vsram), d);
             fwrite(vdp.reg, 1, sizeof(vdp.reg), d);
+            fwrite(md.ram, 1, sizeof(md.ram), d);
             fclose(d);
         }
     }
