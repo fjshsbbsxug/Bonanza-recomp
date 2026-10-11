@@ -109,6 +109,15 @@ int cpu_line_cycles(void)
 /* Execute one instruction with the interpreter (without touching the cycle pool). */
 static void interp_step(void)
 {
+#ifdef INTERP_TRACE
+    if (md.use_recomp) {
+        static unsigned char seen[0x40000];
+        if (REG_PC < 0x80000 && !seen[REG_PC >> 1]) {
+            seen[REG_PC >> 1] = 1;
+            fprintf(stderr, "interp %06x\n", REG_PC);
+        }
+    }
+#endif
     REG_PPC = REG_PC;
     REG_IR = m68ki_read_imm_16();
     m68ki_instruction_jump_table[REG_IR]();
