@@ -377,9 +377,8 @@ static void handle_events(void)
 
 static Uint64 next_frame;
 
-static void frame(void)
+static void run_one(void)
 {
-    handle_events();
     if (have_rom && !paused) {
         for (int p = 0; p < 2; p++) {
             ctl_pad[p] = controller_state(pads[p]);
@@ -396,6 +395,33 @@ static void frame(void)
         while (md_audio_take(buf, 2048) > 0) {
         }
     }
+}
+
+static void frame(void)
+{
+    handle_events();
+#ifdef __EMSCRIPTEN__
+    /* the browser calls us at the display refresh rate; run the game at 59.92 Hz */
+    static double acc, last;
+    double now = emscripten_get_now();
+    if (last == 0)
+        last = now - 1000.0 / 59.922743;
+    acc += now - last;
+    last = now;
+    if (acc > 100)
+        acc = 100;
+    int n = 0;
+    while (acc >= 1000.0 / 59.922743 && n < 4) {
+        acc -= 1000.0 / 59.922743;
+        run_one();
+        n++;
+    }
+    /* drop audio backlog so latency stays low */
+    if (audio_dev && SDL_GetQueuedAudioSize(audio_dev) > 48000u * 4 / 5)
+        SDL_ClearQueuedAudio(audio_dev);
+#else
+    run_one();
+#endif
     present();
 }
 

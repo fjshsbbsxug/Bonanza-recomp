@@ -1,0 +1,150 @@
+name: Port
+
+# Builds the native port for Linux, Windows, Android and the web, and assembles the
+# HTML builder site (builder/index.html + runtime packages). No ROM is involved:
+# players add their own ROM in the builder page or on first start.
+#
+# The site is uploaded as the "bonanza-site" artifact on every run. It is also deployed to
+# GitHub Pages on pushes to the default branch and on manual runs, once Pages is enabled
+# (Settings > Pages > Source: GitHub Actions).
+
+on:
+  push:
+    paths:
+      - "port/**"
+      - "builder/**"
+      - ".github/workflows/port.yml"
+  pull_request:
+    paths:
+      - "port/**"
+      - "builder/**"
+      - ".github/workflows/port.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SDL_URL: https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDL build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxi-dev libxss-dev libxfixes-dev libxkbcommon-dev libwayland-dev wayland-protocols \
+            libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libdbus-1-dev libudev-dev libdecor-0-dev
+      - name: Build
+        run: |
+          cmake -S port -B build -DCMAKE_BUILD_TYPE=Release -DBONANZA_FETCH_SDL=ON -DBONANZA_SDL_URL=$SDL_URL
+          cmake --build build -j
+      - name: Package
+        run: python3 port/dist/package.py native --platform linux --exe build/bonanza --out out/bonanza-linux-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bonanza-linux-x64
+          path: out/bonanza-linux-x64.zip
+
+  windows:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW-w64
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64
+      - name: Build
+        run: |
+          cmake -S port -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake \
+                -DBONANZA_FETCH_SDL=ON -DBONANZA_SDL_URL=$SDL_URL
+          cmake --build build -j
+      - name: Package
+        run: python3 port/dist/package.py native --platform windows --exe build/bonanza.exe --out out/bonanza-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bonanza-windows-x64
+          path: out/bonanza-windows-x64.zip
+
+  web:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
+      - name: Build
+        run: |
+          emcmake cmake -S port -B build -DCMAKE_BUILD_TYPE=Release -DBONANZA_HEADLESS=OFF \
+                 -DBONANZA_FETCH_SDL=ON -DBONANZA_SDL_URL=$SDL_URL
+          cmake --build build -j
+      - name: Package
+        run: python3 port/dist/package.py web --build build --out out/web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bonanza-web
+          path: out/web
+
+  android:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Install NDK and CMake
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;26.3.11579264" "cmake;3.22.1" "platforms;android-34"
+      - name: Build APK
+        working-directory: port/android
+        run: ./gradlew --no-daemon assembleRelease
+      - name: Package
+        run: |
+          mkdir -p out
+          cp port/android/app/build/outputs/apk/release/app-release.apk out/bonanza-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bonanza-android
+          path: out/bonanza-android.apk
+
+  site:
+    needs: [linux, windows, web, android]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Assemble builder site
+        run: |
+          mkdir -p site/packages site/web
+          cp artifacts/bonanza-linux-x64/*.zip artifacts/bonanza-windows-x64/*.zip site/packages/
+          cp artifacts/bonanza-android/*.apk site/packages/
+          cp artifacts/bonanza-web/* site/web/
+          python3 port/dist/package.py site --out site --version "${GITHUB_SHA::7} ($(date -u +%Y-%m-%d))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bonanza-site
+          path: site
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        with:
+          path: site
+
+  deploy:
+    needs: site
+    if: github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-22.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

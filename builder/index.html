@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonanza Bros Port Builder</title>
+<meta name="description" content="Turn your own Bonanza Bros. ROM into a Windows, Linux, Android or in-browser port.">
+<style>
+  :root {
+    --bg: #f4f2ec; --panel: #ffffff; --ink: #1d1b22; --muted: #615d6b; --line: #dcd7cc;
+    --accent: #c8102e; --accent-ink: #ffffff; --gold: #b07a00; --ok: #177245; --bad: #b42318;
+    --chip: #efebe2; --focus: #2457c5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121219; --panel: #1b1b25; --ink: #ecebf2; --muted: #a29fb0; --line: #2e2d3c;
+      --accent: #ff4f5e; --accent-ink: #16121a; --gold: #f2b632; --ok: #4ccf8a; --bad: #ff7a6e;
+      --chip: #24232f; --focus: #8ab0ff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121219; --panel: #1b1b25; --ink: #ecebf2; --muted: #a29fb0; --line: #2e2d3c;
+    --accent: #ff4f5e; --accent-ink: #16121a; --gold: #f2b632; --ok: #4ccf8a; --bad: #ff7a6e;
+    --chip: #24232f; --focus: #8ab0ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  header h1 { font-size: 30px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header h1 span { color: var(--accent); }
+  header p { margin: 0; color: var(--muted); max-width: 62ch; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-top: 20px; }
+  .step h2 { font-size: 18px; margin: 0 0 12px; display: flex; gap: 10px; align-items: center; }
+  .num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+         background: var(--ink); color: var(--panel); font-size: 14px; font-weight: 700; flex: none; }
+  .step.disabled { opacity: .5; pointer-events: none; }
+  .drop { display: block; border: 2px dashed var(--line); border-radius: 12px; padding: 22px 16px; text-align: center; cursor: pointer;
+          transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--chip); }
+  .drop strong { display: block; font-size: 17px; }
+  .drop small { color: var(--muted); }
+  .romcard { display: none; margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--chip);
+             font-size: 14px; word-break: break-all; }
+  .romcard.show { display: block; }
+  .romcard .status { font-weight: 700; margin-bottom: 4px; word-break: normal; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .targets { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .target { position: relative; border: 1.5px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer;
+            background: var(--panel); text-align: left; color: inherit; font: inherit; }
+  .target:hover { border-color: var(--muted); }
+  .target[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .target b { display: block; font-size: 16px; }
+  .target span { color: var(--muted); font-size: 13px; }
+  .target svg { width: 26px; height: 26px; margin-bottom: 6px; color: var(--ink); }
+  button.primary { appearance: none; border: 0; border-radius: 10px; padding: 12px 20px; font: inherit; font-weight: 700;
+                   background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  button.primary:disabled { opacity: .45; cursor: default; }
+  button.secondary { appearance: none; border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; font: inherit;
+                     background: var(--panel); color: var(--ink); cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .log { margin-top: 14px; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--chip);
+         border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; display: none; max-height: 240px; overflow: auto; }
+  .log.show { display: block; }
+  .note { color: var(--muted); font-size: 14px; margin: 12px 0 0; }
+  .fallback { display: none; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+  .fallback.show { display: block; }
+  #player { display: none; margin-top: 20px; }
+  #player.show { display: block; }
+  .screen { background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; width: 100%; }
+  canvas#canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; touch-action: none; }
+  table.keys { border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+  table.keys td, table.keys th { padding: 4px 12px 4px 0; text-align: left; }
+  table.keys th { color: var(--muted); font-weight: 600; }
+  kbd { font: 12px ui-monospace, monospace; background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+  footer a { color: inherit; }
+  @media (max-width: 480px) { header h1 { font-size: 25px; } .step { padding: 16px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Bonanza Bros <span>Port Builder</span></h1>
+    <p>Turn your own copy of the Mega Drive game into a native Windows, Linux or Android port, or play it right here in the browser. The ROM stays on your device: everything happens in this page and nothing is uploaded.</p>
+  </header>
+
+  <section class="step" id="step-rom">
+    <h2><span class="num">1</span> Your ROM</h2>
+    <label class="drop" id="drop" tabindex="0">
+      <input type="file" id="romfile" hidden>
+      <strong>Drop the Bonanza Bros. ROM here</strong>
+      <small>or click to choose a file (.md, .bin or .gen, 512 KiB)</small>
+    </label>
+    <div class="romcard" id="romcard" aria-live="polite"></div>
+  </section>
+
+  <section class="step disabled" id="step-target">
+    <h2><span class="num">2</span> Choose a platform</h2>
+    <div class="targets" role="radiogroup" aria-label="Target platform">
+      <button class="target" role="radio" aria-checked="false" data-target="windows">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5 10.5 4.4v7.1H3zM11.5 4.3 21 3v8.5h-9.5zM3 12.5h7.5v7.1L3 18.5zM11.5 12.5H21V21l-9.5-1.3z"/></svg>
+        <b>Windows</b><span>64-bit .exe in a zip</span>
+      </button>
+      <button class="target" role="radio" aria-checked="false" data-target="linux">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m7 9 3 2.5L7 14M12 14h5"/></svg>
+        <b>Linux</b><span>x86-64 program in a zip</span>
+      </button>
+      <button class="target" role="radio" aria-checked="false" data-target="android">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>
+        <b>Android</b><span>APK for phones &amp; tablets</span>
+      </button>
+      <button class="target" role="radio" aria-checked="false" data-target="web">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.7 5.6 3.7 9s-1.2 6.4-3.7 9c-2.5-2.6-3.7-5.6-3.7-9S9.5 5.6 12 3z"/></svg>
+        <b>Browser</b><span>play now, no install</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="step disabled" id="step-build">
+    <h2><span class="num">3</span> Build</h2>
+    <div class="row">
+      <button class="primary" id="build" disabled>Build</button>
+      <span id="buildhint" class="note" style="margin:0"></span>
+    </div>
+    <div class="fallback" id="fallback">
+      <p style="margin-top:0">The runtime packages are not hosted next to this page (for example when the page is opened from disk).
+      Download the <b id="fb-name">runtime package</b> from the project's GitHub Actions run (artifact <code>bonanza-site</code>) and select it here:</p>
+      <input type="file" id="pkgfile" accept=".zip,.apk">
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+  </section>
+
+  <section id="player">
+    <div class="screen"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
+    <div class="row" style="margin-top:12px">
+      <button class="secondary" id="fullscreen">Full screen</button>
+      <span class="note" style="margin:0">Click the picture first so it receives the keyboard.</span>
+    </div>
+    <table class="keys">
+      <tr><th></th><th>Player 1</th><th>Player 2</th></tr>
+      <tr><td>Move</td><td><kbd>Arrows</kbd></td><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td></tr>
+      <tr><td>A / B / C</td><td><kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd></td><td><kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd></td></tr>
+      <tr><td>Start</td><td><kbd>Enter</kbd></td><td><kbd>Space</kbd></td></tr>
+    </table>
+  </section>
+
+  <footer>
+    Built from the <b>bonanza-recomp</b> project: the game's 68000 code is statically recompiled to C and runs on a
+    re-implementation of the Mega Drive hardware. Bonanza Bros. is &copy; SEGA; no game data is included in the runtime.
+    <span id="version"></span>
+  </footer>
+</main>
+
+<script src="jszip.min.js"></script>
+<script>
+  /* JSZip ships next to this page; fall back to the CDN if the page was copied on its own. */
+  if (typeof JSZip === 'undefined')
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>');
+</script>
+<script>
+(() => {
+  'use strict';
+  const ROM_SHA1 = 'f7313ecaf7143873597e3a6ebf58d542d06c3ef3';
+  const ROM_SIZE = 0x80000;
+  const DEFAULT_PACKAGES = {
+    windows: 'packages/bonanza-windows-x64.zip',
+    linux: 'packages/bonanza-linux-x64.zip',
+    android: 'packages/bonanza-android.apk',
+    web: 'web/bonanza.js',
+  };
+  const OUTPUT = {
+    windows: 'BonanzaBros-Windows.zip',
+    linux: 'BonanzaBros-Linux.zip',
+    android: 'BonanzaBros.apk',
+  };
+
+  const $ = (id) => document.getElementById(id);
+  let rom = null, target = null, manifest = null;
+
+  /* ---------- SHA-1 (crypto.subtle when available, small JS fallback otherwise) ---------- */
+  function sha1js(bytes) {
+    const rol = (x, n) => (x << n) | (x >>> (32 - n));
+    const len = bytes.length, words = new Uint32Array((((len + 8) >> 6) + 1) * 16);
+    for (let i = 0; i < len; i++) words[i >> 2] |= bytes[i] << (24 - (i & 3) * 8);
+    words[len >> 2] |= 0x80 << (24 - (len & 3) * 8);
+    words[words.length - 1] = len * 8;
+    let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+    const w = new Uint32Array(80);
+    for (let b = 0; b < words.length; b += 16) {
+      for (let i = 0; i < 16; i++) w[i] = words[b + i];
+      for (let i = 16; i < 80; i++) w[i] = rol(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+      let a = h0, bb = h1, c = h2, d = h3, e = h4;
+      for (let i = 0; i < 80; i++) {
+        let f, k;
+        if (i < 20) { f = (bb & c) | (~bb & d); k = 0x5A827999; }
+        else if (i < 40) { f = bb ^ c ^ d; k = 0x6ED9EBA1; }
+        else if (i < 60) { f = (bb & c) | (bb & d) | (c & d); k = 0x8F1BBCDC; }
+        else { f = bb ^ c ^ d; k = 0xCA62C1D6; }
+        const t = (rol(a, 5) + f + e + k + w[i]) >>> 0;
+        e = d; d = c; c = rol(bb, 30) >>> 0; bb = a; a = t;
+      }
+      h0 = (h0 + a) >>> 0; h1 = (h1 + bb) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+    }
+    return [h0, h1, h2, h3, h4].map(x => x.toString(16).padStart(8, '0')).join('');
+  }
+  async function sha1(bytes) {
+    try {
+      if (crypto && crypto.subtle) {
+        const d = await crypto.subtle.digest('SHA-1', bytes);
+        return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+    } catch (e) { /* fall through */ }
+    return sha1js(bytes);
+  }
+
+  /* ---------- ROM ---------- */
+  function headerText(bytes, off, len) {
+    return String.fromCharCode(...bytes.slice(off, off + len)).replace(/\s+/g, ' ').trim();
+  }
+  async function loadRom(file) {
+    const card = $('romcard');
+    card.className = 'romcard show';
+    card.textContent = 'Checking ' + file.name + '…';
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const hash = await sha1(bytes);
+    const name = bytes.length >= 0x200 ? headerText(bytes, 0x120, 48) : '';
+    const good = bytes.length === ROM_SIZE && hash === ROM_SHA1;
+    card.innerHTML = '';
+    const st = document.createElement('div');
+    st.className = 'status ' + (good ? 'ok' : 'bad');
+    st.textContent = good ? '✓ Bonanza Bros. (Japan, USA, Europe) verified'
+                          : '✗ This is not the expected Bonanza Bros. ROM';
+    card.appendChild(st);
+    const info = document.createElement('div');
+    info.textContent = `${file.name} · ${bytes.length.toLocaleString()} bytes · header “${name || '?'}” · SHA-1 ${hash}`;
+    card.appendChild(info);
+    if (!good) {
+      const hint = document.createElement('div');
+      hint.className = 'note';
+      hint.textContent = 'The port needs the 512 KiB JUE release (SHA-1 ' + ROM_SHA1 + '). Headered, interleaved (.smd) or hacked ROMs will not work.';
+      card.appendChild(hint);
+    }
+    rom = good ? bytes : null;
+    $('step-target').classList.toggle('disabled', !rom);
+    updateBuild();
+  }
+  const drop = $('drop');
+  $('romfile').addEventListener('change', e => e.target.files[0] && loadRom(e.target.files[0]));
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('romfile').click(); } });
+  ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => e.dataTransfer.files[0] && loadRom(e.dataTransfer.files[0]));
+
+  /* ---------- target ---------- */
+  document.querySelectorAll('.target').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.target').forEach(b => b.setAttribute('aria-checked', 'false'));
+    btn.setAttribute('aria-checked', 'true');
+    target = btn.dataset.target;
+    $('fallback').classList.remove('show');
+    updateBuild();
+  }));
+  function updateBuild() {
+    const ready = !!(rom && target);
+    $('step-build').classList.toggle('disabled', !ready);
+    $('build').disabled = !ready;
+    $('build').textContent = target === 'web' ? 'Play in browser' : target ? 'Build ' + label(target) + ' port' : 'Build';
+    $('buildhint').textContent = {
+      windows: 'Your ROM is added to the package: unzip and run bonanza.exe.',
+      linux: 'Your ROM is added to the package: unzip and run ./bonanza.',
+      android: 'Android apps cannot carry the ROM: the app asks for it once on first start.',
+      web: 'Runs right here. Nothing is uploaded.',
+    }[target] || '';
+  }
+  const label = t => ({ windows: 'Windows', linux: 'Linux', android: 'Android', web: 'browser' })[t];
+
+  /* ---------- log ---------- */
+  function log(msg, cls) {
+    const el = $('log');
+    el.classList.add('show');
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  /* ---------- packages ---------- */
+  async function loadManifest() {
+    if (manifest !== null) return manifest;
+    try {
+      const r = await fetch('packages/manifest.json', { cache: 'no-cache' });
+      manifest = r.ok ? await r.json() : {};
+    } catch (e) { manifest = {}; }
+    if (manifest.version) $('version').textContent = ' Runtime ' + manifest.version + '.';
+    return manifest;
+  }
+  async function fetchPackage(t) {
+    const m = await loadManifest();
+    const url = (m.packages && m.packages[t]) || DEFAULT_PACKAGES[t];
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+      return new Uint8Array(await r.arrayBuffer());
+    } catch (e) {
+      return null;
+    }
+  }
+  function pickPackageFromDisk(t) {
+    return new Promise(resolve => {
+      $('fb-name').textContent = DEFAULT_PACKAGES[t].split('/').pop();
+      $('fallback').classList.add('show');
+      const input = $('pkgfile');
+      input.value = '';
+      input.onchange = async () => {
+        const f = input.files[0];
+        if (!f) return;
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        if (/\.zip$/i.test(f.name) && t !== 'android') {
+          // accept the whole bonanza-site artifact too: dig the package out of it
+          try {
+            const z = await JSZip.loadAsync(bytes);
+            const want = DEFAULT_PACKAGES[t].split('/').pop();
+            const inner = Object.values(z.files).find(e => !e.dir && e.name.endsWith(want));
+            if (inner) { resolve(new Uint8Array(await inner.async('uint8array'))); return; }
+          } catch (e) { /* not a zip we know; use as-is */ }
+        }
+        resolve(bytes);
+      };
+    });
+  }
+  function download(bytes, name, type) {
+    const blob = new Blob([bytes], { type: type || 'application/octet-stream' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  }
+
+  async function buildNative(t) {
+    $('log').innerHTML = '';
+    log('Fetching the ' + label(t) + ' runtime…');
+    let pkg = await fetchPackage(t);
+    if (!pkg) {
+      log('Runtime package not found next to this page. Select it below.', 'bad');
+      pkg = await pickPackageFromDisk(t);
+      $('fallback').classList.remove('show');
+    }
+    log('Runtime: ' + pkg.length.toLocaleString() + ' bytes');
+    if (t === 'android') {
+      download(pkg, OUTPUT.android, 'application/vnd.android.package-archive');
+      log('✓ Downloaded ' + OUTPUT.android + '. Install it, open “Bonanza Bros” and select your ROM once.', 'ok');
+      log('(Allow installing apps from your browser / file manager when Android asks.)');
+      return;
+    }
+    if (typeof JSZip === 'undefined') {
+      log('The zip library could not be loaded (offline?). Reload the page with a network connection.', 'bad');
+      return;
+    }
+    const zip = await JSZip.loadAsync(pkg);
+    const root = Object.keys(zip.files).find(n => /(^|\/)bonanza(\.exe)?$/.test(n));
+    const dir = root ? root.replace(/[^/]*$/, '') : '';
+    zip.file(dir + 'baserom.md', rom, { binary: true });
+    log('Added your ROM as ' + dir + 'baserom.md');
+    const out = await zip.generateAsync({ type: 'uint8array', platform: 'UNIX', compression: 'DEFLATE',
+                                          compressionOptions: { level: 6 } },
+                                        m => { /* progress */ });
+    download(out, OUTPUT[t], 'application/zip');
+    log('✓ Downloaded ' + OUTPUT[t] + ' (' + out.length.toLocaleString() + ' bytes).', 'ok');
+    log(t === 'windows' ? 'Unzip it and double-click bonanza.exe.' : 'Unzip it and run ./bonanza (needs a desktop with SDL-compatible video/audio).');
+  }
+
+  /* ---------- browser play ---------- */
+  let webStarted = false;
+  async function playWeb() {
+    if (webStarted) { $('player').scrollIntoView({ behavior: 'smooth' }); return; }
+    $('log').innerHTML = '';
+    log('Loading the browser runtime…');
+    const m = await loadManifest();
+    const js = (m.packages && m.packages.web) || DEFAULT_PACKAGES.web;
+    const base = js.replace(/[^/]*$/, '');
+    const probe = await fetch(js, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+    if (!probe) {
+      log('The browser runtime is not hosted next to this page. Open the builder from the project\'s GitHub Pages site, or serve the bonanza-site artifact with any web server (e.g. python3 -m http.server).', 'bad');
+      return;
+    }
+    webStarted = true;
+    $('player').classList.add('show');
+    const canvas = $('canvas');
+    window.Module = {
+      canvas,
+      locateFile: p => base + p,
+      print: t => console.log(t),
+      printErr: t => console.warn(t),
+      onRuntimeInitialized() {
+        Module.FS.writeFile('/baserom.md', rom);
+        log('✓ Running. Click the picture to give it the keyboard.', 'ok');
+        Module.callMain([]);
+        canvas.focus();
+      },
+    };
+    const s = document.createElement('script');
+    s.src = js;
+    s.onerror = () => log('Could not load ' + js, 'bad');
+    document.body.appendChild(s);
+    $('player').scrollIntoView({ behavior: 'smooth' });
+    window.addEventListener('keydown', e => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key) && document.activeElement === canvas)
+        e.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('click', () => canvas.focus());
+  }
+  $('fullscreen').addEventListener('click', () => {
+    const el = $('canvas').parentElement;
+    (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+  });
+
+  $('build').addEventListener('click', async () => {
+    if (!rom || !target) return;
+    $('build').disabled = true;
+    try {
+      if (target === 'web') await playWeb();
+      else await buildNative(target);
+    } catch (e) {
+      log('Error: ' + (e && e.message ? e.message : e), 'bad');
+    } finally {
+      $('build').disabled = false;
+    }
+  });
+
+  loadManifest();
+})();
+</script>
+</body>
+</html>
