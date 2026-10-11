@@ -320,13 +320,104 @@ static void draw_window(uint8_t *out, int y, int width, int m, uint8_t *in_windo
     }
 }
 
-static void draw_sprites(uint8_t *out, int y, int width, int m)
+/* ---- player characters ----
+ * Robo's animation frames are always uploaded to sprite tiles 0x100-0x17F and Mobo's
+ * to 0x180-0x1FF (palette line 0). Inside such a sprite:
+ *   shirt = the character's suit colours (Robo 9/A, Mobo B/C)
+ *   pants = black (8) pixels in the rows right below the shirt, up to the gap above the shoes
+ *   skin  = D/E
+ * The analysis is done once per sprite per frame. */
+
+typedef struct { uint32_t frame; uint16_t attr; uint8_t size; int8_t ch; int8_t shirt_end, pants_end; } char_info;
+static char_info char_cache[8];
+
+static int char_of(uint16_t attr)
+{
+    if (attr & 0x6000) return -1;            /* palette line 0 only */
+    int t = attr & 0x07FF;
+    if (t >= 0x100 && t < 0x180) return CHAR_ROBO;
+    if (t >= 0x180 && t < 0x200) return CHAR_MOBO;
+    return -1;
+}
+
+static int any_char_colors(void)
+{
+    for (int c = 0; c < CHAR_COUNT; c++)
+        for (int p = 0; p < PART_COUNT; p++)
+            if (settings.char_on[c][p]) return 1;
+    return 0;
+}
+
+/* colour index of displayed pixel (x,row) of a sprite */
+static int sprite_index(uint16_t attr, int hsz, int vsz, int x, int row)
+{
+    int cy = row >> 3, py = row & 7, cx = x >> 3, px = x & 7;
+    if (attr & 0x1000) { cy = vsz - 1 - cy; py = 7 - py; }
+    if (attr & 0x0800) { cx = hsz - 1 - cx; px = 7 - px; }
+    uint32_t a = (((attr + cx * vsz + cy) & 0x07FF) << 5) + (py << 2) + (px >> 1);
+    uint8_t b = vdp.vram[a & 0xFFFF];
+    return (px & 1) ? (b & 0x0F) : (b >> 4);
+}
+
+static const char_info *char_analyse(uint16_t attr, int hsz, int vsz, int ch)
+{
+    uint8_t size = (uint8_t)((hsz << 4) | vsz);
+    char_info *slot = &char_cache[0];
+    for (int i = 0; i < 8; i++) {
+        char_info *c = &char_cache[i];
+        if (c->frame == md.frame + 1 && c->attr == attr && c->size == size)
+            return c;
+        if (c->frame < slot->frame) slot = c;
+    }
+    int light = ch == CHAR_ROBO ? 9 : 0xB, dark = ch == CHAR_ROBO ? 0xA : 0xC;
+    int rows = vsz * 8, shirt_end = -1, pants_end = -1;
+    for (int r = 0; r < rows; r++)
+        for (int x = 0; x < hsz * 8; x++) {
+            int c = sprite_index(attr, hsz, vsz, x, r);
+            if (c == light || c == dark) { shirt_end = r; break; }
+        }
+    if (shirt_end >= 0) {
+        pants_end = shirt_end;
+        for (int r = shirt_end + 1; r < rows; r++) {
+            int empty = 1;
+            for (int x = 0; x < hsz * 8 && empty; x++)
+                if (sprite_index(attr, hsz, vsz, x, r)) empty = 0;
+            if (empty) break;
+            pants_end = r;
+        }
+    }
+    slot->frame = md.frame + 1;
+    slot->attr = attr;
+    slot->size = size;
+    slot->ch = (int8_t)ch;
+    slot->shirt_end = (int8_t)shirt_end;
+    slot->pants_end = (int8_t)pants_end;
+    return slot;
+}
+
+/* returns 0 or 1 + character slot for a player pixel */
+static int char_part(int ch, int c, int row, const char_info *ci)
+{
+    int light = ch == CHAR_ROBO ? 9 : 0xB, dark = ch == CHAR_ROBO ? 0xA : 0xC;
+    int base = ch * 8 + 1;
+    if (c == light && settings.char_on[ch][PART_SHIRT]) return base + CHAR_SLOT_SHIRT;
+    if (c == dark && settings.char_on[ch][PART_SHIRT]) return base + CHAR_SLOT_SHIRT_DARK;
+    if (c == 0xD && settings.char_on[ch][PART_SKIN]) return base + CHAR_SLOT_SKIN;
+    if (c == 0xE && settings.char_on[ch][PART_SKIN]) return base + CHAR_SLOT_SKIN_DARK;
+    if (c == 8 && settings.char_on[ch][PART_PANTS] && row > ci->shirt_end && row <= ci->pants_end)
+        return base + CHAR_SLOT_PANTS;
+    return 0;
+}
+
+static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
 {
     int h40 = width == 320;
     uint32_t sat = (vdp.reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
     int max_sprites = h40 ? 80 : 64, max_line = h40 ? 20 : 16, max_px = h40 ? 320 : 256;
     int link = 0, count = 0, line_count = 0, pixels = 0, masked = 0, seen_nonzero_x = 0;
+    int chars = any_char_colors();
     memset(out, 0, width + 2 * m);
+    memset(part, 0, width + 2 * m);
     do {
         const uint8_t *s = &vdp.vram[(sat + link * 8) & 0xFFFF];
         int sy = ((s[0] << 8) | s[1]) & 0x3FF;
@@ -344,6 +435,8 @@ static void draw_sprites(uint8_t *out, int y, int width, int m)
             } else {
                 seen_nonzero_x = 1;
             }
+            int ch = chars ? char_of(attr) : -1;
+            const char_info *ci = ch >= 0 ? char_analyse(attr, hsz, vsz, ch) : NULL;
             int cy = row >> 3, py = row & 7;
             if (attr & 0x1000) { cy = vsz - 1 - cy; py = 7 - py; }
             for (int cx = 0; cx < hsz; cx++) {
@@ -361,6 +454,8 @@ static void draw_sprites(uint8_t *out, int y, int width, int m)
                     /* flip already applied to py; tile_pixel would flip again */
                     uint16_t e = tile & ~0x1000;
                     out[x + m] = (uint8_t)tile_pixel(e, px, py);
+                    if (ci && (out[x + m] & 0x0F))
+                        part[x + m] = (uint8_t)char_part(ch, out[x + m] & 0x0F, row, ci);
                 }
             }
         }
@@ -413,7 +508,7 @@ void vdp_render_line(int y)
             fb[x] = bg;
         return;
     }
-    uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W];
+    uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W], part[VDP_FB_W];
     draw_plane(b, y, width, m, 1);
     draw_plane(a, y, width, m, 0);
     /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
@@ -423,14 +518,14 @@ void vdp_render_line(int y)
             if (win[x])
                 a[x] = wbuf[x];
     }
-    draw_sprites(s, y, width, m);
+    draw_sprites(s, part, y, width, m);
     for (int x = 0; x < ow; x++) {
         int p;
         int sp = s[x], ap = a[x], bp = b[x];
-        if ((sp & 0x80) && (sp & 0x0F)) p = sp;
+        if ((sp & 0x80) && (sp & 0x0F)) { if (part[x]) { fb[x] = VDP_CHAR_BASE + part[x] - 1; continue; } p = sp; }
         else if ((ap & 0x80) && (ap & 0x0F)) p = ap;
         else if ((bp & 0x80) && (bp & 0x0F)) p = bp;
-        else if (sp & 0x0F) p = sp;
+        else if (sp & 0x0F) { if (part[x]) { fb[x] = VDP_CHAR_BASE + part[x] - 1; continue; } p = sp; }
         else if (ap & 0x0F) p = ap;
         else if (bp & 0x0F) p = bp;
         else { fb[x] = bg; continue; }

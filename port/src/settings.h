@@ -19,6 +19,10 @@ enum {
 
 #define MAX_RECOLOR 128
 
+/* player characters: Robo (player 1, red) and Mobo (player 2, blue) */
+enum { CHAR_ROBO, CHAR_MOBO, CHAR_COUNT };
+enum { PART_SHIRT, PART_PANTS, PART_SKIN, PART_COUNT };
+
 typedef struct {
     int screen;              /* SCREEN_* */
     int smooth;              /* 1 = smooth scaling, 0 = sharp pixels */
@@ -29,7 +33,16 @@ typedef struct {
     int hue;                 /* -180..180 degrees */
     int nrecolor;
     struct { uint16_t md; uint32_t rgb; } recolor[MAX_RECOLOR]; /* Mega Drive colour -> RGB */
+    int      char_on[CHAR_COUNT][PART_COUNT];   /* part has a custom colour */
+    uint32_t char_rgb[CHAR_COUNT][PART_COUNT];  /* RRGGBB */
 } settings_t;
+
+/* Colours for player-character pixels. The renderer marks them in the picture as
+ * VDP_CHAR_BASE + slot, slot = character * 8 + CHAR_SLOT_*. */
+enum { CHAR_SLOT_SHIRT, CHAR_SLOT_SHIRT_DARK, CHAR_SLOT_PANTS, CHAR_SLOT_SKIN, CHAR_SLOT_SKIN_DARK };
+extern uint32_t char_color_lut[16];
+const char *settings_char_name(int c);
+const char *settings_part_name(int p);
 
 extern settings_t settings;
 extern uint32_t md_color_lut[512];   /* 9-bit Mega Drive colour -> XRGB8888 */

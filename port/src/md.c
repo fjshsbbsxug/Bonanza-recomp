@@ -400,7 +400,7 @@ const uint32_t *md_framebuffer(void)
     for (int y = 0; y < MD_SCREEN_H; y++)
         for (int x = 0; x < w; x++) {
             uint16_t c = vdp.fbmd[y][x];
-            fb[y][x] = c < 512 ? md_color_lut[c] : 0xFF000000u;
+            fb[y][x] = c < 512 ? md_color_lut[c] : c >= VDP_CHAR_BASE ? char_color_lut[(c - VDP_CHAR_BASE) & 15] : 0xFF000000u;
         }
     return &fb[0][0];
 }

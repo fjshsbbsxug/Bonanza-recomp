@@ -82,6 +82,14 @@
   .recolor input[type=color] { width: 46px; height: 28px; border: 1px solid var(--line); border-radius: 6px; padding: 0; background: none; }
   .recolor code { color: var(--muted); }
   button.link { appearance: none; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; padding: 4px; }
+  .chars { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 8px; }
+  .char { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .char > b { display: block; margin-bottom: 8px; }
+  .part { display: grid; grid-template-columns: 52px 46px 1fr; gap: 8px; align-items: center; font-size: 14px; margin: 6px 0; }
+  .part input[type=color] { width: 46px; height: 28px; border: 1px solid var(--line); border-radius: 6px; padding: 0; background: none; }
+  .part .orig { font-size: 13px; color: var(--muted); }
+  .chips { display: flex; gap: 4px; flex-wrap: wrap; grid-column: 2 / 4; }
+  .chip { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; padding: 0; }
   .addcolor { display: flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); flex-wrap: wrap; }
   .addcolor input { width: 56px; }
   canvas#canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; touch-action: none; }
@@ -160,8 +168,13 @@
       <label>Saturation <span class="v" id="v-saturation">0</span><input type="range" id="o-saturation" min="-100" max="100" step="5" value="0"></label>
       <label>Hue <span class="v" id="v-hue">0</span><input type="range" id="o-hue" min="-180" max="180" step="10" value="0"></label>
     </div>
+    <h3>Player characters</h3>
+    <p class="note" style="margin-top:0">Give Robo (player 1) and Mobo (player 2) their own shirt, pants and skin tone.
+      Only the two player characters change; guards and the rest of the game keep their colors.</p>
+    <div class="chars" id="chars"></div>
+
     <h3>Your own colors</h3>
-    <p class="note" style="margin-top:0">Replace any color of the game with one you choose, for example the robbers' outfits.
+    <p class="note" style="margin-top:0">Replace any color of the whole game with one you choose, for example the walls, floors or the HUD.
       Start the live preview, then press <b>Pick a color in the game</b>: the game's Recolor menu shows the colors on screen and flashes the one you select.
       Your picks appear in this list.</p>
     <div class="recolors" id="recolors"></div>
@@ -178,6 +191,7 @@
         <button class="secondary" id="add-color">Add</button>
       </div>
     </details>
+    <p class="note">Recolor changes a color everywhere it appears; use Player characters to change only Robo and Mobo.</p>
     <p class="note">Widescreen modes show more of the level on the left and right instead of stretching the picture.</p>
     <p class="note" id="opts-note">These settings go into the package as <code>bonanza.ini</code>. They can also be changed any time in the game: press <kbd>Esc</kbd> (keyboard), Back (gamepad) or MENU (touch).</p>
   </section>
@@ -442,7 +456,15 @@
   }
 
   /* ---------- options (bonanza.ini) ---------- */
-  const OPT = { screen: 'original', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0, recolor: {} };
+  const CHARS = [['robo', 'Robo · player 1'], ['mobo', 'Mobo · player 2']];
+  const PARTS = [['shirt', 'Shirt'], ['pants', 'Pants'], ['skin', 'Skin']];
+  const ORIGINAL = { 'robo.shirt': '#ff0000', 'robo.pants': '#000000', 'robo.skin': '#ff9200',
+                     'mobo.shirt': '#0000ff', 'mobo.pants': '#000000', 'mobo.skin': '#ff9200' };
+  const SKIN_TONES = ['#ffe0c8', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#6b4226', '#3b2219'];
+  const CLOTHES = ['#101010', '#f0f0f0', '#e02020', '#f08020', '#f0d020', '#20b040', '#2050e0', '#8030c0', '#f070b0'];
+  const freshOpts = () => ({ screen: 'original', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
+                             recolor: {}, chars: {} });
+  const OPT = freshOpts();
   const SLIDERS = ['brightness', 'contrast', 'saturation', 'hue'];
   const mdLevel = v => Math.round(v * 255 / 7);
   const mdHex = key => '#' + [0, 1, 2].map(i => mdLevel(+key[i]).toString(16).padStart(2, '0')).join('');
@@ -450,23 +472,82 @@
     let t = '# Bonanza Bros port settings (made with the port builder)\n';
     t += `screen = ${OPT.screen}\nsmooth = ${OPT.smooth}\ncolors = ${OPT.colors}\n`;
     for (const k of SLIDERS) t += `${k} = ${OPT[k]}\n`;
+    for (const [c] of CHARS) for (const [p] of PARTS) {
+      const v = OPT.chars[c + '.' + p];
+      t += `${c}.${p} = ${v ? v.replace('#', '').toUpperCase() : 'original'}\n`;
+    }
     for (const [k, v] of Object.entries(OPT.recolor)) t += `color.${k} = ${v.replace('#', '').toUpperCase()}\n`;
     return t;
   }
   function parseIni(text) {
-    const o = { screen: 'original', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0, recolor: {} };
+    const o = freshOpts();
     for (const line of text.split(/\r?\n/)) {
       const m = line.match(/^\s*([\w.]+)\s*=\s*(\S*)\s*$/);
       if (!m) continue;
       const [, k, v] = m;
       if (k.startsWith('color.')) o.recolor[k.slice(6)] = '#' + v.toLowerCase();
+      else if (/^(robo|mobo)\.(shirt|pants|skin)$/.test(k)) { if (v !== 'original') o.chars[k] = '#' + v.toLowerCase(); }
       else if (SLIDERS.includes(k)) o[k] = parseInt(v, 10) || 0;
       else if (k in o) o[k] = v;
     }
     return o;
   }
   const sameOpts = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  function setChar(key, val) {
+    if (val) OPT.chars[key] = val; else delete OPT.chars[key];
+    gameSet(key, val ? val.slice(1) : 'original');
+    syncChars();
+  }
+  function syncChars() {
+    const box = $('chars');
+    box.innerHTML = '';
+    for (const [c, title] of CHARS) {
+      const card = document.createElement('div');
+      card.className = 'char';
+      const h = document.createElement('b');
+      h.textContent = title;
+      card.appendChild(h);
+      for (const [p, label] of PARTS) {
+        const key = c + '.' + p;
+        const row = document.createElement('div');
+        row.className = 'part';
+        const l = document.createElement('span');
+        l.textContent = label;
+        const pick = document.createElement('input');
+        pick.type = 'color';
+        pick.value = OPT.chars[key] || ORIGINAL[key];
+        pick.setAttribute('aria-label', title + ' ' + label);
+        pick.addEventListener('input', () => setChar(key, pick.value));
+        const state = document.createElement('span');
+        state.className = 'orig';
+        if (OPT.chars[key]) {
+          const reset = document.createElement('button');
+          reset.className = 'link';
+          reset.textContent = 'Back to original';
+          reset.addEventListener('click', () => setChar(key, null));
+          state.appendChild(reset);
+        } else {
+          state.textContent = 'original';
+        }
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+        for (const col of (p === 'skin' ? SKIN_TONES : CLOTHES)) {
+          const chip = document.createElement('button');
+          chip.className = 'chip';
+          chip.style.background = col;
+          chip.title = col;
+          chip.setAttribute('aria-label', label + ' ' + col);
+          chip.addEventListener('click', () => setChar(key, col));
+          chips.appendChild(chip);
+        }
+        row.append(l, pick, state, chips);
+        card.appendChild(row);
+      }
+      box.appendChild(card);
+    }
+  }
   function syncUI() {
+    syncChars();
     $('o-screen').value = OPT.screen;
     $('o-smooth').value = OPT.smooth;
     $('o-colors').value = OPT.colors;
@@ -517,7 +598,7 @@
     gameSet(k, OPT[k]);
   }));
   $('resetopts').addEventListener('click', () => {
-    Object.assign(OPT, { screen: 'original', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0, recolor: {} });
+    Object.assign(OPT, freshOpts());
     if (webStarted && window.Module && Module.ccall) Module.ccall('bonanza_reset_settings', null, [], []);
     syncUI();
   });

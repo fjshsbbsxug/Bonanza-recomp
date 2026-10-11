@@ -43,6 +43,9 @@ button or the MENU button (top left) on Android.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
                Inverted.
   Brightness, Contrast, Saturation, Hue
+  Characters...  Shirt, pants and skin tone of Robo (player 1) and Mobo (player 2).
+               Left/right picks a preset (skin tones, clothing colours), Enter opens
+               Red/Green/Blue sliders. Only the two players change.
   Recolor...   Shows the colours on screen; pick one (it flashes in the game) and set
                any new colour with the Red/Green/Blue sliders.
 
@@ -51,7 +54,9 @@ otherwise in your user data folder). It is a plain text file, e.g.
 
     screen = 16:9
     colors = vivid
-    color.700 = 2040FF      # Mega Drive colour R7 G0 B0 becomes #2040FF
+    robo.shirt = 20B040     # player 1 shirt
+    mobo.skin = 8D5524      # player 2 skin tone ("original" = unchanged)
+    color.700 = 2040FF      # Mega Drive colour R7 G0 B0 becomes #2040FF everywhere
 
 Command line: bonanza [ROM file] [--interp]
   --interp  run the original code on the built-in 68000 interpreter instead of the

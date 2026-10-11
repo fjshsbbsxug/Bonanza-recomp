@@ -69,6 +69,10 @@ builder/      the HTML builder page
     memory instead of stretching; a few HUD tiles can wrap into the corners.
   * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
     plus brightness, contrast, saturation and hue.
+  * Player characters: separate shirt, pants and skin-tone colours for Robo and Mobo.
+    The renderer recognises the players' sprites (their animation frames always sit
+    in sprite tiles 0x100-0x1FF) and recolours only those, so guards and the HUD
+    keep their colours.
   * A recolour tool that replaces any Mega Drive colour with one you choose.
 
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). They only change the

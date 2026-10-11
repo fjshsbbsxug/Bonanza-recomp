@@ -9,13 +9,27 @@
 int menu_allow_quit = 1;
 int menu_settings_dirty;
 
-enum { PAGE_MAIN, PAGE_RECOLOR, PAGE_EDIT };
+enum { PAGE_MAIN, PAGE_RECOLOR, PAGE_EDIT, PAGE_CHARS };
 
 static int open_, page, sel;
 static int recolor_sel;            /* index into colors[] on the recolour page */
 static uint16_t colors[64];        /* colours visible in the current picture, most used first */
 static int ncolors;
-static uint16_t edit_md;           /* colour being edited */
+static uint16_t edit_md;           /* colour being edited (recolour) */
+static int edit_char = -1, edit_part; /* or: character part being edited */
+
+/* original Mega Drive colours of the character parts (palette line 0) */
+static const uint16_t char_orig_md[CHAR_COUNT][PART_COUNT] = {
+    {5, 0, 7 | (4 << 3)},          /* Robo: red 500, black pants, skin 740 */
+    {5 << 6, 0, 7 | (4 << 3)},     /* Mobo: blue 005, black pants, skin 740 */
+};
+static const uint32_t cloth_presets[] = {
+    0x101010, 0xF0F0F0, 0x808080, 0xE02020, 0xF08020, 0xF0D020, 0x20B040, 0x20B0B0,
+    0x2050E0, 0x8030C0, 0xF070B0, 0x7A4A20, 0x203060,
+};
+static const uint32_t skin_presets[] = {
+    0xFFE0C8, 0xF1C27D, 0xE0AC69, 0xC68642, 0x8D5524, 0x6B4226, 0x3B2219, 0x60C050, 0x70A0F0,
+};
 
 /* ------------------------------------------------------------ drawing */
 
@@ -86,11 +100,11 @@ static void slider(uint32_t *buf, int x, int y, int v, int lo, int hi, int selec
 
 enum {
     IT_RESUME, IT_SCREEN, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
-    IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
+    IT_CHARS, IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
 };
 static const char *item_label[IT_COUNT] = {
     "Resume", "Screen", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
-    "Recolor...", "Reset all colors", "Reset game", "Quit",
+    "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
 static int main_count(void) { return menu_allow_quit ? IT_COUNT : IT_COUNT - 1; }
@@ -133,8 +147,30 @@ static void collect_colors(void)
     if (recolor_sel >= ncolors) recolor_sel = ncolors ? ncolors - 1 : 0;
 }
 
+static uint32_t char_rgb(int c, int p)
+{
+    return settings.char_on[c][p] ? settings.char_rgb[c][p] : (settings_base_color(char_orig_md[c][p]) & 0xFFFFFF);
+}
+
+static void char_cycle(int c, int p, int dir)
+{
+    const uint32_t *list = p == PART_SKIN ? skin_presets : cloth_presets;
+    int n = p == PART_SKIN ? (int)(sizeof(skin_presets) / 4) : (int)(sizeof(cloth_presets) / 4);
+    int cur = -1; /* -1 = original */
+    if (settings.char_on[c][p])
+        for (int i = 0; i < n; i++)
+            if (list[i] == settings.char_rgb[c][p]) cur = i;
+    cur += dir;
+    if (cur < -1) cur = n - 1;
+    if (cur >= n) cur = -1;
+    if (cur < 0) settings.char_on[c][p] = 0;
+    else { settings.char_on[c][p] = 1; settings.char_rgb[c][p] = list[cur]; }
+}
+
 static uint32_t current_rgb(uint16_t md)
 {
+    if (edit_char >= 0 && page == PAGE_EDIT)
+        return char_rgb(edit_char, edit_part);
     int i = settings_find_recolor(md);
     return i >= 0 ? settings.recolor[i].rgb : (settings_base_color(md) & 0xFFFFFF);
 }
@@ -160,11 +196,19 @@ static int activate_main(int item)
     switch (item) {
     case IT_RESUME: open_ = 0; return MENU_ACT_CLOSE;
     case IT_RECOLOR: page = PAGE_RECOLOR; collect_colors(); return MENU_ACT_NONE;
+    case IT_CHARS: page = PAGE_CHARS; sel = 0; return MENU_ACT_NONE;
     case IT_RESETCOLORS: {
         int screen = settings.screen, smooth = settings.smooth;
+        /* keeps character colours; they have their own reset */
+        int on[CHAR_COUNT][PART_COUNT];
+        uint32_t rgb[CHAR_COUNT][PART_COUNT];
+        memcpy(on, settings.char_on, sizeof(on));
+        memcpy(rgb, settings.char_rgb, sizeof(rgb));
         settings_defaults();
         settings.screen = screen;
         settings.smooth = smooth;
+        memcpy(settings.char_on, on, sizeof(on));
+        memcpy(settings.char_rgb, rgb, sizeof(rgb));
         changed();
         return MENU_ACT_NONE;
     }
@@ -181,7 +225,13 @@ static void edit_change(int row, int dir)
     int ch[3] = {(int)(rgb >> 16) & 255, (int)(rgb >> 8) & 255, (int)rgb & 255};
     if (row > 2) return;
     ch[row] = clampi(ch[row] + dir * 15, 0, 255);
-    settings_set_recolor(edit_md, ((uint32_t)ch[0] << 16) | ((uint32_t)ch[1] << 8) | (uint32_t)ch[2]);
+    uint32_t v = ((uint32_t)ch[0] << 16) | ((uint32_t)ch[1] << 8) | (uint32_t)ch[2];
+    if (edit_char >= 0) {
+        settings.char_on[edit_char][edit_part] = 1;
+        settings.char_rgb[edit_char][edit_part] = v;
+    } else {
+        settings_set_recolor(edit_md, v);
+    }
     changed();
 }
 
@@ -200,6 +250,7 @@ void menu_open(void)
 int menu_highlight(void)
 {
     if (!open_) return -1;
+    if (page == PAGE_CHARS || (page == PAGE_EDIT && edit_char >= 0)) return -1;
     if (page == PAGE_RECOLOR && ncolors) return colors[recolor_sel];
     if (page == PAGE_EDIT) return edit_md;
     return -1;
@@ -207,6 +258,13 @@ int menu_highlight(void)
 
 static int back(void)
 {
+    if (page == PAGE_EDIT && edit_char >= 0) {
+        page = PAGE_CHARS;
+        sel = edit_char * PART_COUNT + edit_part;
+        edit_char = -1;
+        return MENU_ACT_NONE;
+    }
+    if (page == PAGE_CHARS) { page = PAGE_MAIN; sel = IT_CHARS; return MENU_ACT_NONE; }
     if (page == PAGE_EDIT) { page = PAGE_RECOLOR; collect_colors(); return MENU_ACT_NONE; }
     if (page == PAGE_RECOLOR) { page = PAGE_MAIN; sel = IT_RECOLOR; return MENU_ACT_NONE; }
     open_ = 0;
@@ -233,8 +291,30 @@ int menu_key(int key)
         else if (key == MK_DOWN && recolor_sel + 8 < n) recolor_sel += 8;
         else if (key == MK_OK && n) {
             edit_md = colors[recolor_sel];
+            edit_char = -1;
             page = PAGE_EDIT;
             sel = 0;
+        }
+    } else if (page == PAGE_CHARS) {
+        /* rows: 6 parts, reset, back */
+        int n = CHAR_COUNT * PART_COUNT + 2;
+        if (key == MK_UP) sel = (sel + n - 1) % n;
+        else if (key == MK_DOWN) sel = (sel + 1) % n;
+        else if (sel < CHAR_COUNT * PART_COUNT && (key == MK_LEFT || key == MK_RIGHT)) {
+            char_cycle(sel / PART_COUNT, sel % PART_COUNT, key == MK_LEFT ? -1 : 1);
+            changed();
+        } else if (key == MK_OK) {
+            if (sel < CHAR_COUNT * PART_COUNT) {
+                edit_char = sel / PART_COUNT;
+                edit_part = sel % PART_COUNT;
+                page = PAGE_EDIT;
+                sel = 0;
+            } else if (sel == CHAR_COUNT * PART_COUNT) {
+                memset(settings.char_on, 0, sizeof(settings.char_on));
+                changed();
+            } else {
+                return back();
+            }
         }
     } else {
         if (key == MK_UP) sel = (sel + 4) % 5;
@@ -242,7 +322,11 @@ int menu_key(int key)
         else if (key == MK_LEFT) edit_change(sel, -1);
         else if (key == MK_RIGHT) edit_change(sel, 1);
         else if (key == MK_OK) {
-            if (sel == 3) { settings_clear_recolor(edit_md); changed(); }
+            if (sel == 3) {
+                if (edit_char >= 0) settings.char_on[edit_char][edit_part] = 0;
+                else settings_clear_recolor(edit_md);
+                changed();
+            }
             else if (sel == 4) return back();
             else edit_change(sel, 1);
         }
@@ -273,13 +357,14 @@ int menu_pointer(int x, int y)
         }
         return MENU_ACT_NONE;
     }
-    int row = (y - ROW_Y0) / ROW_H;
-    int n = page == PAGE_MAIN ? main_count() : 5;
+    int row;
+    int n = page == PAGE_MAIN ? main_count() : page == PAGE_CHARS ? CHAR_COUNT * PART_COUNT + 2 : 5;
     int y0 = page == PAGE_EDIT ? ROW_Y0 + 40 : ROW_Y0;
     row = (y - y0) / ROW_H;
     if (y < y0 || row < 0 || row >= n) return MENU_ACT_NONE;
     sel = row;
-    int is_value = page == PAGE_MAIN ? (row >= IT_SCREEN && row <= IT_HUE) : row <= 2;
+    int is_value = page == PAGE_MAIN ? (row >= IT_SCREEN && row <= IT_HUE)
+                 : page == PAGE_CHARS ? row < CHAR_COUNT * PART_COUNT : row <= 2;
     if (is_value && x >= VALUE_X)
         return menu_key(x < VALUE_X + 50 ? MK_LEFT : MK_RIGHT);
     return menu_key(MK_OK);
@@ -319,6 +404,17 @@ void menu_draw(uint32_t *buf)
             case IT_CONTRAST: slider(buf, VALUE_X, y, settings.contrast, -100, 100, s); break;
             case IT_SAT: slider(buf, VALUE_X, y, settings.saturation, -100, 100, s); break;
             case IT_HUE: slider(buf, VALUE_X, y, settings.hue, -180, 180, s); break;
+            case IT_CHARS: {
+                int k = 0;
+                for (int c = 0; c < CHAR_COUNT; c++)
+                    for (int p = 0; p < PART_COUNT; p++)
+                        k += settings.char_on[c][p];
+                if (k) {
+                    snprintf(t, sizeof(t), "%d changed", k);
+                    text(buf, VALUE_X, y, t, C_DIM);
+                }
+                break;
+            }
             case IT_RECOLOR:
                 if (settings.nrecolor) {
                     snprintf(t, sizeof(t), "%d changed", settings.nrecolor);
@@ -346,10 +442,36 @@ void menu_draw(uint32_t *buf)
         if (!ncolors)
             text(buf, SW_X0, SW_Y0, "No colors on screen.", C_DIM);
         text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 14, "Enter/tap again: edit  Esc: back", 0xFF6E6A7Eu);
+    } else if (page == PAGE_CHARS) {
+        text(buf, PANEL_X + 12, PANEL_Y + 10, "CHARACTERS", C_GOLD);
+        text(buf, PANEL_X + PANEL_W - 48, PANEL_Y + 10, "Back", C_DIM);
+        int n = CHAR_COUNT * PART_COUNT + 2;
+        for (int i = 0; i < n; i++) {
+            int y = ROW_Y0 + i * ROW_H;
+            int s = i == sel;
+            if (s) fill(buf, PANEL_X + 4, y - 3, PANEL_W - 8, ROW_H, C_SEL);
+            if (s) fill(buf, PANEL_X + 4, y - 3, 2, ROW_H, C_ACCENT);
+            if (i < CHAR_COUNT * PART_COUNT) {
+                int c = i / PART_COUNT, p = i % PART_COUNT;
+                snprintf(t, sizeof(t), "%s %s", c == CHAR_ROBO ? "Robo" : "Mobo", settings_part_name(p));
+                text(buf, PANEL_X + 14, y, t, s ? C_TEXT : C_DIM);
+                text(buf, VALUE_X - 16, y, "<", C_TEXT);
+                fill(buf, VALUE_X, y - 1, 34, 10, 0xFF000000u | char_rgb(c, p));
+                frame(buf, VALUE_X, y - 1, 34, 10, 0xFF5A5870u);
+                text(buf, VALUE_X + 40, y, settings.char_on[c][p] ? ">" : "> original", settings.char_on[c][p] ? C_TEXT : C_DIM);
+            } else {
+                text(buf, PANEL_X + 14, y, i == CHAR_COUNT * PART_COUNT ? "Reset characters" : "Back", s ? C_TEXT : C_DIM);
+            }
+        }
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 14, "Left/right: presets  Enter: mix", 0xFF6E6A7Eu);
     } else {
-        uint16_t md = edit_md;
+        uint16_t md = edit_char >= 0 ? char_orig_md[edit_char][edit_part] : edit_md;
         uint32_t rgb = current_rgb(md);
-        snprintf(t, sizeof(t), "EDIT COLOR %d%d%d", md & 7, (md >> 3) & 7, (md >> 6) & 7);
+        if (edit_char >= 0)
+            snprintf(t, sizeof(t), "%s %s", edit_char == CHAR_ROBO ? "ROBO" : "MOBO",
+                     edit_part == PART_SHIRT ? "SHIRT" : edit_part == PART_PANTS ? "PANTS" : "SKIN");
+        else
+            snprintf(t, sizeof(t), "EDIT COLOR %d%d%d", md & 7, (md >> 3) & 7, (md >> 6) & 7);
         text(buf, PANEL_X + 12, PANEL_Y + 10, t, C_GOLD);
         text(buf, PANEL_X + PANEL_W - 48, PANEL_Y + 10, "Back", C_DIM);
         text(buf, 28, 40, "Original", C_DIM);

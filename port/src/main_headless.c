@@ -85,6 +85,7 @@ int main(int argc, char **argv)
     md_load_rom(buf, n);
 
     int frames = 600, hash = 0;
+    const char *dumpvdp = NULL;
     struct { int frame; char path[256]; } shots[64];
     struct { int frame, pad; uint8_t b; } inputs[256];
     int nshots = 0, ninputs = 0;
@@ -94,6 +95,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--interp")) md.use_recomp = 0;
         else if (!strcmp(argv[i], "--hash")) hash = 1;
+        else if (!strcmp(argv[i], "--dumpvdp") && i + 1 < argc) dumpvdp = argv[++i];
         else if (!strcmp(argv[i], "--ini") && i + 1 < argc) {
             settings_load(argv[++i]);
             settings_apply();
@@ -160,6 +162,16 @@ int main(int argc, char **argv)
         printf("\ncram:");
         for (int i = 0; i < 64; i++) printf(" %03x", vdp.cram[i]);
         printf("\nram c070=%04x\n", (md.ram[0xc070] << 8) | md.ram[0xc071]);
+    }
+    if (dumpvdp) { /* raw VDP state for tools: vram, cram, vsram, regs */
+        FILE *d = fopen(dumpvdp, "wb");
+        if (d) {
+            fwrite(vdp.vram, 1, sizeof(vdp.vram), d);
+            fwrite(vdp.cram, 1, sizeof(vdp.cram), d);
+            fwrite(vdp.vsram, 1, sizeof(vdp.vsram), d);
+            fwrite(vdp.reg, 1, sizeof(vdp.reg), d);
+            fclose(d);
+        }
     }
     if (wf) { wav_header(wf, 48000, wav_frames); fclose(wf); }
     fprintf(stderr, "instructions: recompiled %llu, interpreted %llu\n",

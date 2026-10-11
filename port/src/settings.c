@@ -10,6 +10,19 @@
 
 settings_t settings;
 uint32_t md_color_lut[512];
+uint32_t char_color_lut[16];
+static const char *char_keys[CHAR_COUNT] = {"robo", "mobo"};
+static const char *part_keys[PART_COUNT] = {"shirt", "pants", "skin"};
+static const char *char_names[CHAR_COUNT] = {"Robo (P1)", "Mobo (P2)"};
+static const char *part_names[PART_COUNT] = {"Shirt", "Pants", "Skin"};
+const char *settings_char_name(int c) { return c >= 0 && c < CHAR_COUNT ? char_names[c] : "?"; }
+const char *settings_part_name(int p) { return p >= 0 && p < PART_COUNT ? part_names[p] : "?"; }
+
+static uint32_t shade(uint32_t rgb, double f)
+{
+    uint32_t r = (uint32_t)(((rgb >> 16) & 255) * f), g = (uint32_t)(((rgb >> 8) & 255) * f), b = (uint32_t)((rgb & 255) * f);
+    return 0xFF000000u | (r << 16) | (g << 8) | b;
+}
 int md_color_lut_ready;
 
 static const char *screen_names[SCREEN_COUNT] = {
@@ -172,6 +185,14 @@ void settings_apply(void)
     for (int i = 0; i < settings.nrecolor; i++)
         md_color_lut[settings.recolor[i].md & 511] = 0xFF000000u | settings.recolor[i].rgb;
     md_color_lut_ready = 1;
+    for (int c = 0; c < CHAR_COUNT; c++) {
+        uint32_t *l = &char_color_lut[c * 8];
+        l[CHAR_SLOT_SHIRT] = 0xFF000000u | settings.char_rgb[c][PART_SHIRT];
+        l[CHAR_SLOT_SHIRT_DARK] = shade(settings.char_rgb[c][PART_SHIRT], 0.62);   /* like 500 -> 300 */
+        l[CHAR_SLOT_PANTS] = 0xFF000000u | settings.char_rgb[c][PART_PANTS];
+        l[CHAR_SLOT_SKIN] = 0xFF000000u | settings.char_rgb[c][PART_SKIN];
+        l[CHAR_SLOT_SKIN_DARK] = shade(settings.char_rgb[c][PART_SKIN], 0.80);     /* like 740 -> 620 */
+    }
     vdp_refresh_palette();
     md_set_aspect(settings_aspect());
 }
@@ -205,6 +226,20 @@ int settings_set(const char *key, const char *value)
     if (!strcmp(key, "contrast")) { settings.contrast = clampi(atoi(value), -100, 100); return 1; }
     if (!strcmp(key, "saturation")) { settings.saturation = clampi(atoi(value), -100, 100); return 1; }
     if (!strcmp(key, "hue")) { settings.hue = clampi(atoi(value), -180, 180); return 1; }
+    for (int c = 0; c < CHAR_COUNT; c++)
+        for (int p = 0; p < PART_COUNT; p++) {
+            char k[32];
+            snprintf(k, sizeof(k), "%s.%s", char_keys[c], part_keys[p]);
+            if (strcmp(key, k))
+                continue;
+            if (!*value || !strcmp(value, "original") || !strcmp(value, "none")) {
+                settings.char_on[c][p] = 0;
+            } else {
+                settings.char_on[c][p] = 1;
+                settings.char_rgb[c][p] = (uint32_t)strtoul(value[0] == '#' ? value + 1 : value, NULL, 16) & 0xFFFFFF;
+            }
+            return 1;
+        }
     if (!strncmp(key, "color.", 6) && strlen(key) == 9) {
         /* color.RGB = RRGGBB   (R, G, B = Mega Drive levels 0-7) */
         int r = key[6] - '0', g = key[7] - '0', b = key[8] - '0';
@@ -254,6 +289,14 @@ int settings_save(const char *path)
     fprintf(f, "colors = %s\n", preset_keys[settings.preset]);
     fprintf(f, "brightness = %d\ncontrast = %d\nsaturation = %d\nhue = %d\n",
             settings.brightness, settings.contrast, settings.saturation, settings.hue);
+    fprintf(f, "# player characters: RRGGBB or original\n");
+    for (int c = 0; c < CHAR_COUNT; c++)
+        for (int p = 0; p < PART_COUNT; p++) {
+            if (settings.char_on[c][p])
+                fprintf(f, "%s.%s = %06X\n", char_keys[c], part_keys[p], settings.char_rgb[c][p]);
+            else
+                fprintf(f, "%s.%s = original\n", char_keys[c], part_keys[p]);
+        }
     if (settings.nrecolor)
         fprintf(f, "# recoloured Mega Drive colours: color.RGB (levels 0-7) = new colour RRGGBB\n");
     for (int i = 0; i < settings.nrecolor; i++) {

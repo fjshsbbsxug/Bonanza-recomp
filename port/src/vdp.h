@@ -4,6 +4,7 @@
 
 #define VDP_FB_W 576   /* widest picture: 320 + 2 * 128 */
 #define VDP_BLACK 0x200 /* colour index used outside the picture (always black) */
+#define VDP_CHAR_BASE 0x400 /* + slot: player-character colour (see settings.h) */
 
 typedef struct {
     uint8_t  reg[32];
