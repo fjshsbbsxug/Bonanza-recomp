@@ -267,19 +267,25 @@ static void draw_plane(uint8_t *out, int y, int width, int plane_b)
     hsa += plane_b ? 2 : 0;
     int hs = ((vdp.vram[hsa & 0xFFFF] << 8) | vdp.vram[(hsa + 1) & 0xFFFF]) & 0x3FF;
     int column_vs = vdp.reg[11] & 4;
+    int wmask = pw * 8 - 1, hmask = ph * 8 - 1;
+    int vs = vdp.vsram[plane_b];
+    int last_tile = -1, last_py = -1;
+    uint16_t entry = 0;
     for (int x = 0; x < width; x++) {
-        int vs;
-        if (column_vs) {
+        if (column_vs && !(x & 15)) {
             int col = (x >> 4) & 0x1F;
             if (col > 19) col = 19;
             vs = vdp.vsram[col * 2 + plane_b];
-        } else {
-            vs = vdp.vsram[plane_b];
         }
-        int px = (x - hs) & (pw * 8 - 1);
-        int py = (y + vs) & (ph * 8 - 1);
-        uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
-        uint16_t entry = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
+        int px = (x - hs) & wmask;
+        int py = (y + vs) & hmask;
+        int tile = px >> 3;
+        if (tile != last_tile || py != last_py) {
+            uint32_t ea = name + (((py >> 3) * pw + tile) << 1);
+            entry = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
+            last_tile = tile;
+            last_py = py;
+        }
         out[x] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
     }
 }

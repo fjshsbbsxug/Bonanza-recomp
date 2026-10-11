@@ -12,7 +12,7 @@ BUILD   := build
 TARGET  := $(BUILD)/bonanza.md
 SRCS    := $(wildcard src/*.s) $(wildcard include/*.inc)
 
-.PHONY: all compare clean extract disasm
+.PHONY: all compare clean extract disasm recomp port
 
 all: compare
 
@@ -39,6 +39,15 @@ compare: $(TARGET)
 # Regenerate src/ from the ROM (overwrites src/ and assets.txt).
 disasm:
 	$(PYTHON) tools/disasm.py
+
+# Regenerate the recompiled C code of the native port (port/gen/).
+recomp:
+	$(PYTHON) tools/recomp.py
+
+# Build the native port for this machine (needs CMake and SDL2).
+port:
+	cmake -S port -B port/build -DCMAKE_BUILD_TYPE=Release
+	cmake --build port/build -j
 
 clean:
 	rm -rf $(BUILD) assets
