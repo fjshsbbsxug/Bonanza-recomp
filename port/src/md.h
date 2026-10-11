@@ -1,0 +1,79 @@
+/* Bonanza Bros. port - Mega Drive hardware layer */
+#ifndef MD_H
+#define MD_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+#define MD_ROM_SHA1 "f7313ecaf7143873597e3a6ebf58d542d06c3ef3"
+#define MD_ROM_SIZE 0x80000
+
+#define MD_LINES        262   /* NTSC */
+#define MD_CYC68K_LINE  488   /* 3420 master clocks / 7 */
+#define MD_CYCZ80_LINE  228   /* 3420 master clocks / 15 */
+#define MD_FPS          60
+
+#define MD_SCREEN_W 320
+#define MD_SCREEN_H 224
+
+/* Pad buttons (active high in this API) */
+enum {
+    PAD_UP = 1 << 0, PAD_DOWN = 1 << 1, PAD_LEFT = 1 << 2, PAD_RIGHT = 1 << 3,
+    PAD_B = 1 << 4, PAD_C = 1 << 5, PAD_A = 1 << 6, PAD_START = 1 << 7,
+};
+
+typedef struct {
+    uint8_t  rom[0x400000];
+    uint32_t rom_size;
+    uint8_t  ram[0x10000];
+    uint8_t  zram[0x2000];
+
+    /* I/O */
+    uint8_t  io_data[3], io_ctrl[3];
+    uint8_t  pad[2];          /* current button state, PAD_* */
+    int      region_overseas;  /* 1 = export (US/EU), 0 = Japan */
+
+    /* Z80 */
+    int      z80_busreq;       /* 68k holds the Z80 bus */
+    int      z80_reset;        /* Z80 held in reset */
+    uint32_t z80_bank;         /* 68k bank for 0x8000-0xFFFF */
+    int      z80_bank_bit;
+
+    uint32_t frame;
+    int      line;
+    int      use_recomp;       /* run recompiled code where available */
+} md_t;
+
+extern md_t md;
+
+/* machine */
+int  md_load_rom(const uint8_t *data, size_t size);
+const char *md_rom_check(const uint8_t *data, size_t size); /* NULL if OK, else message */
+void md_reset(void);
+void md_run_frame(void);       /* emulate one 60 Hz frame */
+
+/* video output: XRGB8888, MD_SCREEN_W x MD_SCREEN_H, active width in md_screen_width() */
+const uint32_t *md_framebuffer(void);
+int md_screen_width(void);
+
+/* audio: interleaved stereo int16 samples produced during the last frame */
+void md_audio_set_rate(int rate);
+int  md_audio_take(int16_t *out, int max_frames);
+
+/* bus (used by the CPU cores) */
+uint32_t md_read8(uint32_t a);
+uint32_t md_read16(uint32_t a);
+void     md_write8(uint32_t a, uint32_t v);
+void     md_write16(uint32_t a, uint32_t v);
+
+/* 68k core glue (cpu68k.c) */
+void cpu_init(void);
+void cpu_reset(void);
+void cpu_run(int cycles);       /* run until the cycle budget is used */
+void cpu_set_irq(int level);
+uint32_t cpu_get_pc(void);
+
+/* save state of the whole machine to a buffer (for differential testing) */
+uint32_t md_state_hash(void);
+
+#endif

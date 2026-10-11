@@ -1,0 +1,409 @@
+/* Mega Drive machine: memory map, I/O, Z80 + sound, frame scheduler. */
+#include <string.h>
+#include <stdio.h>
+#include "md.h"
+#include "vdp.h"
+#include "psg.h"
+#include "sha1.h"
+#include "../ext/z80/z80.h"
+#include "../ext/nuked-opn2/ym3438.h"
+
+md_t md;
+
+static z80 zcpu;
+static ym3438_t ym;
+
+/* ------------------------------------------------------------ timing */
+
+#define MASTER_LINE     3420
+#define YM_DIV          42          /* master clocks per OPN2_Clock */
+#define YM_RATE         (53693175.0 / 7 / 144) /* NTSC master/7/144 */
+
+static uint64_t master_line_start;   /* master clock at the start of the current line */
+static uint64_t ym_time;             /* master clock the YM has been run up to */
+static int      ym_phase;            /* 0..23 clock within the current sample */
+static int32_t  ym_acc[2];
+static int      z80_line_cyc;        /* Z80 cycles executed in this line */
+
+/* audio output */
+static int      out_rate = 48000;
+static double   resample_pos;
+static int16_t  last_in[2], prev_in[2];
+#define AUDIO_BUF 16384
+static int16_t  audio_buf[AUDIO_BUF * 2];
+static int      audio_len;
+
+extern int cpu_line_cycles(void);
+
+int md_line_cycle(void)
+{
+    return cpu_line_cycles();
+}
+
+static void push_output(int16_t l, int16_t r)
+{
+    if (audio_len < AUDIO_BUF) {
+        audio_buf[audio_len * 2] = l;
+        audio_buf[audio_len * 2 + 1] = r;
+        audio_len++;
+    }
+}
+
+static void ym_emit_sample(int32_t l, int32_t r)
+{
+    int16_t p = psg_sample(3579545.0 / 16.0 / YM_RATE);
+    l = l * 6 + p;
+    r = r * 6 + p;
+    if (l > 32767) l = 32767; else if (l < -32768) l = -32768;
+    if (r > 32767) r = 32767; else if (r < -32768) r = -32768;
+    prev_in[0] = last_in[0]; prev_in[1] = last_in[1];
+    last_in[0] = (int16_t)l; last_in[1] = (int16_t)r;
+    /* linear resample YM_RATE -> out_rate */
+    double step = YM_RATE / out_rate;
+    while (resample_pos < 1.0) {
+        double t = resample_pos;
+        push_output((int16_t)(prev_in[0] + (last_in[0] - prev_in[0]) * t),
+                    (int16_t)(prev_in[1] + (last_in[1] - prev_in[1]) * t));
+        resample_pos += step;
+    }
+    resample_pos -= 1.0;
+}
+
+static void ym_sync(uint64_t target)
+{
+    Bit16s buf[2];
+    while (ym_time + YM_DIV <= target) {
+        OPN2_Clock(&ym, buf);
+        ym_acc[0] += buf[0];
+        ym_acc[1] += buf[1];
+        ym_time += YM_DIV;
+        if (++ym_phase == 24) {
+            ym_phase = 0;
+            ym_emit_sample(ym_acc[0], ym_acc[1]);
+            ym_acc[0] = ym_acc[1] = 0;
+        }
+    }
+}
+
+static uint64_t now_z80(void) { return master_line_start + (uint64_t)z80_line_cyc * 15; }
+static uint64_t now_68k(void) { return master_line_start + (uint64_t)cpu_line_cycles() * 7; }
+
+void md_audio_set_rate(int rate) { out_rate = rate; }
+
+int md_audio_take(int16_t *out, int max_frames)
+{
+    int n = audio_len < max_frames ? audio_len : max_frames;
+    memcpy(out, audio_buf, n * 4);
+    memmove(audio_buf, audio_buf + n * 2, (audio_len - n) * 4);
+    audio_len -= n;
+    return n;
+}
+
+static void ym_write(uint64_t t, int port, uint8_t v)
+{
+    ym_sync(t);
+    OPN2_Write(&ym, port, v);
+}
+
+/* ------------------------------------------------------------ Z80 bus */
+
+static uint8_t z80_bus_read(uint32_t a, uint64_t t)
+{
+    a &= 0xFFFF;
+    if (a < 0x4000)
+        return md.zram[a & 0x1FFF];
+    if (a < 0x6000) {
+        ym_sync(t);
+        return OPN2_Read(&ym, a & 3);
+    }
+    if (a >= 0x8000)
+        return (uint8_t)md_read8(md.z80_bank | (a & 0x7FFF));
+    return 0xFF;
+}
+
+static void z80_bus_write(uint32_t a, uint8_t v, uint64_t t)
+{
+    a &= 0xFFFF;
+    if (a < 0x4000) {
+        md.zram[a & 0x1FFF] = v;
+    } else if (a < 0x6000) {
+        ym_write(t, a & 3, v);
+    } else if (a < 0x6100) {
+        md.z80_bank = ((md.z80_bank >> 1) | ((uint32_t)(v & 1) << 23)) & 0xFF8000;
+    } else if (a >= 0x7F00 && a < 0x7F20) {
+        if (a == 0x7F11 || a == 0x7F13 || a == 0x7F15 || a == 0x7F17)
+            psg_write(v);
+    } else if (a >= 0x8000) {
+        md_write8(md.z80_bank | (a & 0x7FFF), v);
+    }
+}
+
+static uint8_t zr(void *u, uint16_t a) { (void)u; return z80_bus_read(a, now_z80()); }
+static void zw(void *u, uint16_t a, uint8_t v) { (void)u; z80_bus_write(a, v, now_z80()); }
+static uint8_t zin(z80 *z, uint8_t p) { (void)z; (void)p; return 0xFF; }
+static void zout(z80 *z, uint8_t p, uint8_t v) { (void)z; (void)p; (void)v; }
+
+static int z80_running(void) { return !md.z80_busreq && !md.z80_reset; }
+
+static void z80_do_reset(void)
+{
+    z80_init(&zcpu);
+    zcpu.read_byte = zr;
+    zcpu.write_byte = zw;
+    zcpu.port_in = zin;
+    zcpu.port_out = zout;
+    md.z80_bank = 0;
+}
+
+/* ------------------------------------------------------------ I/O */
+
+static uint8_t pad_read(int port)
+{
+    uint8_t ctrl = md.io_ctrl[port];
+    uint8_t th = (ctrl & 0x40) ? (md.io_data[port] & 0x40) : 0x40;
+    uint8_t in;
+    if (port >= 2)
+        in = 0x7F;
+    else {
+        uint8_t b = md.pad[port];
+        if (th)
+            in = 0x40 | (~b & 0x3F);
+        else
+            in = (~b & 0x03) | ((~b >> 2) & 0x30);
+    }
+    return (md.io_data[port] & ctrl & 0x7F) | (in & ~ctrl & 0x7F) | (md.io_data[port] & 0x80);
+}
+
+static uint8_t io_read(uint32_t a)
+{
+    switch ((a >> 1) & 0x0F) {
+    case 0: return md.region_overseas ? 0xA0 : 0x20;
+    case 1: return pad_read(0);
+    case 2: return pad_read(1);
+    case 3: return pad_read(2);
+    case 4: return md.io_ctrl[0];
+    case 5: return md.io_ctrl[1];
+    case 6: return md.io_ctrl[2];
+    default: return 0;
+    }
+}
+
+static void io_write(uint32_t a, uint8_t v)
+{
+    int r = (a >> 1) & 0x0F;
+    if (r >= 1 && r <= 3)
+        md.io_data[r - 1] = v;
+    else if (r >= 4 && r <= 6)
+        md.io_ctrl[r - 4] = v;
+}
+
+/* ------------------------------------------------------------ 68k bus */
+
+uint32_t md_read8(uint32_t a)
+{
+    a &= 0xFFFFFF;
+    if (a < 0x400000)
+        return md.rom[a];
+    if (a >= 0xE00000)
+        return md.ram[a & 0xFFFF];
+    if (a >= 0xC00000 && a < 0xC00020) {
+        uint16_t w;
+        if (a < 0xC00004) w = vdp_read_data();
+        else if (a < 0xC00008) w = vdp_read_ctrl();
+        else if (a < 0xC00010) w = vdp_read_hv();
+        else return 0xFF;
+        return (a & 1) ? (w & 0xFF) : (w >> 8);
+    }
+    if (a >= 0xA00000 && a < 0xA10000)
+        return md.z80_busreq || md.z80_reset ? z80_bus_read(a & 0x7FFF, now_68k()) : 0xFF;
+    if (a >= 0xA10000 && a < 0xA10020)
+        return io_read(a);
+    if (a == 0xA11100)
+        return (md.z80_busreq && !md.z80_reset) ? 0x00 : 0x01;
+    if (a == 0xA11101)
+        return 0;
+    return 0xFF;
+}
+
+uint32_t md_read16(uint32_t a)
+{
+    a &= 0xFFFFFE;
+    if (a < 0x400000)
+        return (md.rom[a] << 8) | md.rom[a + 1];
+    if (a >= 0xE00000)
+        return (md.ram[a & 0xFFFF] << 8) | md.ram[(a + 1) & 0xFFFF];
+    if (a >= 0xC00000 && a < 0xC00020) {
+        if (a < 0xC00004) return vdp_read_data();
+        if (a < 0xC00008) return vdp_read_ctrl();
+        if (a < 0xC00010) return vdp_read_hv();
+        return 0xFFFF;
+    }
+    if (a >= 0xA00000 && a < 0xA10000) {
+        uint32_t b = md_read8(a);
+        return (b << 8) | b;
+    }
+    if (a >= 0xA10000 && a < 0xA10020) {
+        uint32_t b = io_read(a | 1);
+        return (b << 8) | b;
+    }
+    if (a == 0xA11100)
+        return (md_read8(a) << 8) | 0;
+    return 0xFFFF;
+}
+
+void md_write8(uint32_t a, uint32_t v)
+{
+    a &= 0xFFFFFF;
+    v &= 0xFF;
+    if (a >= 0xE00000) {
+        md.ram[a & 0xFFFF] = (uint8_t)v;
+        return;
+    }
+    if (a >= 0xC00000 && a < 0xC00020) {
+        if (a < 0xC00004) vdp_write_data((uint16_t)(v | (v << 8)));
+        else if (a < 0xC00008) vdp_write_ctrl((uint16_t)(v | (v << 8)));
+        else if (a >= 0xC00010 && a < 0xC00018 && (a & 1)) psg_write((uint8_t)v);
+        return;
+    }
+    if (a >= 0xA00000 && a < 0xA10000) {
+        if (md.z80_busreq || md.z80_reset)
+            z80_bus_write(a & 0x7FFF, (uint8_t)v, now_68k());
+        return;
+    }
+    if (a >= 0xA10000 && a < 0xA10020) {
+        io_write(a, (uint8_t)v);
+        return;
+    }
+    if (a == 0xA11100) {
+        md.z80_busreq = v & 1;
+        return;
+    }
+    if (a == 0xA11200) {
+        int reset = !(v & 1);
+        if (reset && !md.z80_reset) {
+            ym_sync(now_68k());
+            OPN2_Reset(&ym);
+        }
+        if (!reset && md.z80_reset)
+            z80_do_reset();
+        md.z80_reset = reset;
+        return;
+    }
+}
+
+void md_write16(uint32_t a, uint32_t v)
+{
+    a &= 0xFFFFFE;
+    v &= 0xFFFF;
+    if (a >= 0xE00000) {
+        md.ram[a & 0xFFFF] = (uint8_t)(v >> 8);
+        md.ram[(a + 1) & 0xFFFF] = (uint8_t)v;
+        return;
+    }
+    if (a >= 0xC00000 && a < 0xC00020) {
+        if (a < 0xC00004) vdp_write_data((uint16_t)v);
+        else if (a < 0xC00008) vdp_write_ctrl((uint16_t)v);
+        else if (a >= 0xC00010 && a < 0xC00018) psg_write((uint8_t)v);
+        return;
+    }
+    if (a >= 0xA00000 && a < 0xA10000) {
+        md_write8(a, v >> 8);
+        return;
+    }
+    if (a >= 0xA10000 && a < 0xA10020) {
+        io_write(a | 1, (uint8_t)v);
+        return;
+    }
+    if (a == 0xA11100 || a == 0xA11200) {
+        md_write8(a, v >> 8);
+        return;
+    }
+}
+
+/* ------------------------------------------------------------ machine */
+
+const char *md_rom_check(const uint8_t *data, size_t size)
+{
+    char hex[41];
+    if (size != MD_ROM_SIZE)
+        return "This is not the Bonanza Bros. (JUE) ROM: wrong size (expected 512 KiB).";
+    sha1_hex(data, size, hex);
+    if (strcmp(hex, MD_ROM_SHA1) != 0)
+        return "This is not the Bonanza Bros. (JUE) ROM: SHA-1 does not match.";
+    return NULL;
+}
+
+int md_load_rom(const uint8_t *data, size_t size)
+{
+    if (size > sizeof(md.rom))
+        return -1;
+    memset(md.rom, 0xFF, sizeof(md.rom));
+    memcpy(md.rom, data, size);
+    md.rom_size = (uint32_t)size;
+    md.region_overseas = 1;
+    return 0;
+}
+
+void md_reset(void)
+{
+    memset(md.ram, 0, sizeof(md.ram));
+    memset(md.zram, 0, sizeof(md.zram));
+    memset(md.io_data, 0, sizeof(md.io_data));
+    memset(md.io_ctrl, 0, sizeof(md.io_ctrl));
+    md.z80_busreq = 0;
+    md.z80_reset = 1;
+    md.frame = 0;
+    vdp_reset();
+    psg_reset();
+    OPN2_SetChipType(ym3438_mode_ym2612);
+    OPN2_Reset(&ym);
+    z80_do_reset();
+    master_line_start = ym_time = 0;
+    ym_phase = 0;
+    cpu_init();
+    cpu_reset();
+}
+
+void md_run_frame(void)
+{
+    for (int line = 0; line < MD_LINES; line++) {
+        md.line = line;
+        if (line < 224)
+            vdp_render_line(line);
+        vdp_line_start(line);
+        if (line == 224)
+            z80_gen_int(&zcpu, 0xFF);
+        z80_line_cyc = 0;
+        cpu_run(MD_CYC68K_LINE);
+        if (z80_running()) {
+            while (z80_line_cyc < MD_CYCZ80_LINE) {
+                unsigned long c0 = zcpu.cyc;
+                z80_step(&zcpu);
+                z80_line_cyc += (int)(zcpu.cyc - c0);
+            }
+            z80_line_cyc -= MD_CYCZ80_LINE;
+        }
+        if (line == 225)
+            zcpu.int_pending = 0;
+        z80_line_cyc = 0;
+        master_line_start += MASTER_LINE;
+        ym_sync(master_line_start);
+    }
+    md.frame++;
+}
+
+const uint32_t *md_framebuffer(void) { return &vdp.fb[0][0]; }
+int md_screen_width(void) { return vdp_width(); }
+
+uint32_t md_state_hash(void)
+{
+    uint32_t h = 2166136261u;
+#define HB(p, n) for (size_t i_ = 0; i_ < (n); i_++) { h ^= ((const uint8_t *)(p))[i_]; h *= 16777619u; }
+    HB(md.ram, sizeof(md.ram));
+    HB(vdp.vram, sizeof(vdp.vram));
+    HB(vdp.cram, sizeof(vdp.cram));
+    HB(vdp.vsram, sizeof(vdp.vsram));
+    HB(md.zram, sizeof(md.zram));
+#undef HB
+    return h;
+}
