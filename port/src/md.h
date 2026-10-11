@@ -13,7 +13,7 @@
 #define MD_CYCZ80_LINE  228   /* 3420 master clocks / 15 */
 #define MD_FPS          60
 
-#define MD_SCREEN_W 320
+#define MD_FB_W     576   /* framebuffer stride (pixels); widescreen output can use all of it */
 #define MD_SCREEN_H 224
 
 /* Pad buttons (active high in this API) */
@@ -52,9 +52,11 @@ const char *md_rom_check(const uint8_t *data, size_t size); /* NULL if OK, else 
 void md_reset(void);
 void md_run_frame(void);       /* emulate one 60 Hz frame */
 
-/* video output: XRGB8888, MD_SCREEN_W x MD_SCREEN_H, active width in md_screen_width() */
-const uint32_t *md_framebuffer(void);
+/* video output: XRGB8888, MD_FB_W stride, MD_SCREEN_H lines, picture width md_screen_width() */
+const uint32_t *md_framebuffer(void);      /* converted with the current colour settings */
+const uint16_t *md_framebuffer_md(void);   /* raw 9-bit Mega Drive colours (>= 512: black) */
 int md_screen_width(void);
+void md_set_aspect(double aspect);   /* 4/3 original, wider = widescreen */
 
 /* audio: interleaved stereo int16 samples produced during the last frame */
 void md_audio_set_rate(int rate);

@@ -5,6 +5,7 @@
 #include "vdp.h"
 #include "psg.h"
 #include "sha1.h"
+#include "settings.h"
 #include "../ext/z80/z80.h"
 #include "../ext/nuked-opn2/ym3438.h"
 
@@ -392,8 +393,21 @@ void md_run_frame(void)
     md.frame++;
 }
 
-const uint32_t *md_framebuffer(void) { return &vdp.fb[0][0]; }
-int md_screen_width(void) { return vdp_width(); }
+const uint32_t *md_framebuffer(void)
+{
+    static uint32_t fb[MD_SCREEN_H][MD_FB_W];
+    int w = md_screen_width();
+    for (int y = 0; y < MD_SCREEN_H; y++)
+        for (int x = 0; x < w; x++) {
+            uint16_t c = vdp.fbmd[y][x];
+            fb[y][x] = c < 512 ? md_color_lut[c] : 0xFF000000u;
+        }
+    return &fb[0][0];
+}
+
+const uint16_t *md_framebuffer_md(void) { return &vdp.fbmd[0][0]; }
+int md_screen_width(void) { return vdp_out_width(); }
+void md_set_aspect(double aspect) { vdp_set_aspect(aspect); }
 
 uint32_t md_state_hash(void)
 {

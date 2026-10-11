@@ -11,6 +11,7 @@
 #include <string.h>
 #include "md.h"
 #include "vdp.h"
+#include "settings.h"
 
 extern uint64_t cpu_stat_recomp_insns, cpu_stat_interp_insns;
 
@@ -41,7 +42,7 @@ static void write_ppm(const char *path)
     const uint32_t *fb = md_framebuffer();
     for (int y = 0; y < MD_SCREEN_H; y++)
         for (int x = 0; x < w; x++) {
-            uint32_t p = fb[y * MD_SCREEN_W + x];
+            uint32_t p = fb[y * MD_FB_W + x];
             uint8_t rgb[3] = {(uint8_t)(p >> 16), (uint8_t)(p >> 8), (uint8_t)p};
             fwrite(rgb, 1, 3, f);
         }
@@ -93,6 +94,24 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--interp")) md.use_recomp = 0;
         else if (!strcmp(argv[i], "--hash")) hash = 1;
+        else if (!strcmp(argv[i], "--ini") && i + 1 < argc) {
+            settings_load(argv[++i]);
+            settings_apply();
+        } else if (!strcmp(argv[i], "--set") && i + 1 < argc) {
+            char kv[256];
+            snprintf(kv, sizeof(kv), "%s", argv[++i]);
+            char *eq = strchr(kv, '=');
+            if (eq) {
+                *eq = 0;
+                if (!settings_set(kv, eq + 1))
+                    fprintf(stderr, "unknown setting %s\n", kv);
+                settings_apply();
+            }
+        } else if (!strcmp(argv[i], "--aspect") && i + 1 < argc) {
+            double a = 0, b = 0;
+            if (sscanf(argv[++i], "%lf:%lf", &a, &b) == 2 && b > 0)
+                md_set_aspect(a / b);
+        }
         else if (!strcmp(argv[i], "--wav") && i + 1 < argc) wav = argv[++i];
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc && nshots < 64) {
             char *c = strchr(argv[++i], ':');

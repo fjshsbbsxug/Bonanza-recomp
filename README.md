@@ -63,6 +63,16 @@ builder/      the HTML builder page
   does. A recompiled run is therefore **bit-identical** to an interpreted one; this was
   checked frame by frame over the attract mode, menus, and gameplay on x86-64, Windows
   (MinGW build under Wine), ARM64 and ARMv7.
+* **Widescreen and custom colours.** An in-game menu (Esc, gamepad Back, or MENU on
+  touch screens) and the builder's *Screen & colors* step offer:
+  * 4:3, 16:9, 16:10 and 21:9 output. Widescreen draws more of the level from video
+    memory instead of stretching; a few HUD tiles can wrap into the corners.
+  * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
+    plus brightness, contrast, saturation and hue.
+  * A recolour tool that replaces any Mega Drive colour with one you choose.
+
+  Settings live in `bonanza.ini` (see `port/dist/README.txt`). They only change the
+  picture, so recompiled-vs-interpreted runs stay bit-identical with any settings.
 * Controls: arrows / Z X C / Enter (player 1), W A S D / J K L / Space (player 2),
   gamepads, and an on-screen touch pad on phones. F11 toggles full screen, P pauses.
 

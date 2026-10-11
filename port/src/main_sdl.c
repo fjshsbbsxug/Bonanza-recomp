@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "md.h"
+#include "settings.h"
+#include "menu.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -28,6 +30,65 @@ static int running = 1, paused, have_rom, show_touch;
 static uint8_t key_pad[2], ctl_pad[2], touch_pad;
 static char status_msg[256] = "Drop the Bonanza Bros. ROM file onto this window";
 static uint8_t *rom_buf;
+static SDL_Texture *menu_tex;
+static uint32_t menu_buf[MENU_W * MENU_H];
+static SDL_Rect menu_rect;              /* where the menu overlay is drawn (window pixels) */
+static char settings_path[1024];
+
+/* ------------------------------------------------------------------ settings */
+
+static int file_exists(const char *path)
+{
+    SDL_RWops *rw = SDL_RWFromFile(path, "rb");
+    if (rw)
+        SDL_RWclose(rw);
+    return rw != NULL;
+}
+
+/* bonanza.ini next to the program wins ("portable", e.g. made by the HTML builder);
+ * otherwise it lives in the user data folder. */
+static void load_settings(void)
+{
+    char *base = SDL_GetBasePath();
+    if (base) {
+        snprintf(settings_path, sizeof(settings_path), "%sbonanza.ini", base);
+        SDL_free(base);
+    }
+    if (!settings_path[0] || !file_exists(settings_path)) {
+        char *pref = SDL_GetPrefPath(APP_ORG, APP_NAME);
+        if (pref) {
+            snprintf(settings_path, sizeof(settings_path), "%sbonanza.ini", pref);
+            SDL_free(pref);
+        }
+    }
+    settings_defaults();
+    if (settings_load(settings_path))
+        SDL_Log("settings from %s", settings_path);
+    settings_apply();
+}
+
+/* Give a windowed desktop window the shape of the picture (4:3, 16:9, ...). */
+static void fit_window(void)
+{
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+    Uint32 flags = SDL_GetWindowFlags(window);
+    if (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_MAXIMIZED))
+        return;
+    if (settings.screen == SCREEN_STRETCH)
+        return;
+    int w, h;
+    SDL_GetWindowSize(window, &w, &h);
+    int nw = (int)(h * settings_aspect() + 0.5);
+    if (nw != w)
+        SDL_SetWindowSize(window, nw, h);
+#endif
+}
+
+static void save_settings(void)
+{
+    if (settings_path[0] && !settings_save(settings_path))
+        SDL_Log("could not save %s", settings_path);
+}
 
 /* ------------------------------------------------------------------ ROM */
 
@@ -213,6 +274,7 @@ static touch_btn tbtns[] = {
     {0.80f, 0.70f, 0.09f, 0.16f, PAD_B, "B"},
     {0.90f, 0.62f, 0.09f, 0.16f, PAD_C, "C"},
     {0.44f, 0.90f, 0.12f, 0.08f, PAD_START, "START"},
+    {0.01f, 0.02f, 0.08f, 0.09f, 0, "MENU"},
 };
 #define NTB (int)(sizeof(tbtns) / sizeof(tbtns[0]))
 #define MAX_FINGERS 10
@@ -232,9 +294,28 @@ static void touch_update(void)
     }
 }
 
+static void menu_action(int act);
+
 static void touch_event(SDL_Event *e)
 {
     show_touch = 1;
+    if (e->type == SDL_FINGERDOWN) {
+        int ww, wh;
+        SDL_GetRendererOutputSize(renderer, &ww, &wh);
+        if (menu_is_open()) {
+            int mx = (int)((e->tfinger.x * ww - menu_rect.x) * MENU_W / (menu_rect.w ? menu_rect.w : 1));
+            int my = (int)((e->tfinger.y * wh - menu_rect.y) * MENU_H / (menu_rect.h ? menu_rect.h : 1));
+            menu_action(menu_pointer(mx, my));
+            return;
+        }
+        touch_btn *mb = &tbtns[NTB - 1];
+        if (e->tfinger.x >= mb->x && e->tfinger.x < mb->x + mb->w && e->tfinger.y >= mb->y && e->tfinger.y < mb->y + mb->h) {
+            menu_open();
+            return;
+        }
+    }
+    if (menu_is_open())
+        return;
     int slot = -1;
     for (int f = 0; f < MAX_FINGERS; f++)
         if (fingers[f].active && fingers[f].id == e->tfinger.fingerId)
@@ -265,11 +346,18 @@ static void draw_touch(int ww, int wh)
         if (!b->label[0])
             continue;
         SDL_Rect r = {(int)(b->x * ww), (int)(b->y * wh), (int)(b->w * ww), (int)(b->h * wh)};
-        int on = (touch_pad & b->bits) == b->bits;
+        int on = b->bits && (touch_pad & b->bits) == b->bits;
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, on ? 110 : 45);
         SDL_RenderFillRect(renderer, &r);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 120);
         SDL_RenderDrawRect(renderer, &r);
+        if (!b->bits) { /* menu button: three bars */
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
+            for (int k = 0; k < 3; k++) {
+                SDL_Rect bar = {r.x + r.w / 4, r.y + r.h * (k + 1) / 4 - r.h / 24, r.w / 2, r.h / 12 + 1};
+                SDL_RenderFillRect(renderer, &bar);
+            }
+        }
     }
 }
 
@@ -283,18 +371,52 @@ static void present(void)
     SDL_RenderClear(renderer);
     if (have_rom) {
         int sw = md_screen_width();
-        SDL_UpdateTexture(texture, NULL, md_framebuffer(), MD_SCREEN_W * 4);
-        SDL_Rect src = {0, 0, sw, MD_SCREEN_H};
-        /* 4:3 picture, as on a TV */
-        int dw = ww, dh = ww * 3 / 4;
-        if (dh > wh) {
-            dh = wh;
-            dw = wh * 4 / 3;
+        uint32_t *fb = (uint32_t *)md_framebuffer();
+        int hl = menu_highlight();
+        if (hl >= 0 && (SDL_GetTicks() / 200) % 2) {
+            /* flash the colour being recoloured */
+            const uint16_t *fm = md_framebuffer_md();
+            for (int i = 0; i < MD_SCREEN_H * MD_FB_W; i++)
+                if (fm[i] == hl)
+                    fb[i] = 0xFFFFFFFFu ^ (fb[i] & 0x00FFFFFF);
         }
-        SDL_Rect dst = {(ww - dw) / 2, (wh - dh) / 2, dw, dh};
+        SDL_UpdateTexture(texture, NULL, fb, MD_FB_W * 4);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+        SDL_SetTextureScaleMode(texture, settings.smooth ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+#endif
+        SDL_Rect src = {0, 0, sw, MD_SCREEN_H};
+        SDL_Rect dst = {0, 0, ww, wh};
+        if (settings.screen != SCREEN_STRETCH) {
+            /* the picture keeps its TV shape: 4:3, or wider in widescreen modes */
+            double aspect = settings_aspect();
+            int dw = ww, dh = (int)(ww / aspect);
+            if (dh > wh) {
+                dh = wh;
+                dw = (int)(wh * aspect);
+            }
+            dst.x = (ww - dw) / 2;
+            dst.y = (wh - dh) / 2;
+            dst.w = dw;
+            dst.h = dh;
+        }
         SDL_RenderCopy(renderer, texture, &src, &dst);
-        if (show_touch)
+        if (show_touch && !menu_is_open())
             draw_touch(ww, wh);
+    }
+    /* menu overlay: 4:3 box in the middle of the window */
+    int mh = wh, mw = wh * 4 / 3;
+    if (mw > ww) {
+        mw = ww;
+        mh = ww * 3 / 4;
+    }
+    menu_rect.x = (ww - mw) / 2;
+    menu_rect.y = (wh - mh) / 2;
+    menu_rect.w = mw;
+    menu_rect.h = mh;
+    if (menu_is_open()) {
+        menu_draw(menu_buf);
+        SDL_UpdateTexture(menu_tex, NULL, menu_buf, MENU_W * 4);
+        SDL_RenderCopy(renderer, menu_tex, NULL, &menu_rect);
     }
     SDL_RenderPresent(renderer);
 }
@@ -308,6 +430,61 @@ static void set_title(void)
 }
 
 /* ------------------------------------------------------------------ loop */
+
+static int last_screen = -1;
+
+static void menu_action(int act)
+{
+    if (settings.screen != last_screen) {
+        last_screen = settings.screen;
+        fit_window();
+    }
+    if (act == MENU_ACT_NONE)
+        return;
+    if (menu_settings_dirty) {
+        save_settings();
+        menu_settings_dirty = 0;
+    }
+    if (act == MENU_ACT_RESET && have_rom)
+        md_reset();
+    else if (act == MENU_ACT_QUIT)
+        running = 0;
+    memset(key_pad, 0, sizeof(key_pad));
+}
+
+static void toggle_menu(void)
+{
+    if (menu_is_open())
+        menu_action(menu_key(MK_BACK));
+    else if (have_rom)
+        menu_open();
+}
+
+static int menu_key_for(SDL_Keycode k)
+{
+    switch (k) {
+    case SDLK_UP: case SDLK_w: return MK_UP;
+    case SDLK_DOWN: case SDLK_s: return MK_DOWN;
+    case SDLK_LEFT: case SDLK_a: return MK_LEFT;
+    case SDLK_RIGHT: case SDLK_d: return MK_RIGHT;
+    case SDLK_RETURN: case SDLK_KP_ENTER: case SDLK_SPACE: case SDLK_z: return MK_OK;
+    case SDLK_BACKSPACE: case SDLK_x: return MK_BACK;
+    }
+    return -1;
+}
+
+static int menu_button_for(int b)
+{
+    switch (b) {
+    case SDL_CONTROLLER_BUTTON_DPAD_UP: return MK_UP;
+    case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return MK_DOWN;
+    case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return MK_LEFT;
+    case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return MK_RIGHT;
+    case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_START: return MK_OK;
+    case SDL_CONTROLLER_BUTTON_B: return MK_BACK;
+    }
+    return -1;
+}
 
 static void handle_events(void)
 {
@@ -326,28 +503,34 @@ static void handle_events(void)
         case SDL_KEYDOWN:
         case SDL_KEYUP: {
             SDL_Keycode k = e.key.keysym.sym;
-            if (e.type == SDL_KEYDOWN && !e.key.repeat) {
-                if (k == SDLK_F11 || (k == SDLK_RETURN && (e.key.keysym.mod & KMOD_ALT))) {
+            if (e.type == SDL_KEYDOWN) {
+                if (!e.key.repeat && (k == SDLK_F11 || (k == SDLK_RETURN && (e.key.keysym.mod & KMOD_ALT)))) {
                     Uint32 fs = SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
                     SDL_SetWindowFullscreen(window, fs ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
                     break;
                 }
-                if (k == SDLK_ESCAPE || k == SDLK_AC_BACK) {
-#ifndef __EMSCRIPTEN__
-                    running = 0;
-#endif
+                if (!e.key.repeat && (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_F1 || k == SDLK_TAB)) {
+                    toggle_menu();
                     break;
                 }
-                if (k == SDLK_p || k == SDLK_PAUSE) {
+                if (menu_is_open()) {
+                    int mk = menu_key_for(k);
+                    if (mk >= 0)
+                        menu_action(menu_key(mk));
+                    break;
+                }
+                if (!e.key.repeat && (k == SDLK_p || k == SDLK_PAUSE)) {
                     paused = !paused;
                     set_title();
                     break;
                 }
-                if (k == SDLK_F3 && have_rom) {
+                if (!e.key.repeat && k == SDLK_F3 && have_rom) {
                     md_reset();
                     break;
                 }
             }
+            if (menu_is_open())
+                break;
             int pl;
             uint8_t bit = key_bit(k, &pl);
             if (e.type == SDL_KEYDOWN)
@@ -356,6 +539,30 @@ static void handle_events(void)
                 key_pad[pl] &= ~bit;
             break;
         }
+        case SDL_MOUSEBUTTONDOWN:
+            if (e.button.which == SDL_TOUCH_MOUSEID)
+                break;
+            if (menu_is_open() && e.button.button == SDL_BUTTON_LEFT) {
+                int ww, wh, winw, winh;
+                SDL_GetRendererOutputSize(renderer, &ww, &wh);
+                SDL_GetWindowSize(window, &winw, &winh);
+                /* window coordinates -> renderer pixels (high-DPI) -> menu coordinates */
+                int px = e.button.x * ww / (winw ? winw : 1), py = e.button.y * wh / (winh ? winh : 1);
+                menu_action(menu_pointer((px - menu_rect.x) * MENU_W / (menu_rect.w ? menu_rect.w : 1),
+                                         (py - menu_rect.y) * MENU_H / (menu_rect.h ? menu_rect.h : 1)));
+            } else if (e.button.button == SDL_BUTTON_RIGHT) {
+                toggle_menu();
+            }
+            break;
+        case SDL_CONTROLLERBUTTONDOWN:
+            if (e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK || e.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) {
+                toggle_menu();
+            } else if (menu_is_open()) {
+                int mk = menu_button_for(e.cbutton.button);
+                if (mk >= 0)
+                    menu_action(menu_key(mk));
+            }
+            break;
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:
             open_pads();
@@ -367,6 +574,8 @@ static void handle_events(void)
             break;
         case SDL_APP_WILLENTERBACKGROUND:
             paused = 1;
+            if (menu_settings_dirty)
+                save_settings();
             break;
         case SDL_APP_DIDENTERFOREGROUND:
             paused = 0;
@@ -379,7 +588,7 @@ static Uint64 next_frame;
 
 static void run_one(void)
 {
-    if (have_rom && !paused) {
+    if (have_rom && !paused && !menu_is_open()) {
         for (int p = 0; p < 2; p++) {
             ctl_pad[p] = controller_state(pads[p]);
             md.pad[p] = key_pad[p] | ctl_pad[p] | (p == 0 ? touch_pad : 0);
@@ -425,6 +634,30 @@ static void frame(void)
     present();
 }
 
+#ifdef __EMSCRIPTEN__
+/* Called from the HTML builder page (Module.ccall) for its live preview. */
+EMSCRIPTEN_KEEPALIVE int bonanza_set(const char *key, const char *value)
+{
+    int ok = settings_set(key, value);
+    settings_apply();
+    return ok;
+}
+EMSCRIPTEN_KEEPALIVE void bonanza_reset_settings(void)
+{
+    settings_defaults();
+    settings_apply();
+}
+EMSCRIPTEN_KEEPALIVE void bonanza_save_settings(const char *path)
+{
+    settings_save(path);
+}
+EMSCRIPTEN_KEEPALIVE void bonanza_open_menu(void)
+{
+    if (have_rom && !menu_is_open())
+        menu_open();
+}
+#endif
+
 int main(int argc, char **argv)
 {
     int use_recomp = 1;
@@ -434,11 +667,17 @@ int main(int argc, char **argv)
     }
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1"); /* Back opens the menu */
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) < 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
     }
-    window = SDL_CreateWindow(APP_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 960, 720,
+#ifdef __EMSCRIPTEN__
+    const int win_w = 1280; /* the page shows a 16:9 canvas; 4:3 is pillarboxed inside */
+#else
+    const int win_w = 960;
+#endif
+    window = SDL_CreateWindow(APP_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, win_w, 720,
                               SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!window) {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
@@ -447,7 +686,12 @@ int main(int argc, char **argv)
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer)
         renderer = SDL_CreateRenderer(window, -1, 0);
-    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, MD_SCREEN_W, MD_SCREEN_H);
+    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, MD_FB_W, MD_SCREEN_H);
+    menu_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, MENU_W, MENU_H);
+    SDL_SetTextureBlendMode(menu_tex, SDL_BLENDMODE_BLEND);
+#ifdef __EMSCRIPTEN__
+    menu_allow_quit = 0;
+#endif
 #if defined(__ANDROID__)
     show_touch = 1;
 #endif
@@ -463,6 +707,9 @@ int main(int argc, char **argv)
         SDL_PauseAudioDevice(audio_dev, 0);
     open_pads();
 
+    load_settings();
+    last_screen = settings.screen;
+    fit_window();
     find_rom(argc, argv);
     md.use_recomp = use_recomp;
     set_title();
@@ -476,7 +723,7 @@ int main(int argc, char **argv)
     while (running) {
         frame();
         /* pace by the audio queue when possible, otherwise by the clock */
-        if (audio_dev && have_rom && !paused) {
+        if (audio_dev && have_rom && !paused && !menu_is_open()) {
             Uint32 limit = (Uint32)(have.freq * 4 / 20); /* ~50 ms */
             while (running && SDL_GetQueuedAudioSize(audio_dev) > limit)
                 SDL_Delay(1);
@@ -490,6 +737,8 @@ int main(int argc, char **argv)
                 next_frame = now;
         }
     }
+    if (menu_settings_dirty)
+        save_settings();
     SDL_Quit();
 #endif
     return 0;

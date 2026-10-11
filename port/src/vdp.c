@@ -2,6 +2,7 @@
 #include <string.h>
 #include "vdp.h"
 #include "md.h"
+#include "settings.h"
 
 vdp_t vdp;
 
@@ -9,17 +10,21 @@ extern int md_line_cycle(void);
 
 static void update_palette(int i)
 {
-    uint16_t c = vdp.cram[i];
-    /* 3 bits per channel, scaled to 0..252 the way most emulators do */
-    uint32_t r = ((c >> 1) & 7) * 36, g = ((c >> 5) & 7) * 36, b = ((c >> 9) & 7) * 36;
-    vdp.palette[i] = 0xFF000000u | (r << 16) | (g << 8) | b;
+    vdp.palette[i] = md_color_lut[md_color_index(vdp.cram[i])];
+}
+
+void vdp_refresh_palette(void)
+{
+    for (int i = 0; i < 64; i++)
+        update_palette(i);
 }
 
 void vdp_reset(void)
 {
+    if (!md_color_lut_ready)
+        settings_apply(); /* default colours (all-zero settings are the defaults) */
     memset(&vdp, 0, sizeof(vdp));
-    for (int i = 0; i < 64; i++)
-        update_palette(i);
+    vdp_refresh_palette();
 }
 
 int vdp_width(void) { return (vdp.reg[12] & 0x01) ? 320 : 256; }
@@ -252,7 +257,11 @@ static inline int tile_pixel(uint16_t entry, int px, int py)
     return c | ((entry >> 9) & 0x30) | ((entry >> 8) & 0x80);
 }
 
-static void draw_plane(uint8_t *out, int y, int width, int plane_b)
+/* Output can be wider than the real screen ("widescreen"): vdp.margin extra pixels are
+ * drawn on each side from the same VRAM. This only affects the picture, never the
+ * emulated machine state. Line buffers are indexed with x + margin. */
+
+static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
 {
     static const int sizes[4] = {32, 64, 32, 128};
     int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
@@ -271,10 +280,10 @@ static void draw_plane(uint8_t *out, int y, int width, int plane_b)
     int vs = vdp.vsram[plane_b];
     int last_tile = -1, last_py = -1;
     uint16_t entry = 0;
-    for (int x = 0; x < width; x++) {
-        if (column_vs && !(x & 15)) {
-            int col = (x >> 4) & 0x1F;
-            if (col > 19) col = 19;
+    for (int x = -m; x < width + m; x++) {
+        if (column_vs) {
+            int col = x < 0 ? 0 : (x >> 4);
+            if (col > (width >> 4) - 1) col = (width >> 4) - 1;
             vs = vdp.vsram[col * 2 + plane_b];
         }
         int px = (x - hs) & wmask;
@@ -286,35 +295,38 @@ static void draw_plane(uint8_t *out, int y, int width, int plane_b)
             last_tile = tile;
             last_py = py;
         }
-        out[x] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
+        out[x + m] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
     }
 }
 
-static void draw_window(uint8_t *out, int y, int width, uint8_t *in_window)
+static void draw_window(uint8_t *out, int y, int width, int m, uint8_t *in_window)
 {
     int h40 = width == 320;
     uint32_t name = (vdp.reg[3] & (h40 ? 0x3C : 0x3E)) << 10;
     int ww = h40 ? 64 : 32;
     int vp = (vdp.reg[18] & 0x1F) * 8, hp = (vdp.reg[17] & 0x1F) * 16;
     int vin = (vdp.reg[18] & 0x80) ? (y >= vp) : (y < vp);
-    for (int x = 0; x < width; x++) {
-        int hin = (vdp.reg[17] & 0x80) ? (x >= hp) : (x < hp);
-        in_window[x] = (uint8_t)(vin || hin);
-        if (!in_window[x])
+    for (int x = -m; x < width + m; x++) {
+        /* outside the real screen the window extends its edge column */
+        int cx = x < 0 ? 0 : (x >= width ? width - 1 : x);
+        int hin = (vdp.reg[17] & 0x80) ? (cx >= hp) : (cx < hp);
+        in_window[x + m] = (uint8_t)(vin || hin);
+        if (!in_window[x + m])
             continue;
-        uint32_t ea = name + (((y >> 3) * ww + (x >> 3)) << 1);
+        int wx = x & (ww * 8 - 1);
+        uint32_t ea = name + (((y >> 3) * ww + (wx >> 3)) << 1);
         uint16_t entry = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
-        out[x] = (uint8_t)tile_pixel(entry, x & 7, y & 7);
+        out[x + m] = (uint8_t)tile_pixel(entry, wx & 7, y & 7);
     }
 }
 
-static void draw_sprites(uint8_t *out, int y, int width)
+static void draw_sprites(uint8_t *out, int y, int width, int m)
 {
     int h40 = width == 320;
     uint32_t sat = (vdp.reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
     int max_sprites = h40 ? 80 : 64, max_line = h40 ? 20 : 16, max_px = h40 ? 320 : 256;
     int link = 0, count = 0, line_count = 0, pixels = 0, masked = 0, seen_nonzero_x = 0;
-    memset(out, 0, width);
+    memset(out, 0, width + 2 * m);
     do {
         const uint8_t *s = &vdp.vram[(sat + link * 8) & 0xFFFF];
         int sy = ((s[0] << 8) | s[1]) & 0x3FF;
@@ -344,11 +356,11 @@ static void draw_sprites(uint8_t *out, int y, int width)
                     if (masked)
                         continue;
                     int x = sx - 128 + cx * 8 + px;
-                    if (x < 0 || x >= width || (out[x] & 0x0F))
+                    if (x < -m || x >= width + m || (out[x + m] & 0x0F))
                         continue;
                     /* flip already applied to py; tile_pixel would flip again */
                     uint16_t e = tile & ~0x1000;
-                    out[x] = (uint8_t)tile_pixel(e, px, py);
+                    out[x + m] = (uint8_t)tile_pixel(e, px, py);
                 }
             }
         }
@@ -357,32 +369,62 @@ done:
     return;
 }
 
+static int margin40, margin32;
+
+void vdp_set_aspect(double aspect)
+{
+    /* the Mega Drive picture fills a 4:3 screen at either width */
+    for (int i = 0; i < 2; i++) {
+        int w = i ? 256 : 320;
+        int m = (int)((w * aspect / (4.0 / 3.0) - w) / 2.0 + 0.5);
+        if (m < 0) m = 0;
+        m &= ~1;
+        if (w + 2 * m > VDP_FB_W) m = (VDP_FB_W - w) / 2;
+        if (i) margin32 = m; else margin40 = m;
+    }
+}
+
+int vdp_margin(void)
+{
+    int width = vdp_width();
+    int m = width == 320 ? margin40 : margin32;
+    if (width + 2 * m > VDP_FB_W)
+        m = (VDP_FB_W - width) / 2;
+    return m;
+}
+
+int vdp_out_width(void)
+{
+    return vdp_width() + 2 * vdp_margin();
+}
+
 void vdp_render_line(int y)
 {
     int width = vdp_width();
-    uint32_t *fb = vdp.fb[y];
-    uint32_t bg = vdp.palette[vdp.reg[7] & 0x3F];
+    int m = vdp_margin();
+    int ow = width + 2 * m;
+    uint16_t *fb = vdp.fbmd[y];
+    uint16_t pal[64];
+    for (int i = 0; i < 64; i++)
+        pal[i] = md_color_index(vdp.cram[i]);
+    uint16_t bg = pal[vdp.reg[7] & 0x3F];
     if (!(vdp.reg[1] & 0x40)) {
-        for (int x = 0; x < 320; x++)
+        for (int x = 0; x < VDP_FB_W; x++)
             fb[x] = bg;
         return;
     }
-    uint8_t a[320], b[320], s[320], win[320], wbuf[320];
-    draw_plane(b, y, width, 1);
-    draw_plane(a, y, width, 0);
-    memset(win, 0, sizeof(win));
-    if ((vdp.reg[17] & 0x9F) || (vdp.reg[18] & 0x9F) || (vdp.reg[18] & 0x80) == 0) {
-        /* window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
-        int any = (vdp.reg[17] & 0x1F) || (vdp.reg[17] & 0x80) || (vdp.reg[18] & 0x1F) || (vdp.reg[18] & 0x80);
-        if (any) {
-            draw_window(wbuf, y, width, win);
-            for (int x = 0; x < width; x++)
-                if (win[x])
-                    a[x] = wbuf[x];
-        }
+    uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W];
+    draw_plane(b, y, width, m, 1);
+    draw_plane(a, y, width, m, 0);
+    /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
+    if ((vdp.reg[17] & 0x9F) || (vdp.reg[18] & 0x9F)) {
+        draw_window(wbuf, y, width, m, win);
+        for (int x = 0; x < ow; x++)
+            if (win[x])
+                a[x] = wbuf[x];
     }
-    draw_sprites(s, y, width);
-    for (int x = 0; x < width; x++) {
+    draw_sprites(s, y, width, m);
+    for (int x = 0; x < ow; x++) {
         int p;
         int sp = s[x], ap = a[x], bp = b[x];
         if ((sp & 0x80) && (sp & 0x0F)) p = sp;
@@ -392,8 +434,8 @@ void vdp_render_line(int y)
         else if (ap & 0x0F) p = ap;
         else if (bp & 0x0F) p = bp;
         else { fb[x] = bg; continue; }
-        fb[x] = vdp.palette[p & 0x3F];
+        fb[x] = pal[p & 0x3F];
     }
-    for (int x = width; x < 320; x++)
-        fb[x] = 0xFF000000u;
+    for (int x = ow; x < VDP_FB_W; x++)
+        fb[x] = VDP_BLACK;
 }

@@ -29,7 +29,29 @@ Start        Enter           Space
 
 Game controllers are supported (first pad = player 1). On touch screens an on-screen
 pad is shown.
-F11 or Alt+Enter: full screen   P: pause   F3: reset   Esc: quit
+F11 or Alt+Enter: full screen   P: pause   F3: reset   Esc: menu
+
+Menu: screen shape & colours
+----------------------------
+Open the menu with Esc, F1, Tab or a right click; Back/Guide on a gamepad; the Back
+button or the MENU button (top left) on Android.
+
+  Screen       Original 4:3, Widescreen 16:9 / 16:10, Ultrawide 21:9, or Stretch.
+               The widescreen modes show more of the level on the left and right
+               instead of stretching the picture.
+  Scaling      Sharp pixels or smooth.
+  Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
+               Inverted.
+  Brightness, Contrast, Saturation, Hue
+  Recolor...   Shows the colours on screen; pick one (it flashes in the game) and set
+               any new colour with the Red/Green/Blue sliders.
+
+Settings are saved in bonanza.ini (next to the program if a bonanza.ini is there,
+otherwise in your user data folder). It is a plain text file, e.g.
+
+    screen = 16:9
+    colors = vivid
+    color.700 = 2040FF      # Mega Drive colour R7 G0 B0 becomes #2040FF
 
 Command line: bonanza [ROM file] [--interp]
   --interp  run the original code on the built-in 68000 interpreter instead of the

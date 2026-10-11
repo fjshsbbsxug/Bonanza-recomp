@@ -13,7 +13,7 @@ set(BONANZA_SDL_URL "https://github.com/libsdl-org/SDL/releases/download/release
     CACHE STRING "SDL2 source archive used with BONANZA_FETCH_SDL")
 
 set(CORE_SOURCES
-  src/md.c src/vdp.c src/psg.c src/sha1.c src/cpu68k.c
+  src/md.c src/vdp.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c
   ext/musashi/m68kcpu.c ext/musashi/m68kops.c ext/musashi/m68kdasm.c
   ext/musashi/softfloat/softfloat.c
   ext/z80/z80.c
@@ -43,7 +43,7 @@ endif()
 
 if(EMSCRIPTEN)
   add_executable(bonanza src/main_sdl.c)
-  set(EMFLAGS "-sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sEXPORTED_RUNTIME_METHODS=['FS','callMain'] -sINVOKE_RUN=0 -sENVIRONMENT=web -sSTACK_SIZE=1048576")
+  set(EMFLAGS "-sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sEXPORTED_RUNTIME_METHODS=['FS','callMain','ccall'] -sINVOKE_RUN=0 -sENVIRONMENT=web -sSTACK_SIZE=1048576")
   if(BONANZA_FETCH_SDL)
     include(FetchContent)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)

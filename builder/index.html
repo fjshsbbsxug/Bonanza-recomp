@@ -68,7 +68,22 @@
   .fallback.show { display: block; }
   #player { display: none; margin-top: 20px; }
   #player.show { display: block; }
-  .screen { background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; width: 100%; }
+  .screen { background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 16 / 9; width: 100%; }
+  .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 20px; }
+  .opts label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
+  .opts label .v { color: var(--ink); font-variant-numeric: tabular-nums; }
+  select, input[type=number] { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+           border-radius: 8px; padding: 7px 9px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  h3 { font-size: 15px; margin: 20px 0 6px; }
+  .recolors { display: grid; gap: 8px; margin: 10px 0; }
+  .recolor { display: flex; align-items: center; gap: 10px; font-size: 14px; flex-wrap: wrap; }
+  .sw { width: 34px; height: 24px; border-radius: 6px; border: 1px solid var(--line); flex: none; }
+  .recolor input[type=color] { width: 46px; height: 28px; border: 1px solid var(--line); border-radius: 6px; padding: 0; background: none; }
+  .recolor code { color: var(--muted); }
+  button.link { appearance: none; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; padding: 4px; }
+  .addcolor { display: flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); flex-wrap: wrap; }
+  .addcolor input { width: 56px; }
   canvas#canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; touch-action: none; }
   table.keys { border-collapse: collapse; font-size: 14px; margin-top: 10px; }
   table.keys td, table.keys th { padding: 4px 12px 4px 0; text-align: left; }
@@ -118,8 +133,71 @@
     </div>
   </section>
 
+  <section class="step disabled" id="step-options">
+    <h2><span class="num">3</span> Screen &amp; colors</h2>
+    <div class="opts">
+      <label>Screen
+        <select id="o-screen">
+          <option value="original">Original 4:3</option>
+          <option value="16:9">Widescreen 16:9</option>
+          <option value="16:10">Widescreen 16:10</option>
+          <option value="21:9">Ultrawide 21:9</option>
+          <option value="stretch">Stretch to the window</option>
+        </select>
+      </label>
+      <label>Scaling
+        <select id="o-smooth"><option value="0">Sharp pixels</option><option value="1">Smooth</option></select>
+      </label>
+      <label>Color style
+        <select id="o-colors">
+          <option value="original">Original</option><option value="vivid">Vivid</option><option value="soft">Soft</option>
+          <option value="arcade">Arcade</option><option value="grayscale">Grayscale</option><option value="sepia">Sepia</option>
+          <option value="night">Night</option><option value="gameboy">Game Boy</option><option value="inverted">Inverted</option>
+        </select>
+      </label>
+      <label>Brightness <span class="v" id="v-brightness">0</span><input type="range" id="o-brightness" min="-100" max="100" step="5" value="0"></label>
+      <label>Contrast <span class="v" id="v-contrast">0</span><input type="range" id="o-contrast" min="-100" max="100" step="5" value="0"></label>
+      <label>Saturation <span class="v" id="v-saturation">0</span><input type="range" id="o-saturation" min="-100" max="100" step="5" value="0"></label>
+      <label>Hue <span class="v" id="v-hue">0</span><input type="range" id="o-hue" min="-180" max="180" step="10" value="0"></label>
+    </div>
+    <h3>Your own colors</h3>
+    <p class="note" style="margin-top:0">Replace any color of the game with one you choose, for example the robbers' outfits.
+      Start the live preview, then press <b>Pick a color in the game</b>: the game's Recolor menu shows the colors on screen and flashes the one you select.
+      Your picks appear in this list.</p>
+    <div class="recolors" id="recolors"></div>
+    <div class="row">
+      <button class="secondary" id="preview">Start live preview</button>
+      <button class="secondary" id="pick">Pick a color in the game</button>
+      <button class="secondary" id="resetopts">Reset options</button>
+    </div>
+    <details style="margin-top:12px">
+      <summary class="note" style="cursor:pointer">Add a color by its Mega Drive value</summary>
+      <div class="addcolor" style="margin-top:8px">
+        R <input type="number" id="add-r" min="0" max="7" value="7"> G <input type="number" id="add-g" min="0" max="7" value="0">
+        B <input type="number" id="add-b" min="0" max="7" value="0"> <span class="sw" id="add-sw"></span>
+        <button class="secondary" id="add-color">Add</button>
+      </div>
+    </details>
+    <p class="note">Widescreen modes show more of the level on the left and right instead of stretching the picture.</p>
+    <p class="note" id="opts-note">These settings go into the package as <code>bonanza.ini</code>. They can also be changed any time in the game: press <kbd>Esc</kbd> (keyboard), Back (gamepad) or MENU (touch).</p>
+  </section>
+
+  <section id="player">
+    <div class="screen"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
+    <div class="row" style="margin-top:12px">
+      <button class="secondary" id="fullscreen">Full screen</button>
+      <span class="note" style="margin:0">Click the picture first so it receives the keyboard. <kbd>Esc</kbd> or right-click opens the game menu.</span>
+    </div>
+    <table class="keys">
+      <tr><th></th><th>Player 1</th><th>Player 2</th></tr>
+      <tr><td>Move</td><td><kbd>Arrows</kbd></td><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td></tr>
+      <tr><td>A / B / C</td><td><kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd></td><td><kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd></td></tr>
+      <tr><td>Start</td><td><kbd>Enter</kbd></td><td><kbd>Space</kbd></td></tr>
+    </table>
+  </section>
+
   <section class="step disabled" id="step-build">
-    <h2><span class="num">3</span> Build</h2>
+    <h2><span class="num">4</span> Build</h2>
     <div class="row">
       <button class="primary" id="build" disabled>Build</button>
       <span id="buildhint" class="note" style="margin:0"></span>
@@ -132,19 +210,6 @@
     <div class="log" id="log" aria-live="polite"></div>
   </section>
 
-  <section id="player">
-    <div class="screen"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
-    <div class="row" style="margin-top:12px">
-      <button class="secondary" id="fullscreen">Full screen</button>
-      <span class="note" style="margin:0">Click the picture first so it receives the keyboard.</span>
-    </div>
-    <table class="keys">
-      <tr><th></th><th>Player 1</th><th>Player 2</th></tr>
-      <tr><td>Move</td><td><kbd>Arrows</kbd></td><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td></tr>
-      <tr><td>A / B / C</td><td><kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd></td><td><kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd></td></tr>
-      <tr><td>Start</td><td><kbd>Enter</kbd></td><td><kbd>Space</kbd></td></tr>
-    </table>
-  </section>
 
   <footer>
     Built from the <b>bonanza-recomp</b> project: the game's 68000 code is statically recompiled to C and runs on a
@@ -244,6 +309,7 @@
     }
     rom = good ? bytes : null;
     $('step-target').classList.toggle('disabled', !rom);
+    $('step-options').classList.toggle('disabled', !rom);
     updateBuild();
   }
   const drop = $('drop');
@@ -269,7 +335,7 @@
     $('buildhint').textContent = {
       windows: 'Your ROM is added to the package: unzip and run bonanza.exe.',
       linux: 'Your ROM is added to the package: unzip and run ./bonanza.',
-      android: 'Android apps cannot carry the ROM: the app asks for it once on first start.',
+      android: 'Android apps cannot carry the ROM or settings: the app asks for the ROM once; set screen & colors with its MENU button.',
       web: 'Runs right here. Nothing is uploaded.',
     }[target] || '';
   }
@@ -365,6 +431,8 @@
     const dir = root ? root.replace(/[^/]*$/, '') : '';
     zip.file(dir + 'baserom.md', rom, { binary: true });
     log('Added your ROM as ' + dir + 'baserom.md');
+    zip.file(dir + 'bonanza.ini', toIni());
+    log('Added your screen & color settings as ' + dir + 'bonanza.ini');
     const out = await zip.generateAsync({ type: 'uint8array', platform: 'UNIX', compression: 'DEFLATE',
                                           compressionOptions: { level: 6 } },
                                         m => { /* progress */ });
@@ -373,9 +441,123 @@
     log(t === 'windows' ? 'Unzip it and double-click bonanza.exe.' : 'Unzip it and run ./bonanza (needs a desktop with SDL-compatible video/audio).');
   }
 
+  /* ---------- options (bonanza.ini) ---------- */
+  const OPT = { screen: 'original', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0, recolor: {} };
+  const SLIDERS = ['brightness', 'contrast', 'saturation', 'hue'];
+  const mdLevel = v => Math.round(v * 255 / 7);
+  const mdHex = key => '#' + [0, 1, 2].map(i => mdLevel(+key[i]).toString(16).padStart(2, '0')).join('');
+  function toIni() {
+    let t = '# Bonanza Bros port settings (made with the port builder)\n';
+    t += `screen = ${OPT.screen}\nsmooth = ${OPT.smooth}\ncolors = ${OPT.colors}\n`;
+    for (const k of SLIDERS) t += `${k} = ${OPT[k]}\n`;
+    for (const [k, v] of Object.entries(OPT.recolor)) t += `color.${k} = ${v.replace('#', '').toUpperCase()}\n`;
+    return t;
+  }
+  function parseIni(text) {
+    const o = { screen: 'original', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0, recolor: {} };
+    for (const line of text.split(/\r?\n/)) {
+      const m = line.match(/^\s*([\w.]+)\s*=\s*(\S*)\s*$/);
+      if (!m) continue;
+      const [, k, v] = m;
+      if (k.startsWith('color.')) o.recolor[k.slice(6)] = '#' + v.toLowerCase();
+      else if (SLIDERS.includes(k)) o[k] = parseInt(v, 10) || 0;
+      else if (k in o) o[k] = v;
+    }
+    return o;
+  }
+  const sameOpts = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  function syncUI() {
+    $('o-screen').value = OPT.screen;
+    $('o-smooth').value = OPT.smooth;
+    $('o-colors').value = OPT.colors;
+    for (const k of SLIDERS) { $('o-' + k).value = OPT[k]; $('v-' + k).textContent = (OPT[k] > 0 ? '+' : '') + OPT[k]; }
+    const list = $('recolors');
+    list.innerHTML = '';
+    const keys = Object.keys(OPT.recolor);
+    if (!keys.length) {
+      const p = document.createElement('div');
+      p.className = 'note';
+      p.style.margin = '0';
+      p.textContent = 'No custom colors yet.';
+      list.appendChild(p);
+    }
+    for (const k of keys) {
+      const row = document.createElement('div');
+      row.className = 'recolor';
+      const from = document.createElement('span');
+      from.className = 'sw';
+      from.style.background = mdHex(k);
+      from.title = 'Original color ' + k;
+      const arrow = document.createElement('span');
+      arrow.textContent = '→';
+      const pick = document.createElement('input');
+      pick.type = 'color';
+      pick.value = OPT.recolor[k];
+      pick.setAttribute('aria-label', 'New color for ' + k);
+      pick.addEventListener('input', () => { OPT.recolor[k] = pick.value; gameSet('color.' + k, pick.value.slice(1)); });
+      const code = document.createElement('code');
+      code.textContent = 'color ' + k;
+      const del = document.createElement('button');
+      del.className = 'link';
+      del.textContent = 'Remove';
+      del.addEventListener('click', () => { delete OPT.recolor[k]; gameSet('color.' + k, 'none'); syncUI(); });
+      row.append(from, arrow, pick, code, del);
+      list.appendChild(row);
+    }
+  }
+  function gameSet(key, value) {
+    if (webStarted && window.Module && Module.ccall) {
+      try { Module.ccall('bonanza_set', 'number', ['string', 'string'], [key, String(value)]); } catch (e) { /* not ready */ }
+    }
+  }
+  ['screen', 'smooth', 'colors'].forEach(k => $('o-' + k).addEventListener('change', e => { OPT[k] = e.target.value; gameSet(k, OPT[k]); }));
+  SLIDERS.forEach(k => $('o-' + k).addEventListener('input', e => {
+    OPT[k] = parseInt(e.target.value, 10);
+    $('v-' + k).textContent = (OPT[k] > 0 ? '+' : '') + OPT[k];
+    gameSet(k, OPT[k]);
+  }));
+  $('resetopts').addEventListener('click', () => {
+    Object.assign(OPT, { screen: 'original', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0, recolor: {} });
+    if (webStarted && window.Module && Module.ccall) Module.ccall('bonanza_reset_settings', null, [], []);
+    syncUI();
+  });
+  function addSw() {
+    const k = ['add-r', 'add-g', 'add-b'].map(id => Math.max(0, Math.min(7, parseInt($(id).value, 10) || 0))).join('');
+    $('add-sw').style.background = mdHex(k);
+    return k;
+  }
+  ['add-r', 'add-g', 'add-b'].forEach(id => $(id).addEventListener('input', addSw));
+  addSw();
+  $('add-color').addEventListener('click', () => {
+    const k = addSw();
+    if (!OPT.recolor[k]) OPT.recolor[k] = mdHex(k);
+    gameSet('color.' + k, OPT.recolor[k].slice(1));
+    syncUI();
+  });
+  $('preview').addEventListener('click', () => playWeb());
+  $('pick').addEventListener('click', async () => {
+    await playWeb();
+    const tryOpen = () => {
+      if (window.Module && Module.calledRun) { Module.ccall('bonanza_open_menu', null, [], []); $('canvas').focus(); }
+      else setTimeout(tryOpen, 300);
+    };
+    tryOpen();
+  });
+  /* pick up changes made with the in-game menu */
+  setInterval(() => {
+    if (!webStarted || !window.Module || !Module.calledRun) return;
+    try {
+      Module.ccall('bonanza_save_settings', null, ['string'], ['/live.ini']);
+      const o = parseIni(Module.FS.readFile('/live.ini', { encoding: 'utf8' }));
+      if (!sameOpts(o, OPT)) { Object.assign(OPT, o); syncUI(); }
+    } catch (e) { /* not ready */ }
+  }, 1000);
+  syncUI();
+
   /* ---------- browser play ---------- */
   let webStarted = false;
   async function playWeb() {
+    if (!rom) return;
     if (webStarted) { $('player').scrollIntoView({ behavior: 'smooth' }); return; }
     $('log').innerHTML = '';
     log('Loading the browser runtime…');
@@ -397,6 +579,7 @@
       printErr: t => console.warn(t),
       onRuntimeInitialized() {
         Module.FS.writeFile('/baserom.md', rom);
+        Module.FS.writeFile('/bonanza.ini', toIni());
         log('✓ Running. Click the picture to give it the keyboard.', 'ok');
         Module.callMain([]);
         canvas.focus();

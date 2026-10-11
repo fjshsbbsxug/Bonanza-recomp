@@ -1,0 +1,265 @@
+/* Player options: screen shape and colours (bonanza.ini). */
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include "settings.h"
+#include "md.h"
+#include "vdp.h"
+
+settings_t settings;
+uint32_t md_color_lut[512];
+int md_color_lut_ready;
+
+static const char *screen_names[SCREEN_COUNT] = {
+    "Original 4:3", "Widescreen 16:9", "Widescreen 16:10", "Ultrawide 21:9", "Stretch to window",
+};
+static const char *screen_keys[SCREEN_COUNT] = {"original", "16:9", "16:10", "21:9", "stretch"};
+static const char *preset_names[PRESET_COUNT] = {
+    "Original", "Vivid", "Soft", "Arcade", "Grayscale", "Sepia", "Night", "Game Boy", "Inverted",
+};
+static const char *preset_keys[PRESET_COUNT] = {
+    "original", "vivid", "soft", "arcade", "grayscale", "sepia", "night", "gameboy", "inverted",
+};
+
+const char *settings_screen_name(int s) { return s >= 0 && s < SCREEN_COUNT ? screen_names[s] : "?"; }
+const char *settings_preset_name(int p) { return p >= 0 && p < PRESET_COUNT ? preset_names[p] : "?"; }
+
+double settings_aspect(void)
+{
+    switch (settings.screen) {
+    case SCREEN_WIDE_16_9: return 16.0 / 9.0;
+    case SCREEN_WIDE_16_10: return 16.0 / 10.0;
+    case SCREEN_WIDE_21_9: return 21.0 / 9.0;
+    default: return 4.0 / 3.0;
+    }
+}
+
+void settings_defaults(void)
+{
+    memset(&settings, 0, sizeof(settings));
+    settings.screen = SCREEN_ORIGINAL;
+    settings.preset = PRESET_ORIGINAL;
+}
+
+/* ------------------------------------------------------------ colour */
+
+static double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+static void rgb_to_hsv(double r, double g, double b, double *h, double *s, double *v)
+{
+    double mx = fmax(r, fmax(g, b)), mn = fmin(r, fmin(g, b)), d = mx - mn;
+    *v = mx;
+    *s = mx > 0 ? d / mx : 0;
+    if (d <= 0) { *h = 0; return; }
+    if (mx == r) *h = fmod((g - b) / d, 6.0);
+    else if (mx == g) *h = (b - r) / d + 2;
+    else *h = (r - g) / d + 4;
+    *h *= 60;
+    if (*h < 0) *h += 360;
+}
+
+static void hsv_to_rgb(double h, double s, double v, double *r, double *g, double *b)
+{
+    double c = v * s, x = c * (1 - fabs(fmod(h / 60.0, 2) - 1)), m = v - c;
+    double rr = 0, gg = 0, bb = 0;
+    if (h < 60) { rr = c; gg = x; }
+    else if (h < 120) { rr = x; gg = c; }
+    else if (h < 180) { gg = c; bb = x; }
+    else if (h < 240) { gg = x; bb = c; }
+    else if (h < 300) { rr = x; bb = c; }
+    else { rr = c; bb = x; }
+    *r = rr + m; *g = gg + m; *b = bb + m;
+}
+
+uint32_t settings_base_color(uint16_t md)
+{
+    /* 3 bits per channel -> 0..1 (the usual full-range ramp) */
+    double r = (md & 7) / 7.0, g = ((md >> 3) & 7) / 7.0, b = ((md >> 6) & 7) / 7.0;
+    double luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    switch (settings.preset) {
+    case PRESET_VIVID: {
+        double h, s, v;
+        rgb_to_hsv(r, g, b, &h, &s, &v);
+        s = clamp01(s * 1.35);
+        v = clamp01(v * 1.05);
+        hsv_to_rgb(h, s, v, &r, &g, &b);
+        break;
+    }
+    case PRESET_SOFT:
+        r = 0.18 + 0.72 * (0.75 * r + 0.25 * luma);
+        g = 0.18 + 0.72 * (0.75 * g + 0.25 * luma);
+        b = 0.20 + 0.72 * (0.75 * b + 0.25 * luma);
+        break;
+    case PRESET_ARCADE: /* brighter, a little more contrast, like the System 16 version */
+        r = clamp01(pow(r, 0.8) * 1.05);
+        g = clamp01(pow(g, 0.8) * 1.05);
+        b = clamp01(pow(b, 0.8) * 1.05);
+        break;
+    case PRESET_GRAYSCALE:
+        r = g = b = luma;
+        break;
+    case PRESET_SEPIA:
+        r = clamp01(luma * 1.07 + 0.08);
+        g = clamp01(luma * 0.88 + 0.04);
+        b = clamp01(luma * 0.62);
+        break;
+    case PRESET_NIGHT:
+        r = 0.35 * r + 0.10 * luma;
+        g = 0.45 * g + 0.15 * luma;
+        b = clamp01(0.75 * b + 0.30 * luma + 0.05);
+        break;
+    case PRESET_GAMEBOY: {
+        static const double pal[4][3] = {{0.06, 0.22, 0.06}, {0.19, 0.38, 0.19}, {0.55, 0.67, 0.06}, {0.61, 0.74, 0.06}};
+        int k = (int)(luma * 3.999);
+        r = pal[k][0]; g = pal[k][1]; b = pal[k][2];
+        break;
+    }
+    case PRESET_INVERTED:
+        r = 1 - r; g = 1 - g; b = 1 - b;
+        break;
+    default:
+        break;
+    }
+    /* user adjustments */
+    if (settings.hue || settings.saturation) {
+        double h, s, v;
+        rgb_to_hsv(r, g, b, &h, &s, &v);
+        h = fmod(h + settings.hue + 360.0, 360.0);
+        s = clamp01(s * (1.0 + settings.saturation / 100.0));
+        hsv_to_rgb(h, s, v, &r, &g, &b);
+    }
+    double c = 1.0 + settings.contrast / 100.0, br = settings.brightness / 200.0;
+    r = clamp01((r - 0.5) * c + 0.5 + br);
+    g = clamp01((g - 0.5) * c + 0.5 + br);
+    b = clamp01((b - 0.5) * c + 0.5 + br);
+    return 0xFF000000u | ((uint32_t)(r * 255 + 0.5) << 16) | ((uint32_t)(g * 255 + 0.5) << 8) | (uint32_t)(b * 255 + 0.5);
+}
+
+int settings_find_recolor(uint16_t md)
+{
+    for (int i = 0; i < settings.nrecolor; i++)
+        if (settings.recolor[i].md == md)
+            return i;
+    return -1;
+}
+
+void settings_set_recolor(uint16_t md, uint32_t rgb)
+{
+    int i = settings_find_recolor(md);
+    if (i < 0) {
+        if (settings.nrecolor >= MAX_RECOLOR)
+            return;
+        i = settings.nrecolor++;
+    }
+    settings.recolor[i].md = md & 511;
+    settings.recolor[i].rgb = rgb & 0xFFFFFF;
+}
+
+void settings_clear_recolor(uint16_t md)
+{
+    int i = settings_find_recolor(md);
+    if (i < 0)
+        return;
+    settings.recolor[i] = settings.recolor[--settings.nrecolor];
+}
+
+void settings_apply(void)
+{
+    for (int c = 0; c < 512; c++)
+        md_color_lut[c] = settings_base_color((uint16_t)c);
+    for (int i = 0; i < settings.nrecolor; i++)
+        md_color_lut[settings.recolor[i].md & 511] = 0xFF000000u | settings.recolor[i].rgb;
+    md_color_lut_ready = 1;
+    vdp_refresh_palette();
+    md_set_aspect(settings_aspect());
+}
+
+/* ------------------------------------------------------------ file */
+
+static char *trim(char *s)
+{
+    while (isspace((unsigned char)*s)) s++;
+    char *e = s + strlen(s);
+    while (e > s && isspace((unsigned char)e[-1])) *--e = 0;
+    return s;
+}
+
+static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+int settings_set(const char *key, const char *value)
+{
+    if (!strcmp(key, "screen")) {
+        for (int i = 0; i < SCREEN_COUNT; i++)
+            if (!strcmp(value, screen_keys[i])) { settings.screen = i; return 1; }
+        return 0;
+    }
+    if (!strcmp(key, "colors")) {
+        for (int i = 0; i < PRESET_COUNT; i++)
+            if (!strcmp(value, preset_keys[i])) { settings.preset = i; return 1; }
+        return 0;
+    }
+    if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
+    if (!strcmp(key, "brightness")) { settings.brightness = clampi(atoi(value), -100, 100); return 1; }
+    if (!strcmp(key, "contrast")) { settings.contrast = clampi(atoi(value), -100, 100); return 1; }
+    if (!strcmp(key, "saturation")) { settings.saturation = clampi(atoi(value), -100, 100); return 1; }
+    if (!strcmp(key, "hue")) { settings.hue = clampi(atoi(value), -180, 180); return 1; }
+    if (!strncmp(key, "color.", 6) && strlen(key) == 9) {
+        /* color.RGB = RRGGBB   (R, G, B = Mega Drive levels 0-7) */
+        int r = key[6] - '0', g = key[7] - '0', b = key[8] - '0';
+        if (r < 0 || r > 7 || g < 0 || g > 7 || b < 0 || b > 7)
+            return 0;
+        uint16_t md = (uint16_t)(r | (g << 3) | (b << 6));
+        if (!strcmp(value, "none") || !*value) {
+            settings_clear_recolor(md);
+            return 1;
+        }
+        settings_set_recolor(md, (uint32_t)strtoul(value[0] == '#' ? value + 1 : value, NULL, 16));
+        return 1;
+    }
+    return 0;
+}
+
+int settings_load(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return 0;
+    char line[256];
+    while (fgets(line, sizeof(line), f)) {
+        char *s = trim(line);
+        if (!*s || *s == '#' || *s == ';' || *s == '[')
+            continue;
+        char *eq = strchr(s, '=');
+        if (!eq)
+            continue;
+        *eq = 0;
+        settings_set(trim(s), trim(eq + 1));
+    }
+    fclose(f);
+    return 1;
+}
+
+int settings_save(const char *path)
+{
+    FILE *f = fopen(path, "w");
+    if (!f)
+        return 0;
+    fprintf(f, "# Bonanza Bros port settings\n");
+    fprintf(f, "# screen: original, 16:9, 16:10, 21:9, stretch\n");
+    fprintf(f, "screen = %s\n", screen_keys[settings.screen]);
+    fprintf(f, "smooth = %d\n", settings.smooth);
+    fprintf(f, "# colors: original, vivid, soft, arcade, grayscale, sepia, night, gameboy, inverted\n");
+    fprintf(f, "colors = %s\n", preset_keys[settings.preset]);
+    fprintf(f, "brightness = %d\ncontrast = %d\nsaturation = %d\nhue = %d\n",
+            settings.brightness, settings.contrast, settings.saturation, settings.hue);
+    if (settings.nrecolor)
+        fprintf(f, "# recoloured Mega Drive colours: color.RGB (levels 0-7) = new colour RRGGBB\n");
+    for (int i = 0; i < settings.nrecolor; i++) {
+        uint16_t md = settings.recolor[i].md;
+        fprintf(f, "color.%d%d%d = %06X\n", md & 7, (md >> 3) & 7, (md >> 6) & 7, settings.recolor[i].rgb);
+    }
+    fclose(f);
+    return 1;
+}
