@@ -584,7 +584,29 @@ static void handle_events(void)
     }
 }
 
-static Uint64 next_frame;
+static SDL_AudioSpec have;
+static int vsync_on;              /* the renderer waits for the display's refresh */
+
+/* The picture is shown at the display's refresh rate, which is rarely exactly the
+ * Mega Drive's 59.92 Hz; the audio queue absorbs the difference by dropping or
+ * repeating a few samples (inaudible) instead of making the picture wait. */
+static void queue_audio(int16_t *buf, int n)
+{
+    Uint32 queued = SDL_GetQueuedAudioSize(audio_dev) / 4;
+    Uint32 hi = (Uint32)have.freq * 90 / 1000, lo = (Uint32)have.freq * 35 / 1000;
+    if (queued > hi * 3) {
+        SDL_ClearQueuedAudio(audio_dev);
+    } else if (queued > hi && n > 64) {
+        n -= 4;
+    } else if (queued < lo && n > 0) {
+        for (int i = 0; i < 4; i++) {
+            buf[(n + i) * 2] = buf[(n - 1) * 2];
+            buf[(n + i) * 2 + 1] = buf[(n - 1) * 2 + 1];
+        }
+        n += 4;
+    }
+    SDL_QueueAudio(audio_dev, buf, (Uint32)n * 4);
+}
 
 static void run_one(void)
 {
@@ -594,11 +616,11 @@ static void run_one(void)
             md.pad[p] = key_pad[p] | ctl_pad[p] | (p == 0 ? touch_pad : 0);
         }
         md_run_frame();
-        int16_t buf[2048 * 2];
+        int16_t buf[2048 * 2 + 64];
         int n;
         while ((n = md_audio_take(buf, 2048)) > 0)
             if (audio_dev)
-                SDL_QueueAudio(audio_dev, buf, n * 4);
+                queue_audio(buf, n);
     } else {
         int16_t buf[2048 * 2];
         while (md_audio_take(buf, 2048) > 0) {
@@ -606,31 +628,42 @@ static void run_one(void)
     }
 }
 
+#define MD_FRAME_MS (1000.0 / 59.922743)
+
+static double now_ms(void)
+{
+#ifdef __EMSCRIPTEN__
+    return emscripten_get_now();
+#else
+    return (double)SDL_GetPerformanceCounter() * 1000.0 / (double)SDL_GetPerformanceFrequency();
+#endif
+}
+
+/* One pass per displayed picture. On a ~60 Hz display with vsync the game runs exactly
+ * one frame per refresh (smooth scrolling); otherwise frames are run by elapsed time. */
 static void frame(void)
 {
-    handle_events();
-#ifdef __EMSCRIPTEN__
-    /* the browser calls us at the display refresh rate; run the game at 59.92 Hz */
-    static double acc, last;
-    double now = emscripten_get_now();
-    if (last == 0)
-        last = now - 1000.0 / 59.922743;
-    acc += now - last;
+    static double last, acc, avg = MD_FRAME_MS;
+    double now = now_ms();
+    double dt = last ? now - last : MD_FRAME_MS;
     last = now;
-    if (acc > 100)
-        acc = 100;
-    int n = 0;
-    while (acc >= 1000.0 / 59.922743 && n < 4) {
-        acc -= 1000.0 / 59.922743;
+    if (dt > 250) dt = MD_FRAME_MS;          /* after a pause or a dragged window */
+    avg = avg * 0.95 + dt * 0.05;
+    handle_events();
+    int locked = vsync_on && avg > 15.6 && avg < 17.6;
+    if (locked) {
+        acc = 0;
         run_one();
-        n++;
+    } else {
+        acc += dt;
+        if (acc > 100) acc = 100;
+        int n = 0;
+        while (acc >= MD_FRAME_MS && n < 4) {
+            acc -= MD_FRAME_MS;
+            run_one();
+            n++;
+        }
     }
-    /* drop audio backlog so latency stays low */
-    if (audio_dev && SDL_GetQueuedAudioSize(audio_dev) > 48000u * 4 / 5)
-        SDL_ClearQueuedAudio(audio_dev);
-#else
-    run_one();
-#endif
     present();
 }
 
@@ -686,6 +719,13 @@ int main(int argc, char **argv)
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer)
         renderer = SDL_CreateRenderer(window, -1, 0);
+    {
+        SDL_RendererInfo ri;
+        vsync_on = renderer && SDL_GetRendererInfo(renderer, &ri) == 0 && (ri.flags & SDL_RENDERER_PRESENTVSYNC);
+#ifdef __EMSCRIPTEN__
+        vsync_on = 1;   /* requestAnimationFrame */
+#endif
+    }
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, MD_FB_W, MD_SCREEN_H);
     menu_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, MENU_W, MENU_H);
     SDL_SetTextureBlendMode(menu_tex, SDL_BLENDMODE_BLEND);
@@ -696,7 +736,7 @@ int main(int argc, char **argv)
     show_touch = 1;
 #endif
 
-    SDL_AudioSpec want = {0}, have;
+    SDL_AudioSpec want = {0};
     want.freq = 48000;
     want.format = AUDIO_S16SYS;
     want.channels = 2;
@@ -717,24 +757,20 @@ int main(int argc, char **argv)
 #ifdef __EMSCRIPTEN__
     emscripten_set_main_loop(frame, 0, 1);
 #else
-    const Uint64 freq = SDL_GetPerformanceFrequency();
-    const Uint64 period = (Uint64)(freq / 59.922743);
-    next_frame = SDL_GetPerformanceCounter();
+    double next = now_ms();
     while (running) {
+        double t0 = now_ms();
         frame();
-        /* pace by the audio queue when possible, otherwise by the clock */
-        if (audio_dev && have_rom && !paused && !menu_is_open()) {
-            Uint32 limit = (Uint32)(have.freq * 4 / 20); /* ~50 ms */
-            while (running && SDL_GetQueuedAudioSize(audio_dev) > limit)
-                SDL_Delay(1);
-            next_frame = SDL_GetPerformanceCounter();
+        /* without a working vsync the loop would spin: wait for the next game frame */
+        if (!vsync_on || now_ms() - t0 < 2.0) {
+            next += MD_FRAME_MS;
+            double wait = next - now_ms();
+            if (wait > 0)
+                SDL_Delay((Uint32)wait);
+            else if (wait < -100)
+                next = now_ms();
         } else {
-            next_frame += period;
-            Uint64 now = SDL_GetPerformanceCounter();
-            if (now < next_frame)
-                SDL_Delay((Uint32)((next_frame - now) * 1000 / freq));
-            else
-                next_frame = now;
+            next = now_ms();
         }
     }
     if (menu_settings_dirty)

@@ -80,7 +80,8 @@ builder/      the HTML builder page
     the way sub_059C6 does: props, levers, presses and trap doors stay visible.
   * *Patrol Return* (option): a guard leaving the 4:3 picture is put back at its post
     by the game at once (sub_14232; posts at $9108/$9154). In the wider picture a copy
-    of it is shown walking back there, using the walk cycle it was last seen with.
+    of it is shown hurrying back there (3x walking speed, with the walk cycle it was
+    last seen with), opening the doors it passes.
     Like everything above this only reads the game's memory, so the game plays exactly
     as the original.
   * In a 1-player game the top of the screen shows the floor above Robo, following
@@ -96,6 +97,9 @@ builder/      the HTML builder page
 
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). They only change the
   picture, so recompiled-vs-interpreted runs stay bit-identical with any settings.
+* Frame pacing: on a ~60 Hz display with vsync the game runs exactly one frame per
+  refresh (the audio queue absorbs the 59.92 / 60 Hz difference by dropping or
+  repeating a few samples); on other displays frames are run by elapsed time.
 * Controls: arrows / Z X C / Enter (player 1), W A S D / J K L / Space (player 2),
   gamepads, and an on-screen touch pad on phones. F11 toggles full screen, P pauses.
 

@@ -46,8 +46,8 @@ button or the MENU button (top left) on Android.
                (game over and time-up screens stay wide), or keep them wide.
   Patrol Return  Widescreen only. The game sends a guard that leaves the 4:3
                picture straight back to its post. On: in the wider picture you see
-               it walk back there, and guards you have not met yet stand at their
-               posts. Off: they vanish at the edge of the 4:3 picture, as in the
+               it hurry back there (three times walking speed), opening the doors
+               on its way, and guards you have not met yet stand at their posts. Off: they vanish at the edge of the 4:3 picture, as in the
                original. Either way the game itself plays exactly as the original.
   Scaling      Sharp pixels or smooth.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,

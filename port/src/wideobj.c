@@ -53,6 +53,7 @@ static int cur;             /* snaps[cur] = start of this frame, then the two be
 
 /* ---- what we learn about each guard while the game shows it ---- */
 #define SEQ 48
+#define GHOST_SPEED 3       /* ghosts walk back three times as fast as guards walk */
 typedef struct {
     uint16_t walk[SEQ]; int nwalk; int walk_dir; uint16_t walk_flip; int speed16;
     uint16_t idle[SEQ]; int nidle;
@@ -71,6 +72,39 @@ typedef struct {
 } guard_t;
 
 static guard_t guards[NOBJ];
+
+/* Doors (state 2, 20x20 objects) rest on a frame R; when someone goes through, the game
+ * shows R+1 for a few frames, R+2 (open) while they pass, then R+1 again. Ghosts open
+ * the doors in the side areas the same way. */
+typedef struct { int phase, timer; } door_t;
+static door_t doors[NOBJ];
+static int ghost_x[NOBJ], ghost_y[NOBJ], ghost_on[NOBJ];   /* walking ghosts this frame */
+
+static int is_door(const obj_t *b) { return b->st == 2 && b->w == 20 && b->h == 20; }
+
+static void doors_update(const snap_t *s)
+{
+    for (int i = 0; i < NOBJ; i++) {
+        const obj_t *b = &s->o[i];
+        door_t *d = &doors[i];
+        if (!is_door(b)) { d->phase = 0; continue; }
+        int near = 0;
+        for (int j = 0; j < NOBJ && !near; j++)
+            near = ghost_on[j] && abs(ghost_x[j] - b->x) < 18 && abs(ghost_y[j] - b->y) < 40;
+        switch (d->phase) {
+        case 0: if (near) { d->phase = 1; d->timer = 8; } break;
+        case 1: if (--d->timer <= 0) d->phase = 2; break;
+        case 2: if (!near) { d->phase = 3; d->timer = 2; } break;
+        default: if (--d->timer <= 0) d->phase = 0; break;
+        }
+    }
+}
+
+static uint16_t door_frame(int i, uint16_t frame)
+{
+    static const int add[4] = {0, 1, 2, 1};
+    return (uint16_t)(frame + add[doors[i].phase]);
+}
 static uint32_t level_id;   /* map pointer: new level -> forget everything */
 
 static void take_snapshot(snap_t *s)
@@ -182,12 +216,14 @@ static void learn(const snap_t *s, const snap_t *prev)
         if (shown) {
             const obj_t *p = &prev->o[i];
             int moved = g->seen && p->y == b->y ? b->x - g->lx : 0;
-            if (g->seen && moved && abs(moved) <= 3 && p->frame) {
+            /* guards face left unless mirrored; moving the other way is being knocked back */
+            int forward = (moved > 0) == (b->flip != 0);
+            if (g->seen && moved && abs(moved) <= 3 && p->frame && forward) {
                 if (g->a.walk_dir != (moved > 0 ? 1 : -1)) g->a.nwalk = 0;
                 g->a.walk_dir = moved > 0 ? 1 : -1;
                 g->a.walk_flip = b->flip;
                 push_seq(g->a.walk, &g->a.nwalk, b->frame);
-                g->a.speed16 = (g->a.speed16 * 7 + abs(moved) * 16) / 8;
+                g->a.speed16 = g->a.speed16 ? (g->a.speed16 * 7 + abs(moved) * 16) / 8 : abs(moved) * 16;
                 g->still = 0;
             } else if (g->seen && !moved) {
                 /* standing at its post, not yet alarmed */
@@ -259,7 +295,7 @@ static void ghosts(const snap_t *s, const snap_t *prev, int extra, int width)
             g->gy += s->post[i][1] > g->gy ? 1 : -1;
         if (g->ghost == 1) {
             int dir = post > gx ? 1 : -1;
-            int sp = walk && walk->speed16 > 0 ? walk->speed16 : 16;
+            int sp = GHOST_SPEED * (walk && walk->speed16 > 0 ? walk->speed16 : 16);
             if (abs(post * 16 - g->gx16) <= sp) {
                 g->gx16 = post * 16;
                 g->ghost = 2;
@@ -281,21 +317,20 @@ static void ghosts(const snap_t *s, const snap_t *prev, int extra, int width)
             continue;
         uint16_t frame;
         int flip;
-        g->gstep++;
         if (g->ghost == 1) {
             int dir = post * 16 > g->gx16 ? 1 : -1;
-            if (walk) {
-                frame = walk->walk[g->gstep % walk->nwalk];
-                flip = dir == walk->walk_dir ? walk->walk_flip : !walk->walk_flip;
-            } else {
-                frame = g->lframe;
-                flip = g->lflip;
-            }
+            g->gstep += GHOST_SPEED;
+            flip = dir > 0;               /* guards face left unless mirrored */
+            frame = walk ? walk->walk[g->gstep % walk->nwalk] : g->lframe;
         } else {
+            g->gstep++;
             if (idle) frame = idle->idle[g->gstep % idle->nidle];
             else if (walk) frame = walk->walk[0];
             else frame = g->lframe;
             flip = 0;
+        }
+        if (g->ghost == 1) {
+            ghost_on[i] = 1; ghost_x[i] = gx; ghost_y[i] = g->gy;
         }
         emit_frame(s, v, frame, gx, g->gy, g->gz, flip, b->attr, 1, width);
     }
@@ -319,10 +354,12 @@ int wobj_build(int margin, int width, int patrol_return, wobj_sprite *list, int 
         return 0;
     learn(s, older);
     int extra = margin + 16;
+    memset(ghost_on, 0, sizeof(ghost_on));
     if (patrol_return)
         ghosts(s, older, extra, width);
     else
         for (int i = 0; i < NOBJ; i++) guards[i].ghost = 0;
+    doors_update(s);
     for (int v = 0; v < 2; v++) {
         if (!view_on(s, v)) continue;
         /* draw order of sub_0582E: state 2 first, then state 1 */
@@ -333,7 +370,9 @@ int wobj_build(int margin, int width, int patrol_return, wobj_sprite *list, int 
                  * may come from either (pieces it already has are dropped by the renderer) */
                 if (b->st != pass || ((b->vis & older->o[i].vis) & (1 << v)) || !b->frame || guards[i].ghost) continue;
                 if (!in_range(s, v, b->x, b->y, b->z, b->w, b->h, extra)) continue;
-                emit_frame(s, v, b->frame, b->x, b->y, b->z, b->flip != 0, b->attr, 0, width);
+                /* a door the game shows closed may be opened by a ghost */
+                uint16_t f = doors[i].phase && is_door(b) ? door_frame(i, b->frame) : b->frame;
+                emit_frame(s, v, f, b->x, b->y, b->z, b->flip != 0, b->attr, 0, width);
             }
     }
     return out_n;
