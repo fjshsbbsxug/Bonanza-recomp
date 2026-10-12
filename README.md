@@ -131,6 +131,16 @@ builder/      the HTML builder page
     hash of the loaded (modded) ROM. `bonanza-headless --mods-dir DIR --set mods=X.bbro`
     for tests; the HTML builder adds mods to packages.
 
+  * *Level maker* (`builder/levelmaker.html` + `builder/levelcore.js`): a browser
+    editor that reads a stage from the ROM (map, metatiles, the per-floor collision
+    columns, object placement, item kinds, guard templates; tiles decoded from the
+    stage's VRAM loads) and edits it in "slices" (one floor tall, 16 px wide = 5 map
+    blocks + 2 collision columns), so pictures, walls, stairs and doors stay together.
+    Export writes new tables after 0x80000, repoints the stage's entries, renumbers
+    door columns (info 0x90+2k = k-th item), places the exit at the EXIT column, fixes
+    the first-screen descriptors, ROM end and checksum, and saves an IPS patch plus the
+    level source in a `.bbro`. `levelcore.js` also runs in node for tests.
+
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert
   they only change the picture, so recompiled-vs-interpreted runs stay bit-identical.
 * Frame pacing: on a ~60 Hz display with vsync the game runs exactly one frame per

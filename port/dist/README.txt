@@ -122,6 +122,13 @@ contents:
                          4652: 00 C4
     levels/            ignored by the game (the level maker keeps its levels there)
 
+Level maker: levelmaker.html (next to the HTML builder, on the project's site) edits
+a stage in your browser and saves it as a .bbro: copy and paste whole rooms, walls,
+doors and stairs (always with their picture), widen or shorten the building, paint
+blocks, place guards, treasures and other items. The start position, graphics,
+music and time limit stay as in the original stage. Open the .bbro again in the
+level maker to keep working on it.
+
 Patches that change the game's code work too: that code then runs on the built-in
 68000 interpreter instead of the recompiled code. With no mods on, the game is the
 original.

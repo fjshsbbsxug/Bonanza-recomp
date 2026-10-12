@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonanza Bros Level Maker</title>
+<meta name="description" content="Edit Bonanza Bros stages and save them as .bbro mods for the native port.">
+<style>
+  :root {
+    --bg: #f4f2ec; --panel: #ffffff; --ink: #1d1b22; --muted: #615d6b; --line: #dcd7cc;
+    --accent: #c8102e; --accent-ink: #ffffff; --gold: #b07a00; --ok: #177245; --bad: #b42318;
+    --chip: #efebe2; --focus: #2457c5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121219; --panel: #1b1b25; --ink: #ecebf2; --muted: #a29fb0; --line: #2e2d3c;
+      --accent: #ff4f5e; --accent-ink: #16121a; --gold: #f2b632; --ok: #4ccf8a; --bad: #ff7a6e;
+      --chip: #24232f; --focus: #8ab0ff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121219; --panel: #1b1b25; --ink: #ecebf2; --muted: #a29fb0; --line: #2e2d3c;
+    --accent: #ff4f5e; --accent-ink: #16121a; --gold: #f2b632; --ok: #4ccf8a; --bad: #ff7a6e;
+    --chip: #24232f; --focus: #8ab0ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1800px; margin: 0 auto; padding: 20px 16px 48px; }
+  header h1 { font-size: 26px; line-height: 1.15; margin: 0 0 4px; }
+  header h1 span { color: var(--accent); }
+  header p { margin: 0; color: var(--muted); max-width: 80ch; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 14px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button { appearance: none; border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; font: inherit;
+           background: var(--panel); color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+  button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  button:disabled { opacity: .45; cursor: default; }
+  select, input[type=text], input[type=number] { font: inherit; color: var(--ink); background: var(--panel);
+           border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+  label.f { display: grid; gap: 3px; font-size: 13px; color: var(--muted); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  #editor { display: none; }
+  #editor.show { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; margin-top: 14px; }
+  @media (max-width: 900px) { #editor.show { grid-template-columns: minmax(0, 1fr); } }
+  .viewport { overflow: auto; background: #000; border-radius: 10px; max-height: 70vh; border: 1px solid var(--line); }
+  canvas#map { display: block; image-rendering: pixelated; touch-action: none; cursor: crosshair; }
+  .side { display: grid; gap: 12px; align-content: start; }
+  .side .card { margin: 0; }
+  .side h3 { font-size: 14px; margin: 0 0 8px; }
+  .palette { display: flex; flex-wrap: wrap; gap: 3px; max-height: 300px; overflow: auto; }
+  .palette canvas { image-rendering: pixelated; border: 1px solid transparent; border-radius: 3px; cursor: pointer; background: #000; }
+  .palette canvas.sel { border-color: var(--accent); }
+  .presets { display: grid; gap: 4px; max-height: 320px; overflow: auto; }
+  .presets button { text-align: left; font-size: 13px; padding: 5px 8px; }
+  ul.problems { margin: 0; padding-left: 18px; font-size: 13px; }
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  .help { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+  kbd { font: 12px ui-monospace, monospace; background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; }
+  .status { font-size: 13px; color: var(--muted); min-height: 1.4em; margin-top: 6px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Bonanza Bros <span>Level Maker</span></h1>
+    <p>Rebuild a stage from its own rooms, walls and stairs, place guards and treasures, and save it as a
+      <b>.bbro</b> mod. Put the file in the game's <code>mods</code> folder and turn it on in Menu &gt; Mods...</p>
+  </header>
+
+  <section class="card">
+    <div class="row">
+      <label class="f">Your ROM (Bonanza Bros. JUE, never uploaded)<input type="file" id="romfile" accept=".md,.bin,.gen,.smd"></label>
+      <label class="f">Stage<select id="stage" disabled></select></label>
+      <label class="f">Open a level (.bbro or .json)<input type="file" id="openfile" accept=".bbro,.zip,.json" disabled></label>
+    </div>
+    <div class="status" id="romstatus">Select your ROM to start.</div>
+  </section>
+
+  <section id="editor">
+    <div>
+      <div class="card" style="margin-top:0">
+        <div class="row">
+          <div class="tools" role="group" aria-label="Tool">
+            <button data-mode="select" aria-pressed="true" title="Select whole floor slices (16 px wide): copy, paste, clear, widen">Rooms</button>
+            <button data-mode="paint" aria-pressed="false" title="Paint single blocks (picture only, walls stay)">Blocks</button>
+            <button data-mode="objects" aria-pressed="false" title="Place and move guards, treasures and items">Objects</button>
+          </div>
+          <label class="row muted"><input type="checkbox" id="showcol"> walls</label>
+          <label class="row muted"><input type="checkbox" id="showorig"> original stage</label>
+          <label class="row muted">zoom <select id="zoom"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+          <button id="undo" title="Ctrl+Z">Undo</button><button id="redo" title="Ctrl+Y">Redo</button>
+        </div>
+        <div class="row" id="selecttools" style="margin-top:8px">
+          <button id="copy" title="Ctrl+C">Copy</button>
+          <button id="paste" title="Ctrl+V: then click where it goes">Paste</button>
+          <button id="clear" title="Delete: fill with the floor's outer wall">Clear</button>
+          <button id="widen" title="Insert copies of the slice left of the selection (all floors)">Widen here</button>
+          <button id="narrow" title="Remove the selected slices on all floors">Remove slices</button>
+          <label class="row muted"><input type="checkbox" id="withobj" checked> with objects</label>
+        </div>
+        <p class="help" id="help"></p>
+      </div>
+      <div class="viewport" id="viewport" style="margin-top:10px"><canvas id="map"></canvas></div>
+      <div class="status" id="status"></div>
+    </div>
+    <div class="side">
+      <div class="card" id="palcard">
+        <h3 id="paltitle">Blocks</h3>
+        <div class="palette" id="palette"></div>
+        <div class="presets" id="presets"></div>
+        <div id="objprops" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h3>Check</h3>
+        <div id="counts" class="muted"></div>
+        <ul class="problems" id="problems"></ul>
+      </div>
+      <div class="card">
+        <h3>Save as a mod</h3>
+        <div style="display:grid;gap:8px">
+          <label class="f">Name<input type="text" id="m-name" value="My stage"></label>
+          <div class="grid2">
+            <label class="f">Author<input type="text" id="m-author"></label>
+            <label class="f">Version<input type="text" id="m-version" value="1.0"></label>
+          </div>
+          <label class="f">Description<input type="text" id="m-desc"></label>
+          <button class="primary" id="export">Download .bbro</button>
+          <button id="revert">Start over from the original stage</button>
+        </div>
+        <p class="help">The start position, graphics, music and time stay as in the original stage. Guards walk their
+          original patrol routes from where you put them, so give them room.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="jszip.min.js"></script>
+<script>
+  if (typeof JSZip === 'undefined')
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>');
+</script>
+<script src="levelcore.js"></script>
+<script>
+(() => {
+  'use strict';
+  const LC = window.LevelCore;
+  const $ = id => document.getElementById(id);
+  let rom = null, st = 0, info = null, level = null, orig = null;
+  let mode = 'select', zoom = 2, sel = null, clip = null, pasting = false;
+  let paintMeta = 0, preset = null, selObj = null, hover = null;
+  const undo = [], redo = [];
+
+  /* ---------- ROM ---------- */
+  async function sha1(bytes) {
+    if (!(window.crypto && crypto.subtle)) return null;
+    const h = await crypto.subtle.digest('SHA-1', bytes);
+    return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  $('romfile').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const b = new Uint8Array(await f.arrayBuffer());
+    const h = await sha1(b);
+    if (b.length !== LC.ROM_SIZE || (h && h !== LC.SHA1)) {
+      $('romstatus').innerHTML = '<span class="bad">This is not the Bonanza Bros. (JUE) ROM' +
+        (b.length !== LC.ROM_SIZE ? ' (wrong size).' : ' (SHA-1 does not match).') + '</span>';
+      return;
+    }
+    rom = b;
+    $('romstatus').innerHTML = '<span class="ok">ROM OK.</span> Pick a stage, or open a level you saved.';
+    const s = $('stage');
+    s.innerHTML = LC.STAGES.map(n => `<option value="${n}">Stage ${n}</option>`).join('');
+    s.disabled = false;
+    $('openfile').disabled = false;
+    loadStage(1);
+  });
+  $('stage').addEventListener('change', e => {
+    if (level && undo.length && !confirm('Switch stage? Unsaved changes to this stage are lost.')) { e.target.value = st; return; }
+    loadStage(+e.target.value);
+  });
+
+  function loadStage(n, lv) {
+    st = n;
+    $('stage').value = n;
+    info = LC.stageInfo(rom, st);
+    orig = LC.readStage(rom, st);
+    level = lv || LC.readStage(rom, st);
+    undo.length = redo.length = 0;
+    sel = null; clip = null; pasting = false; selObj = null;
+    buildGraphics();
+    buildPalette();
+    $('editor').classList.add('show');
+    $('m-name').value = $('m-name').value === 'My stage' || /^Stage \d+/.test($('m-name').value) ? 'Stage ' + st + ' remix' : $('m-name').value;
+    render();
+    check();
+  }
+
+  /* ---------- graphics ---------- */
+  let metaImgs = [], bgImg = null, sprCache = new Map();
+  function cellTo(img, ox, oy, t, pal, hf, vf, w) {
+    const vram = info.vram, P = info.pal;
+    for (let y = 0; y < 8; y++)
+      for (let x = 0; x < 8; x++) {
+        const sx = hf ? 7 - x : x, sy = vf ? 7 - y : y;
+        const b = vram[(t * 32 + sy * 4 + (sx >> 1)) & 0xFFFF];
+        const c = sx & 1 ? b & 15 : b >> 4;
+        if (!c) continue;
+        const px = ox + x, py = oy + y;
+        if (px < 0 || py < 0 || px >= w || py >= img.height) continue;
+        const k = (py * w + px) * 4, rgb = P[pal * 16 + c];
+        img.data[k] = rgb[0]; img.data[k + 1] = rgb[1]; img.data[k + 2] = rgb[2]; img.data[k + 3] = 255;
+      }
+  }
+  function toCanvas(img) {
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    c.getContext('2d').putImageData(img, 0, 0);
+    return c;
+  }
+  function buildGraphics() {
+    metaImgs = info.meta.map(m => {
+      const img = new ImageData(16, 16);
+      m.forEach((e, k) => cellTo(img, (k & 1) * 8, (k >> 1) * 8, e & 0x7FF, (e >> 13) & 3, e & 0x800, e & 0x1000, 16));
+      return toCanvas(img);
+    });
+    const bw = info.bg.cols * 8, bh = info.bg.rows * 8, img = new ImageData(bw, bh);
+    const bgc = info.pal[0];
+    for (let i = 0; i < bw * bh; i++) { img.data[i * 4] = bgc[0]; img.data[i * 4 + 1] = bgc[1]; img.data[i * 4 + 2] = bgc[2]; img.data[i * 4 + 3] = 255; }
+    info.bg.cells.forEach((e, i) => cellTo(img, (i % info.bg.cols) * 8, Math.floor(i / info.bg.cols) * 8, e & 0x7FF, (e >> 13) & 3, e & 0x800, e & 0x1000, bw));
+    bgImg = toCanvas(img);
+    sprCache = new Map();
+  }
+  /* a sprite frame drawn around its origin; returns {canvas, ox, oy} */
+  function sprite(frame, attrOr) {
+    const key = frame + ':' + attrOr;
+    if (sprCache.has(key)) return sprCache.get(key);
+    const pieces = LC.spritePieces(rom, frame);
+    let res = null;
+    if (pieces.length) {
+      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      for (const p of pieces) { x0 = Math.min(x0, p.dx); y0 = Math.min(y0, p.dy); x1 = Math.max(x1, p.dx + p.w * 8); y1 = Math.max(y1, p.dy + p.h * 8); }
+      const w = x1 - x0, h = y1 - y0;
+      if (w > 0 && h > 0 && w < 200 && h < 200) {
+        const img = new ImageData(w, h);
+        for (const p of pieces) {
+          const a = p.attr | attrOr, hf = a & 0x800, vf = a & 0x1000;
+          for (let cx = 0; cx < p.w; cx++)
+            for (let cy = 0; cy < p.h; cy++) {
+              const t = (a & 0x7FF) + cx * p.h + cy;
+              const ccx = hf ? p.w - 1 - cx : cx, ccy = vf ? p.h - 1 - cy : cy;
+              cellTo(img, p.dx - x0 + ccx * 8, p.dy - y0 + ccy * 8, t, (a >> 13) & 3, hf, vf, w);
+            }
+        }
+        res = { canvas: toCanvas(img), ox: x0, oy: y0 };
+      }
+    }
+    sprCache.set(key, res);
+    return res;
+  }
+
+  /* ---------- drawing ---------- */
+  const cv = $('map'), ctx = cv.getContext('2d');
+  function shown() { return $('showorig').checked ? orig : level; }
+  function objBox(o, isGuard) {
+    const ox = o.x - 32, oy = o.y - o.z - 32;
+    if (!isGuard && o.frame) {
+      const s = sprite(o.frame, o.attr || 0);
+      if (s) return { x: ox + s.ox, y: oy + s.oy, w: s.canvas.width, h: s.canvas.height, s };
+    }
+    return { x: ox - 10, y: oy - 14, w: 20, h: 26, s: null };   /* a guard's size around its origin */
+  }
+  function render() {
+    if (!level) return;
+    const L = shown(), W = L.W, H = L.floors * 5;
+    cv.width = W * 16; cv.height = H * 16;
+    cv.style.width = W * 16 * zoom + 'px'; cv.style.height = H * 16 * zoom + 'px';
+    for (let f = 0; f < L.floors; f++)
+      for (let x = 0; x < W * 16; x += bgImg.width) ctx.drawImage(bgImg, x, f * 80);
+    for (let r = 0; r < H; r++)
+      for (let c = 0; c < W; c++) {
+        const m = metaImgs[L.map[r * W + c]];
+        if (m) ctx.drawImage(m, c * 16, r * 16);
+      }
+    if ($('showcol').checked) drawCollision(L);
+    /* floors */
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    for (let f = 1; f < L.floors; f++) ctx.fillRect(0, f * 80, W * 16, 1);
+    drawObjects(L);
+    /* selection / paste ghost */
+    if (mode === 'select') {
+      if (pasting && clip && hover) {
+        ctx.strokeStyle = '#4ccf8a'; ctx.lineWidth = 1;
+        ctx.strokeRect(hover.s * 16 + 0.5, hover.f * 80 + 0.5, clip.slices * 16 - 1, clip.floors * 80 - 1);
+        ctx.fillStyle = 'rgba(76,207,138,0.15)';
+        ctx.fillRect(hover.s * 16, hover.f * 80, clip.slices * 16, clip.floors * 80);
+      } else if (sel) {
+        const s0 = Math.min(sel.s0, sel.s1), s1 = Math.max(sel.s0, sel.s1), f0 = Math.min(sel.f0, sel.f1), f1 = Math.max(sel.f0, sel.f1);
+        ctx.strokeStyle = '#ff4f5e'; ctx.lineWidth = 1;
+        ctx.strokeRect(s0 * 16 + 0.5, f0 * 80 + 0.5, (s1 - s0 + 1) * 16 - 1, (f1 - f0 + 1) * 80 - 1);
+        ctx.fillStyle = 'rgba(255,79,94,0.12)';
+        ctx.fillRect(s0 * 16, f0 * 80, (s1 - s0 + 1) * 16, (f1 - f0 + 1) * 80);
+      }
+    }
+    if (mode === 'paint' && hover && hover.r !== undefined) {
+      ctx.strokeStyle = '#f2b632';
+      ctx.strokeRect(hover.c * 16 + 0.5, hover.r * 16 + 0.5, 15, 15);
+    }
+  }
+  function drawCollision(L) {
+    for (let f = 0; f < L.floors; f++)
+      L.col[f].forEach((v, c) => {
+        const front = v >>> 24, back = (v >>> 16) & 255, inf = v & 0xFFFF;
+        for (let row = 0; row < 10; row++) {
+          const bit = row < 8 ? 0x80 >> row : 1;
+          if (back & bit) { ctx.fillStyle = 'rgba(60,110,255,0.45)'; ctx.fillRect(c * 8, f * 80 + row * 8, 8, 8); }
+          if (front & bit) { ctx.fillStyle = 'rgba(255,40,40,0.45)'; ctx.fillRect(c * 8 + 2, f * 80 + row * 8 + 2, 4, 4); }
+        }
+        if (LC.isExitInfo(inf)) { ctx.fillStyle = 'rgba(242,182,50,0.8)'; ctx.fillRect(c * 8, f * 80, 8, 80); }
+        else if (LC.isDoorInfo(inf)) { ctx.fillStyle = 'rgba(76,207,138,0.8)'; ctx.fillRect(c * 8, f * 80 + 30, 8, 40); }
+        else if (LC.isStairInfo(inf)) { ctx.fillStyle = 'rgba(255,255,0,0.35)'; ctx.fillRect(c * 8, f * 80 + 76, 8, 4); }
+      });
+  }
+  function drawObjects(L) {
+    ctx.font = '8px monospace';
+    const label = (b, t, color) => {
+      ctx.fillStyle = color; ctx.fillRect(b.x, b.y - 9, Math.max(14, t.length * 5 + 4), 9);
+      ctx.fillStyle = '#000'; ctx.fillText(t, b.x + 2, b.y - 2);
+    };
+    for (const o of L.items) {
+      const b = objBox(o, false);
+      if (b.s) ctx.drawImage(b.s.canvas, b.x, b.y);
+      else { ctx.fillStyle = 'rgba(0,200,255,0.5)'; ctx.fillRect(b.x, b.y, b.w, b.h); }
+      if (o.kind !== LC.KIND.DOOR) label(b, o.kind === LC.KIND.TREASURE ? '$' : (LC.KIND_NAMES[o.kind] || 'item').slice(0, 6), '#7ee0ff');
+      if (o === selObj) { ctx.strokeStyle = '#fff'; ctx.strokeRect(b.x - 1.5, b.y - 1.5, b.w + 3, b.h + 3); }
+    }
+    L.guards.forEach(o => {
+      const b = objBox(o, true);
+      ctx.fillStyle = o.attr & 0x6000 ? 'rgba(255,170,40,0.7)' : 'rgba(80,140,255,0.7)';
+      ctx.fillRect(b.x + 4, b.y + 8, b.w - 8, b.h - 8);
+      ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y + 5, 5, 0, 7); ctx.fill();
+      label(b, 'G' + o.template, '#9cc0ff');
+      if (o === selObj) { ctx.strokeStyle = '#fff'; ctx.strokeRect(b.x - 1.5, b.y - 1.5, b.w + 3, b.h + 3); }
+    });
+    L.players.forEach((o, i) => {
+      const s = sprite(o.frame, 0), ox = o.x - 32, oy = o.y - o.z - 32;
+      if (s) ctx.drawImage(s.canvas, ox + s.ox, oy + s.oy);
+      label({ x: ox - 10, y: oy - 16 }, 'P' + (i + 1) + ' start', '#4ccf8a');
+    });
+    const ex = LC.resolveItems(L).exit;
+    if (ex) label({ x: ex.x - 32 - 6, y: ex.y - 32 - 6 }, 'EXIT', '#f2b632');
+  }
+
+  /* ---------- palette / presets ---------- */
+  function buildPalette() {
+    const p = $('palette');
+    p.innerHTML = '';
+    metaImgs.forEach((m, i) => {
+      const c = document.createElement('canvas');
+      c.width = 16; c.height = 16;
+      c.style.width = c.style.height = '32px';
+      c.getContext('2d').drawImage(m, 0, 0);
+      c.title = 'Block ' + i;
+      c.onclick = () => { paintMeta = i; [...p.children].forEach((x, k) => x.classList.toggle('sel', k === i)); };
+      if (i === paintMeta) c.classList.add('sel');
+      p.appendChild(c);
+    });
+    const pr = $('presets');
+    pr.innerHTML = '';
+    const add = (text, ps) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      b.onclick = () => { preset = ps; selObj = null; [...pr.children].forEach(x => x.setAttribute('aria-pressed', x === b)); showProps(); render(); };
+      b.setAttribute('aria-pressed', 'false');
+      pr.appendChild(b);
+    };
+    info.guardPresets.forEach(g => add('Guard type ' + g.template + (g.attr & 0x6000 ? ' (other colors)' : '') + (g.z ? ', back lane' : ', front lane'),
+                                       Object.assign({ isGuard: true }, g)));
+    info.itemPresets.forEach(o => add((LC.KIND_NAMES[o.kind] || 'Item ' + o.kind) + (o.kind === 0 ? ' (frame ' + o.frame.toString(16) + ')' : ''),
+                                      Object.assign({ isGuard: false }, o)));
+    setMode(mode);
+  }
+  function showProps() {
+    const el = $('objprops');
+    if (mode !== 'objects') { el.innerHTML = ''; return; }
+    if (!selObj) {
+      el.innerHTML = '<p class="help">' + (preset ? 'Click in the stage to place it. ' : 'Pick something to place, ') +
+        'or click a guard/treasure to move it (drag), <kbd>Delete</kbd> removes it.</p>';
+      return;
+    }
+    const isG = level.guards.includes(selObj);
+    const f = LC.floorOf(selObj.y, level.floors);
+    let h = `<div class="muted">${isG ? 'Guard type ' + selObj.template : (LC.KIND_NAMES[selObj.kind] || 'Item')} on floor ${f + 1}, x ${selObj.x}</div>`;
+    h += `<div class="row" style="margin-top:6px"><label class="row muted"><input type="checkbox" id="p-back" ${selObj.z >= 8 ? 'checked' : ''}> back lane</label>`;
+    if (isG) {
+      const types = [...new Set(info.guardPresets.map(g => g.template))];
+      h += `<label class="f">Type<select id="p-type">${types.map(t => `<option ${t === selObj.template ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
+    }
+    h += `<button id="p-del">Remove</button></div>`;
+    el.innerHTML = h;
+    $('p-back').onchange = e => { edit(() => { const dz = (e.target.checked ? 16 : 0) - selObj.z; selObj.z += dz; selObj.y += dz > 0 ? 4 : -4; }); };
+    if (isG) $('p-type').onchange = e => edit(() => { selObj.template = +e.target.value; });
+    $('p-del').onclick = () => removeSel();
+  }
+
+  /* ---------- modes ---------- */
+  const HELP = {
+    select: 'Drag to select slices (one floor tall, 16 px wide). <kbd>Ctrl+C</kbd> copy, <kbd>Ctrl+V</kbd> then click to paste, <kbd>Delete</kbd> clear. ' +
+            'Copy rooms, walls, doors and stairs from anywhere (tick "original stage" to copy from the original). Walls and stairs always come with their picture.',
+    paint: 'Click or drag to paint the picked block; <kbd>Alt</kbd>+click picks the block under the mouse. Only the picture changes, not the walls.',
+    objects: 'Place guards and items from the list, drag to move them, <kbd>Delete</kbd> removes. Doors come with door walls, the exit with the EXIT stairs.',
+  };
+  function setMode(m) {
+    mode = m;
+    pasting = false;
+    document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === m));
+    $('selecttools').style.display = m === 'select' ? 'flex' : 'none';
+    $('palette').style.display = m === 'paint' ? 'flex' : 'none';
+    $('presets').style.display = m === 'objects' ? 'grid' : 'none';
+    $('paltitle').textContent = m === 'paint' ? 'Blocks' : m === 'objects' ? 'Guards & items' : 'Rooms';
+    if (m === 'select') $('objprops').innerHTML = '<p class="help">Select a part of the stage with the mouse.</p>';
+    $('help').innerHTML = HELP[m];
+    showProps();
+    render();
+  }
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+  $('showcol').onchange = render;
+  $('showorig').onchange = () => { sel = null; render(); };
+  $('zoom').onchange = e => { zoom = +e.target.value; render(); };
+
+  /* ---------- editing with undo ---------- */
+  function snapshot() { return JSON.stringify(level); }
+  function edit(fn) {
+    if ($('showorig').checked) { status('Untick "original stage" to edit (you can copy from it).'); return; }
+    const before = snapshot();
+    const keep = selObj ? [level.guards.indexOf(selObj), level.items.indexOf(selObj)] : null;
+    try { fn(); }
+    catch (e) { level = JSON.parse(before); status(e.message, true); render(); return; }
+    undo.push(before);
+    if (undo.length > 200) undo.shift();
+    redo.length = 0;
+    if (keep && !level.guards.includes(selObj) && !level.items.includes(selObj)) selObj = null;
+    render(); check(); showProps();
+    try { localStorage.setItem('bbro-level-' + st, snapshot()); } catch (e) { /* no storage */ }
+  }
+  function restore(from, to) {
+    if (!from.length) return;
+    to.push(snapshot());
+    level = JSON.parse(from.pop());
+    selObj = null;
+    render(); check(); showProps();
+  }
+  $('undo').onclick = () => restore(undo, redo);
+  $('redo').onclick = () => restore(redo, undo);
+  function status(t, bad) { $('status').innerHTML = bad ? '<span class="bad">' + t + '</span>' : t; }
+
+  function selRange() {
+    if (!sel) return null;
+    return { f0: Math.min(sel.f0, sel.f1), f1: Math.max(sel.f0, sel.f1), s0: Math.min(sel.s0, sel.s1), s1: Math.max(sel.s0, sel.s1) };
+  }
+  function doCopy() {
+    const r = selRange();
+    if (!r) return status('Select something first.', true);
+    clip = LC.copyRegion(shown(), r.f0, r.f1, r.s0, r.s1);
+    status(`Copied ${r.s1 - r.s0 + 1} slice(s) x ${r.f1 - r.f0 + 1} floor(s). Click Paste (or Ctrl+V), then where it goes.`);
+  }
+  function doClear() {
+    const r = selRange();
+    if (!r) return;
+    edit(() => {
+      for (let f = r.f0; f <= r.f1; f++) {
+        const filler = LC.copyRegion(level, f, f, 0, 0);
+        filler.guards = []; filler.items = [];
+        LC.removeObjects(level, f, f, r.s0, r.s1);
+        for (let s = r.s0; s <= r.s1; s++) LC.pasteRegion(level, filler, f, s, false);
+      }
+    });
+  }
+  $('copy').onclick = doCopy;
+  $('paste').onclick = () => { if (!clip) return status('Copy something first.', true); pasting = true; status('Click where the top-left slice goes. Esc cancels.'); };
+  $('clear').onclick = doClear;
+  $('widen').onclick = () => {
+    const r = selRange();
+    if (!r) return status('Select where to widen (the slices left of it are repeated).', true);
+    edit(() => LC.insertSlices(level, r.s0, r.s1 - r.s0 + 1));
+  };
+  $('narrow').onclick = () => {
+    const r = selRange();
+    if (!r) return status('Select the slices to remove.', true);
+    edit(() => LC.removeSlices(level, r.s0, r.s1 - r.s0 + 1));
+    sel = null;
+  };
+  function removeSel() {
+    if (!selObj) return;
+    edit(() => {
+      level.guards = level.guards.filter(o => o !== selObj);
+      level.items = level.items.filter(o => o !== selObj);
+    });
+    selObj = null; showProps();
+  }
+
+  /* ---------- mouse ---------- */
+  function at(e) {
+    const r = cv.getBoundingClientRect();
+    const x = (e.clientX - r.left) / zoom, y = (e.clientY - r.top) / zoom;
+    const L = shown();
+    return { x, y, s: Math.max(0, Math.min(L.W - 1, Math.floor(x / 16))), f: Math.max(0, Math.min(L.floors - 1, Math.floor(y / 80))),
+             c: Math.floor(x / 16), r: Math.floor(y / 16) };
+  }
+  function hitObject(p) {
+    const L = level;
+    for (const o of [...L.items].reverse()) { const b = objBox(o, false); if (p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h) return o; }
+    for (const o of [...L.guards].reverse()) { const b = objBox(o, true); if (p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h) return o; }
+    return null;
+  }
+  let drag = null;
+  cv.addEventListener('pointerdown', e => {
+    if (!level) return;
+    cv.setPointerCapture(e.pointerId);
+    const p = at(e);
+    if (mode === 'select') {
+      if (pasting && clip) {
+        edit(() => LC.pasteRegion(level, clip, p.f, p.s, $('withobj').checked));
+        pasting = false;
+        status('Pasted.');
+        return;
+      }
+      sel = { f0: p.f, f1: p.f, s0: p.s, s1: p.s };
+      drag = { kind: 'sel' };
+    } else if (mode === 'paint') {
+      const L = shown();
+      if (p.c < 0 || p.c >= L.W || p.r < 0 || p.r >= L.floors * 5) return;
+      if (e.altKey || e.button === 2) { paintMeta = L.map[p.r * L.W + p.c]; buildPalette(); return; }
+      edit(() => { level.map[p.r * level.W + p.c] = paintMeta; });
+      drag = { kind: 'paint' };
+    } else if (mode === 'objects') {
+      if ($('showorig').checked) return status('Untick "original stage" to edit.', true);
+      const o = hitObject(p);
+      if (o) {
+        selObj = o;
+        drag = { kind: 'move', before: snapshot(), dx: o.x - (p.x + 32), moved: false };
+        showProps(); render();
+        return;
+      }
+      if (preset) {
+        const f = p.f, base = { x: Math.round(p.x) + 32, y: 80 * f + preset.yoff, z: preset.z, frame: preset.frame, beh: preset.beh, dir: preset.dir, attr: preset.attr };
+        edit(() => {
+          if (preset.isGuard) { const g = Object.assign(base, { template: preset.template }); level.guards.push(g); selObj = g; }
+          else { const it = Object.assign(base, { kind: preset.kind }); level.items.push(it); selObj = it; }
+        });
+        showProps();
+      } else { selObj = null; showProps(); render(); }
+    }
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!level) return;
+    const p = at(e);
+    hover = p;
+    if (drag && drag.kind === 'sel') { sel.f1 = p.f; sel.s1 = p.s; }
+    else if (drag && drag.kind === 'paint') {
+      if (p.c >= 0 && p.c < level.W && p.r >= 0 && p.r < level.floors * 5 && level.map[p.r * level.W + p.c] !== paintMeta) {
+        level.map[p.r * level.W + p.c] = paintMeta;
+      }
+    } else if (drag && drag.kind === 'move' && selObj) {
+      const nf = level.floors, f0 = LC.floorOf(selObj.y, nf);
+      selObj.x = Math.round(p.x + 32 + drag.dx);
+      selObj.y += (p.f - f0) * 80;
+      drag.moved = true;
+    }
+    const L = shown();
+    const inf = L.col[p.f] && L.col[p.f][Math.floor(p.x / 8)];
+    $('status').textContent = `floor ${p.f + 1}, x ${Math.round(p.x) + 32}` + (inf !== undefined ? `, wall ${((inf >>> 24) & 255).toString(16).padStart(2, '0')}/${((inf >>> 16) & 255).toString(16).padStart(2, '0')} info ${(inf & 0xFFFF).toString(16).padStart(4, '0')}` : '');
+    render();
+  });
+  cv.addEventListener('pointerup', () => {
+    if (drag && drag.kind === 'move' && drag.moved) {
+      undo.push(drag.before); redo.length = 0;
+      check(); showProps();
+    }
+    if (drag && drag.kind === 'paint') check();
+    drag = null;
+  });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  window.addEventListener('keydown', e => {
+    if (!level || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); restore(undo, redo); }
+    else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); restore(redo, undo); }
+    else if ((e.ctrlKey || e.metaKey) && k === 'c' && mode === 'select') { e.preventDefault(); doCopy(); }
+    else if ((e.ctrlKey || e.metaKey) && k === 'v' && mode === 'select' && clip) { e.preventDefault(); pasting = true; status('Click where the top-left slice goes. Esc cancels.'); render(); }
+    else if (k === 'escape') { pasting = false; selObj = null; render(); showProps(); }
+    else if (k === 'delete' || k === 'backspace') {
+      if (mode === 'objects' && selObj) { e.preventDefault(); removeSel(); }
+      else if (mode === 'select' && sel) { e.preventDefault(); doClear(); }
+    }
+  });
+
+  /* ---------- checking ---------- */
+  function check() {
+    const res = LC.resolveItems(level);
+    $('counts').innerHTML = `${level.W} blocks wide, ${level.floors} floors. Guards ${level.guards.length}/32, ` +
+      `items ${res.items.length}/32 (${res.doors.length} doors, ${res.treasures} treasures${res.exit ? ', exit' : ''}).`;
+    $('problems').innerHTML = res.problems.length ? res.problems.map(p => `<li class="bad">${p}</li>`).join('') : '<li class="ok">Ready to save.</li>';
+    return res;
+  }
+
+  /* ---------- saving / opening ---------- */
+  $('export').onclick = async () => {
+    if (!level) return;
+    let ex;
+    try { ex = LC.exportLevel(rom, level); }
+    catch (e) { status(e.message.replace(/\n/g, ' '), true); return; }
+    const ips = LC.makeIps(rom, ex.rom);
+    const name = $('m-name').value.trim() || 'Stage ' + st;
+    const z = new JSZip();
+    z.file('mod.ini', LC.modIni({ name, author: $('m-author').value, version: $('m-version').value,
+      description: $('m-desc').value || 'Custom stage ' + st + ' made with the level maker' }));
+    z.file('patches/stage' + String(st).padStart(2, '0') + '.ips', ips);
+    z.file('levels/stage' + String(st).padStart(2, '0') + '.json', JSON.stringify(level));
+    const out = await z.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([out], { type: 'application/zip' }));
+    a.download = name.replace(/[^\w.-]+/g, '_') + '.bbro';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    status('Saved ' + a.download + ' (' + out.length.toLocaleString() + ' bytes). Put it in the game\'s mods folder.' +
+           (ex.problems.length ? ' Note: ' + ex.problems.join(' ') : ''));
+  };
+  $('openfile').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f || !rom) return;
+    try {
+      let text, ini = '';
+      if (/\.json$/i.test(f.name)) text = await f.text();
+      else {
+        const z = await JSZip.loadAsync(await f.arrayBuffer());
+        const ent = Object.values(z.files).find(x => /^levels\/.*\.json$/i.test(x.name));
+        if (!ent) throw new Error('This .bbro has no level from the level maker in it.');
+        text = await ent.async('string');
+        if (z.files['mod.ini']) ini = await z.files['mod.ini'].async('string');
+      }
+      const lv = JSON.parse(text);
+      if (lv.format !== 'bbro-level' || !LC.STAGES.includes(lv.stage)) throw new Error('Not a level maker file.');
+      loadStage(lv.stage, lv);
+      const v = k => { const m = ini.match(new RegExp('^\\s*' + k + '\\s*=\\s*(.*)$', 'm')); return m ? m[1].trim() : null; };
+      if (v('name')) $('m-name').value = v('name');
+      if (v('author')) $('m-author').value = v('author');
+      if (v('version')) $('m-version').value = v('version');
+      if (v('description')) $('m-desc').value = v('description');
+      status('Opened ' + f.name + '.');
+    } catch (err) { status(err.message, true); }
+  });
+  $('revert').onclick = () => {
+    if (!confirm('Throw away your changes to stage ' + st + '?')) return;
+    edit(() => { level = LC.readStage(rom, st); });
+  };
+})();
+</script>
+</body>
+</html>
