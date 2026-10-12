@@ -15,6 +15,8 @@ typedef struct {
 int wobj_build(int margin, int width, int patrol_return, wobj_sprite *list, int max);
 void wobj_reset(void);
 /* objects on the floor shown by player 1's view while the views are stacked (vdp.c) */
+/* the player (0 Robo, 1 Mobo) a sprite piece belongs to, or -1 */
+int wobj_player_of(uint16_t attr);
 int wobj_build_stacked(int vtop, int real_wy0, wobj_sprite *list, int max);
 
 #endif

@@ -74,6 +74,7 @@ typedef struct {
     int16_t lx, ly, lz;     /* last position drawn by the game */
     uint16_t lframe, lflip;
     int still;              /* frames without moving */
+    int age;                /* frames it has been drawn by the game */
     anim_t a;
     /* ghost */
     int ghost;              /* 1 walking to its post, 2 standing at it, 3 not met yet (at its post) */
@@ -244,10 +245,13 @@ static void learn(const snap_t *s, const snap_t *prev)
                 g->still = 0;
             } else if (g->seen && !moved) {
                 /* standing at its post, not yet alarmed */
-                if (++g->still > 4 && b->x == s->post[i][0] && b->y == s->post[i][1])
+                /* only right after it is first met, before anything happened to it
+                 * (a guard shot at its post must not teach "lying flat" as standing) */
+                if (++g->still > 4 && g->age < 60 && b->x == s->post[i][0] && b->y == s->post[i][1])
                     push_seq(g->a.idle, &g->a.nidle, b->frame);
             }
             g->seen = 1;
+            g->age++;
             g->lx = b->x; g->ly = b->y; g->lz = b->z;
             g->lframe = b->frame; g->lflip = b->flip;
             g->ghost = 0;
@@ -264,7 +268,9 @@ static const anim_t *anim_for(const snap_t *s, int i, int walking)
     if (walking ? a->nwalk >= 8 : a->nidle >= 8) return a;
     for (int j = FIRST_GUARD; j < FIRST_GUARD + s->nguards; j++) {
         const anim_t *b = &guards[j].a;
-        if (s->o[j].w == s->o[i].w && s->o[j].h == s->o[i].h && (walking ? b->nwalk >= 8 : b->nidle >= 8))
+        /* same size and colours: the same kind of guard */
+        if (s->o[j].w == s->o[i].w && s->o[j].h == s->o[i].h && s->o[j].attr == s->o[i].attr &&
+            (walking ? b->nwalk >= 8 : b->nidle >= 8))
             return b;
     }
     return NULL;
@@ -440,4 +446,36 @@ int wobj_build_stacked(int vtop, int real_wy0, wobj_sprite *list, int max)
                 list[k].y += shift;
         }
     return out_n;
+}
+
+/* Which player a sprite piece belongs to (CHAR_ROBO / CHAR_MOBO), or -1: the pieces of
+ * the players' (objects 0 and 1) current animation frames, so that only they get the
+ * player colours - not guards whose graphics happen to use the same tiles. */
+int wobj_player_of(uint16_t attr)
+{
+    static uint32_t built = 0xFFFFFFFF;
+    static uint16_t tiles[2][24];
+    static int n[2];
+    if (built != md.frame) {
+        built = md.frame;
+        const snap_t *s = &snaps[cur];
+        for (int c = 0; c < 2; c++) {
+            n[c] = 0;
+            uint16_t frame = s->valid ? s->o[c].frame : 0;
+            if (!frame) continue;
+            uint32_t p = FRAMES_TBL + frame * 4u;
+            if (p + 4 > md.rom_size) continue;
+            p = ((uint32_t)md.rom[p] << 24 | md.rom[p + 1] << 16 | md.rom[p + 2] << 8 | md.rom[p + 3]) & 0xFFFFFF;
+            if (p + 2 > md.rom_size) continue;
+            int cnt = md.rom[p] + 1;
+            p += 2;
+            for (int k = 0; k < cnt && n[c] < 24 && p + 6 <= md.rom_size; k++, p += 6)
+                tiles[c][n[c]++] = (uint16_t)(((md.rom[p + 4] << 8) | md.rom[p + 5]) & 0x07FF);
+        }
+    }
+    for (int c = 0; c < 2; c++)
+        for (int i = 0; i < n[c]; i++)
+            if (tiles[c][i] == (attr & 0x07FF))
+                return c;
+    return -1;
 }
