@@ -8,7 +8,7 @@
 #include "md.h"
 #include "vdp.h"
 
-settings_t settings;
+settings_t settings = { .crop_cutscenes = 1 };
 uint32_t md_color_lut[512];
 uint32_t char_color_lut[16];
 static const char *char_keys[CHAR_COUNT] = {"robo", "mobo"};
@@ -54,6 +54,7 @@ void settings_defaults(void)
     memset(&settings, 0, sizeof(settings));
     settings.screen = SCREEN_ORIGINAL;
     settings.preset = PRESET_ORIGINAL;
+    settings.crop_cutscenes = 1;
 }
 
 /* ------------------------------------------------------------ colour */
@@ -222,6 +223,7 @@ int settings_set(const char *key, const char *value)
         return 0;
     }
     if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
+    if (!strcmp(key, "cutscenes")) { settings.crop_cutscenes = strcmp(value, "wide") != 0; return 1; }
     if (!strcmp(key, "upper_view")) { settings.show_2p_panel = !strcmp(value, "panel"); return 1; }
     if (!strcmp(key, "brightness")) { settings.brightness = clampi(atoi(value), -100, 100); return 1; }
     if (!strcmp(key, "contrast")) { settings.contrast = clampi(atoi(value), -100, 100); return 1; }
@@ -288,6 +290,8 @@ int settings_save(const char *path)
     fprintf(f, "smooth = %d\n", settings.smooth);
     fprintf(f, "# top of the screen in a 1-player game: room (the floor above) or panel (original)\n");
     fprintf(f, "upper_view = %s\n", settings.show_2p_panel ? "panel" : "room");
+    fprintf(f, "# widescreen during cutscenes/title: 4:3 (cropped, game overs stay wide) or wide\n");
+    fprintf(f, "cutscenes = %s\n", settings.crop_cutscenes ? "4:3" : "wide");
     fprintf(f, "# colors: original, vivid, soft, arcade, grayscale, sepia, night, gameboy, inverted\n");
     fprintf(f, "colors = %s\n", preset_keys[settings.preset]);
     fprintf(f, "brightness = %d\ncontrast = %d\nsaturation = %d\nhue = %d\n",

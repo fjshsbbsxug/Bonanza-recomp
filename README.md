@@ -66,13 +66,15 @@ builder/      the HTML builder page
 * **Widescreen and custom colours.** An in-game menu (Esc, gamepad Back, or MENU on
   touch screens) and the builder's *Screen & colors* step offer:
   * 4:3, 16:9, 16:10 and 21:9 output. Widescreen draws more of the room from video
-    memory instead of stretching (the game keeps the whole 512-pixel-wide room
-    there). The camera ($FF1846/$FF184A) and level width ($FF2CD0) from the game's RAM
-    tell where the building ends, so beyond its walls the city backdrop shows instead
-    of wrapped room graphics; the HUD rows extend their edges.
+    memory instead of stretching... except that the game only keeps ~20 map columns
+    around the camera there, so the extra columns come straight from the level map in
+    ROM (map $FF1838, metatiles $FF183C, width $FF2CCC, cameras $FF1844/$FF1846 and
+    $FF2288/$FF228A, floor rows $FF187A/$FF22BE). Each frame the map is checked against
+    what the game drew; outside the building the city backdrop shows. Cutscenes and the
+    title are shown 4:3 (option), game over / time-up screens stay wide.
   * In a 1-player game the top of the screen shows the floor above Robo, following
-    his camera, instead of the "press 2P start" panel (option: Top (1 player)). It
-    stays on the floor he started from while he walks up or down stairs.
+    his camera, instead of the "press 2P start" panel (option: Top (1 player)). It is
+    drawn from the level map, so it stays correct while he walks up or down stairs.
   * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
     plus brightness, contrast, saturation and hue.
   * Player characters: separate shirt, pants and skin-tone colours for Robo and Mobo.

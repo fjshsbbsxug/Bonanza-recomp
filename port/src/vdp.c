@@ -263,9 +263,11 @@ static inline int tile_pixel(uint16_t entry, int px, int py)
 
 static int ovr_hs = -1, ovr_vs = -1;   /* scroll override (room-above view) */
 static int wrap_margins;               /* widescreen: repeat the 4:3 picture's columns (static backdrops) */
-/* Building edges for plane A (the rooms): pixels whose world x lies outside [0, clip_right)
- * are left transparent so the city backdrop shows there instead of wrapped plane data. */
-static int clip_on, clip_camx, clip_right;
+/* Map mode for plane A (the rooms): pixels are taken from the game's level map in ROM
+ * at world position (map_camx + x, map_wy) - only outside the real screen (map_all = 0)
+ * or everywhere (map_all = 1, the room-above view). Outside the building: transparent. */
+static int map_on, map_all, map_camx, map_wy;
+static uint16_t map_entry(int wx, int wy);
 
 static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
 {
@@ -305,12 +307,13 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
             last_tile = tile;
             last_py = py;
         }
-        out[x + m] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
-        if (clip_on && !plane_b) {
-            int wx = clip_camx + x;
-            if (wx < 0 || wx >= clip_right)
-                out[x + m] = 0;
+        if (map_on && !plane_b && (map_all || x < 0 || x >= width)) {
+            int wx = map_camx + x;
+            uint16_t me = map_entry(wx, map_wy);
+            out[x + m] = me == 0xFFFF ? 0 : (uint8_t)tile_pixel(me, wx & 7, map_wy & 7);
+            continue;
         }
+        out[x + m] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
     }
 }
 
@@ -581,46 +584,111 @@ int vdp_out_width(void)
 #define VIEW_BOT_Y0 135
 #define VIEW_H 80
 static struct { uint32_t frame; int hsA, hsB, vsA, vsB; } bottom_view;
-/* Vertical camera position of the floor player 1 stands on. While he walks up or down
- * stairs the camera scrolls between floors; the room-above view stays anchored to the
- * floor he started from (those plane rows are fully drawn) instead of following the
- * camera into rows the game has not filled yet. */
-static struct { int vs, last_vs, still; } floor_anchor = {-1, -1, 0};
 
-/* Full camera x of a view: the scroll register only has 10 bits, the game keeps the
- * whole value at $FF1846 (player 1) / $FF184A (player 2) as a negative scroll. */
-static int view_camx(int hs_line, int ram_addr)
+/* ---- level map (what the game draws into plane A during play) ----
+ *   $FF1838.l  map: words (metatile numbers), $FF2CCC words per row, one row per 16 px
+ *   $FF183C.l  metatiles: 4 name-table entries each (2x2 cells)
+ *   player 1: $FF1846 = -camera x, $FF1844 = vertical camera, $FF187A = floor row
+ *   player 2: $FF228A, $FF2288, $FF22BE
+ * The current floor's top is at plane row 80 (player 1) / 352 (player 2), so
+ * world y of a view line = (floor row + 5) * 16 + (line + vertical camera - that row). */
+
+static uint32_t ram32(int a) { return ((uint32_t)md.ram[a] << 24) | (md.ram[a + 1] << 16) | (md.ram[a + 2] << 8) | md.ram[a + 3]; }
+static int ram16s(int a) { return (int16_t)((md.ram[a] << 8) | md.ram[a + 1]); }
+
+static struct { uint32_t map, meta; int w; } level;
+
+static int level_load(void)
 {
-    int16_t ram_hs = (int16_t)((md.ram[ram_addr] << 8) | md.ram[ram_addr + 1]);
-    int cam_ram = -ram_hs;
-    int cam = (-hs_line) & 0x3FF;
-    while (cam + 512 < cam_ram) cam += 1024;
-    while (cam - 512 > cam_ram) cam -= 1024;
-    return cam;
+    level.map = ram32(0x1838);
+    level.meta = ram32(0x183C);
+    level.w = ram16s(0x2CCC);
+    return level.map < md.rom_size && level.meta < md.rom_size && level.w > 16 && level.w < 512;
 }
 
-/* right end of the building in world pixels: the camera stops when its right column
- * reaches the level width in 16-pixel columns ($FF2CD0) */
-static int level_right(void)
+static uint16_t map_entry(int wx, int wy)
 {
-    int cols = (md.ram[0x2CD0] << 8) | md.ram[0x2CD1];
-    return cols > 17 && cols < 512 ? (cols - 1) * 16 : 0x7FFF;
+    if (wx < 0 || wy < 0 || wx >= level.w * 16 || wy >= 64 * 16)
+        return 0xFFFF;                      /* outside the building */
+    uint32_t a = level.map + (uint32_t)((wy >> 4) * level.w + (wx >> 4)) * 2;
+    if (a + 1 >= md.rom_size)
+        return 0xFFFF;
+    uint16_t mt = (md.rom[a] << 8) | md.rom[a + 1];
+    uint32_t e = level.meta + mt * 8u + ((wy >> 3) & 1) * 4 + ((wx >> 3) & 1) * 2;
+    if (e + 1 >= md.rom_size)
+        return 0xFFFF;
+    return (md.rom[e] << 8) | md.rom[e + 1];
 }
 
-static void update_floor_anchor(int vs)
+/* nearest full value to a 10-bit register value, given the game's full value */
+static int unwrap10(int reg, int full)
 {
-    int d = vs - floor_anchor.last_vs;
-    if (d < 0) d = -d;
-    if (floor_anchor.vs < 0 || floor_anchor.last_vs < 0 || d > 16) {
-        floor_anchor.vs = vs;        /* first view, or the game jumped the camera (new floor) */
-        floor_anchor.still = 0;
-    } else if (d == 0) {
-        if (++floor_anchor.still >= 30)
-            floor_anchor.vs = vs;    /* camera resting: this is the current floor */
-    } else {
-        floor_anchor.still = 0;      /* scrolling between floors: keep the anchor */
+    int v = reg & 0x3FF;
+    while (v + 512 < full) v += 1024;
+    while (v - 512 > full) v -= 1024;
+    return v;
+}
+
+/* ---- cutscenes: 4:3 crop ----
+ * Widescreen is only used while playing. Game over / time-up screens keep the play
+ * screen's HUD, so they stay wide too (edges extended); everything else (logo, title,
+ * story, stage intros) is shown 4:3 with black side bars. The HUD is recognised by
+ * comparing a line of it with what it looked like during play. */
+#define HUD_Y 100
+static uint16_t hud_sig[16];
+static int hud_sig_ok;
+static uint32_t hud_seen_frame;       /* last frame (+1) the HUD was on screen */
+
+static void hud_entries(uint16_t *out, int width)
+{
+    static const int sizes[4] = {32, 64, 32, 128};
+    int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
+    uint32_t name = (vdp.reg[4] & 0x07) << 13;     /* the HUD is in plane B */
+    extern int line_hscroll_pub(int y, int plane_b);
+    int hs = line_hscroll_pub(HUD_Y, 1), vs = vdp.vsram[1];
+    for (int k = 0; k < 16; k++) {
+        int x = k * width / 16 + 4;
+        int px = (x - hs) & (pw * 8 - 1), py = (HUD_Y + vs) & (ph * 8 - 1);
+        uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
+        out[k] = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
     }
-    floor_anchor.last_vs = vs;
+}
+
+typedef struct { int ok; uint32_t frame; int camx, wy0; } view_map;
+static view_map views[2];   /* 0 = player 1 (bottom), 1 = player 2 (top) */
+
+/* camera of a view on this line (from the scroll registers, made whole with RAM) */
+static void view_camera(int v, int y0, int hs_reg, int vs_reg, int *camx, int *wy0)
+{
+    int hx = v ? 0x228A : 0x1846, vy = v ? 0x2288 : 0x1844, fr = v ? 0x22BE : 0x187A;
+    int top = v ? 352 : 80;
+    *camx = unwrap10(-hs_reg, -ram16s(hx));
+    int vcam = unwrap10(vs_reg, ram16s(vy));
+    *wy0 = (ram16s(fr) + 5) * 16 + (y0 + vcam - top);
+}
+
+/* does plane A on this line really show the level map at that camera? */
+static int view_matches_map(int y, int camx, int wy, int width)
+{
+    static const int sizes[4] = {32, 64, 32, 128};
+    int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
+    uint32_t name = (vdp.reg[2] & 0x38) << 10;
+    int hs = 0, vs = vdp.vsram[0];
+    {
+        extern int line_hscroll_pub(int y, int plane_b);
+        hs = line_hscroll_pub(y, 0);
+    }
+    int good = 0, tested = 0;
+    for (int x = 4; x < width; x += 16) {
+        uint16_t me = map_entry(camx + x, wy);
+        if (me == 0xFFFF) continue;
+        int px = (x - hs) & (pw * 8 - 1), py = (y + vs) & (ph * 8 - 1);
+        uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
+        uint16_t ve = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
+        tested++;
+        good += ve == me;
+    }
+    return tested >= 8 && good * 4 >= tested * 3;
 }
 
 static int line_opaque(const uint8_t *buf, int m, int width)
@@ -630,6 +698,9 @@ static int line_opaque(const uint8_t *buf, int m, int width)
             return 1;
     return 0;
 }
+
+static int line_hscroll(int y, int plane_b);
+int line_hscroll_pub(int y, int plane_b) { return line_hscroll(y, plane_b); }
 
 static int line_hscroll(int y, int plane_b)
 {
@@ -659,68 +730,91 @@ void vdp_render_line(int y)
         return;
     }
     uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W], part[VDP_FB_W];
-    /* during play (player 1's view seen last frame) tidy up the widescreen margins:
-     * the city backdrop behind the rooms is only one screen wide, so it is repeated,
-     * and the thin HUD strips at the very top and bottom just extend their edges */
-    int playing = bottom_view.frame == md.frame || bottom_view.frame == md.frame + 1;
+    /* Widescreen during play: the side areas of each view are drawn from the level map,
+     * the backdrop is repeated, the HUD rows extend their edges. In a 1-player game the
+     * top view shows the floor above player 1 (also from the map). */
     int in_top = y >= VIEW_TOP_Y0 && y < VIEW_TOP_Y0 + VIEW_H;
-    int in_view = in_top || (y >= VIEW_BOT_Y0 && y < VIEW_BOT_Y0 + VIEW_H);
-    int clamp_edges = m && playing && !in_view;   /* HUD rows: extend their edge colours */
     int in_bot = y >= VIEW_BOT_Y0 && y < VIEW_BOT_Y0 + VIEW_H;
-    draw_plane(a, y, width, m, 0);
-    int room_view = line_opaque(a, m, width);   /* a real room is shown on this line */
-    if (m && playing && room_view) {
-        /* widescreen: nothing of the building beyond its left/right walls */
-        clip_on = 1;
-        clip_camx = view_camx(line_hscroll(y, 0), in_bot ? 0x1846 : 0x184A);
-        clip_right = level_right();
-        draw_plane(a, y, width, m, 0);
-        clip_on = 0;
-    }
-    int room_above = 0;
-    if (in_top) {
-        /* in a 1-player game the game shows nothing in plane A here (the 2P panel) */
-        if (!room_view && !settings.show_2p_panel && bottom_view.frame == md.frame)
-            room_above = 1;
-        if (!room_view && !room_above && m && playing)
-            clamp_edges = 1;   /* original 2P panel: extend its edges */
-    } else if (y == VIEW_BOT_Y0) {
-        /* remember player 1's camera for the next frame's room-above view */
-        if (room_view) {
+    int in_view = in_top || in_bot;
+    int playing = views[0].ok && (views[0].frame == md.frame || views[0].frame == md.frame + 1);
+    if (y == 0 && !level_load())
+        views[0].ok = views[1].ok = 0;
+    int vi = in_bot ? 0 : 1;
+    int camx = 0, wy0 = 0, map_view = 0;
+    if (in_view && level.w) {
+        view_camera(vi, in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0, line_hscroll(y, 0), vdp.vsram[0], &camx, &wy0);
+        int wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
+        if (y == (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0) + 40) {
+            /* once per frame and view: check the map against what the game drew */
+            views[vi].ok = view_matches_map(y, camx, wy, width);
+            views[vi].frame = md.frame + 1;
+        }
+        map_view = views[vi].ok && (views[vi].frame == md.frame || views[vi].frame == md.frame + 1);
+        if (in_top && y == VIEW_TOP_Y0 + 40) {
+            static int vlog_top = -1;
+            if (vlog_top < 0) vlog_top = getenv("VIEWLOG") != NULL;
+            if (vlog_top)
+                fprintf(stderr, "top %u hs %d vs %d\n", md.frame, line_hscroll(y, 0), vdp.vsram[0]);
+        }
+        if (in_bot && y == VIEW_BOT_Y0) {
             bottom_view.frame = md.frame + 1;
-            bottom_view.hsA = line_hscroll(y, 0);
             bottom_view.hsB = line_hscroll(y, 1);
-            bottom_view.vsA = vdp.vsram[0];
             bottom_view.vsB = vdp.vsram[1];
-            update_floor_anchor(bottom_view.vsA & 0x3FF);
+            bottom_view.hsA = camx;      /* full camera x */
+            bottom_view.vsA = wy0;       /* world y of the view's first line */
             static int vlog_view = -1;
             if (vlog_view < 0) vlog_view = getenv("VIEWLOG") != NULL;
             if (vlog_view)
-                fprintf(stderr, "view %u hsA %d vsA %d hsB %d vsB %d\n", md.frame, bottom_view.hsA, bottom_view.vsA,
-                        bottom_view.hsB, bottom_view.vsB);
-        } else {
-            bottom_view.frame = 0;
-            floor_anchor.vs = floor_anchor.last_vs = -1;
+                fprintf(stderr, "view %u camx %d wy0 %d ok %d/%d\n", md.frame, camx, wy0, views[0].ok, views[1].ok);
         }
+    }
+    if (y == HUD_Y && m) {
+        uint16_t e[16];
+        hud_entries(e, width);
+        if (playing) {
+            memcpy(hud_sig, e, sizeof(hud_sig));
+            hud_sig_ok = 1;
+            hud_seen_frame = md.frame + 1;
+        } else if (hud_sig_ok) {
+            int same = 0;
+            for (int k = 0; k < 16; k++) same += e[k] == hud_sig[k];
+            if (same >= 10) hud_seen_frame = md.frame + 1;
+        }
+    }
+    int hud_screen = !playing && (hud_seen_frame == md.frame || hud_seen_frame == md.frame + 1);
+    int crop = m && settings.crop_cutscenes && !playing && !hud_screen;
+    int clamp_edges = m && (playing || hud_screen) && (!in_view || !playing);   /* extend edge colours */
+    map_on = m && map_view;
+    map_all = 0;
+    map_camx = camx;
+    map_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
+    draw_plane(a, y, width, m, 0);
+    map_on = 0;
+    int room_view = line_opaque(a, m, width);   /* a real room is shown on this line */
+    int room_above = 0;
+    if (in_top && !room_view) {
+        /* 1-player game: the game shows nothing in plane A here (the 2P panel) */
+        if (!settings.show_2p_panel && playing && bottom_view.frame == md.frame)
+            room_above = 1;
+        else if (m && playing)
+            clamp_edges = 1;   /* original 2P panel: extend its edges */
     }
     wrap_margins = m && playing && in_view && room_view;
     draw_plane(b, y, width, m, 1);
     wrap_margins = 0;
     if (room_above) {
-        /* the floor above player 1: plane rows directly above the bottom view */
+        /* the floor above player 1, straight from the level map, following his camera */
         ovr_hs = bottom_view.hsB;          /* same sky/city background as below */
         ovr_vs = (bottom_view.vsB + VIEW_BOT_Y0 - VIEW_TOP_Y0) & 0x3FF;
         wrap_margins = m != 0;
         draw_plane(b, y, width, m, 1);
         wrap_margins = 0;
-        ovr_hs = bottom_view.hsA;          /* the 80 plane rows right above player 1's view */
-        ovr_vs = (floor_anchor.vs + VIEW_BOT_Y0 - VIEW_TOP_Y0 - VIEW_H) & 0x3FF;
-        clip_on = m != 0;
-        clip_camx = view_camx(bottom_view.hsA, 0x1846);
-        clip_right = level_right();
-        draw_plane(a, y, width, m, 0);
-        clip_on = 0;
         ovr_hs = ovr_vs = -1;
+        map_on = map_all = 1;
+        map_camx = bottom_view.hsA;
+        map_wy = bottom_view.vsA - VIEW_H + (y - VIEW_TOP_Y0);
+        draw_plane(a, y, width, m, 0);
+        map_on = map_all = 0;
     }
     /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
     if ((vdp.reg[17] & 0x9F) || (vdp.reg[18] & 0x9F)) {
@@ -746,7 +840,12 @@ void vdp_render_line(int y)
         else { fb[x] = bg; continue; }
         fb[x] = pal[p & 0x3F];
     }
-    if (clamp_edges) {
+    if (crop) {
+        for (int x = 0; x < m; x++)
+            fb[x] = VDP_BLACK;
+        for (int x = m + width; x < ow; x++)
+            fb[x] = VDP_BLACK;
+    } else if (clamp_edges) {
         for (int x = 0; x < m; x++)
             fb[x] = fb[m];
         for (int x = m + width; x < ow; x++)

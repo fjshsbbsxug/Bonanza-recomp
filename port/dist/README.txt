@@ -42,6 +42,8 @@ button or the MENU button (top left) on Android.
   Top (1 player)  In a 1-player game the top of the screen shows the floor above
                Robo (follows his camera) instead of the "press 2P start" panel.
                Guards there only appear once the game puts them on screen.
+  Cutscenes    Widescreen only: show title/story/stage intros 4:3 with black bars
+               (game over and time-up screens stay wide), or keep them wide.
   Scaling      Sharp pixels or smooth.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
                Inverted.
