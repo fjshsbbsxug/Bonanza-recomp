@@ -27,8 +27,13 @@ Move         Arrow keys      W A S D
 A / B / C    Z / X / C       J / K / L
 Start        Enter           Space
 
-Game controllers are supported (first pad = player 1). On touch screens an on-screen
-pad is shown.
+Game controllers are supported, USB or Bluetooth, also on Android (first pad =
+player 1, plug in any time). Xbox / PlayStation / Switch-style pads: d-pad or left
+stick; Mega Drive A, B, C = the left, bottom and right face buttons (Xbox X, A, B);
+Start = Start; Back/Select opens the menu. Other pads:
+d-pad or stick, the first three buttons = A B C, Start = Start. On touch screens an
+on-screen pad is shown; it hides while you use a controller and comes back when you
+touch the screen.
 F11 or Alt+Enter: full screen   P: pause   F3: reset   Esc: menu
 
 Menu: screen shape & colours

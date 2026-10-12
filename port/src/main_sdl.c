@@ -29,6 +29,7 @@ static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 static SDL_AudioDeviceID audio_dev;
 static SDL_GameController *pads[2];
+static SDL_Joystick *joys[2];      /* pads SDL has no button layout for (generic USB/Bluetooth) */
 static int running = 1, paused, have_rom, show_touch;
 static uint8_t key_pad[2], ctl_pad[2], touch_pad;
 static char status_msg[256] = "Drop the Bonanza Bros. ROM file onto this window";
@@ -235,21 +236,58 @@ static uint8_t key_bit(SDL_Keycode k, int *player)
 
 static void open_pads(void)
 {
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < 2; i++) {
         if (pads[i]) {
             SDL_GameControllerClose(pads[i]);
             pads[i] = NULL;
         }
+        if (joys[i]) {
+            SDL_JoystickClose(joys[i]);
+            joys[i] = NULL;
+        }
+    }
+    /* first pad = player 1; pads with a known layout first, then any other joystick */
     int n = 0;
     for (int i = 0; i < SDL_NumJoysticks() && n < 2; i++)
-        if (SDL_IsGameController(i))
-            pads[n++] = SDL_GameControllerOpen(i);
+        if (SDL_IsGameController(i) && (pads[n] = SDL_GameControllerOpen(i)) != NULL)
+            n++;
+    for (int i = 0; i < SDL_NumJoysticks() && n < 2; i++)
+        if (!SDL_IsGameController(i) && (joys[n] = SDL_JoystickOpen(i)) != NULL) {
+            if (SDL_JoystickNumButtons(joys[n]) < 2) {   /* not a gamepad (accelerometer...) */
+                SDL_JoystickClose(joys[n]);
+                joys[n] = NULL;
+                continue;
+            }
+            n++;
+        }
 }
 
-static uint8_t controller_state(SDL_GameController *c)
+/* a joystick without a known layout: hat or first stick, buttons 1-3 = A B C, a
+ * button further right (usually Start) = Start */
+static uint8_t joystick_state(SDL_Joystick *j)
 {
+    uint8_t b = 0;
+    int hat = SDL_JoystickNumHats(j) > 0 ? SDL_JoystickGetHat(j, 0) : 0;
+    int ax = SDL_JoystickNumAxes(j) > 1 ? SDL_JoystickGetAxis(j, 0) : 0;
+    int ay = SDL_JoystickNumAxes(j) > 1 ? SDL_JoystickGetAxis(j, 1) : 0;
+    if ((hat & SDL_HAT_UP) || ay < -16000) b |= PAD_UP;
+    if ((hat & SDL_HAT_DOWN) || ay > 16000) b |= PAD_DOWN;
+    if ((hat & SDL_HAT_LEFT) || ax < -16000) b |= PAD_LEFT;
+    if ((hat & SDL_HAT_RIGHT) || ax > 16000) b |= PAD_RIGHT;
+    int nb = SDL_JoystickNumButtons(j);
+    static const uint8_t abc[3] = {PAD_A, PAD_B, PAD_C};
+    for (int i = 0; i < 3 && i < nb; i++)
+        if (SDL_JoystickGetButton(j, i)) b |= abc[i];
+    for (int i = 6; i < nb && i < 12; i++)
+        if (SDL_JoystickGetButton(j, i)) b |= PAD_START;
+    return b;
+}
+
+static uint8_t controller_state(int p)
+{
+    SDL_GameController *c = pads[p];
     if (!c)
-        return 0;
+        return joys[p] ? joystick_state(joys[p]) : 0;
     uint8_t b = 0;
     int ax = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTX);
     int ay = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTY);
@@ -575,7 +613,12 @@ static void handle_events(void)
                 toggle_menu();
             }
             break;
+        case SDL_JOYBUTTONDOWN:
+        case SDL_JOYHATMOTION:
+            show_touch = 0;      /* playing with a controller: hide the touch buttons */
+            break;
         case SDL_CONTROLLERBUTTONDOWN:
+            show_touch = 0;
             if (e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK || e.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) {
                 toggle_menu();
             } else if (menu_is_open()) {
@@ -584,6 +627,8 @@ static void handle_events(void)
                     menu_action(menu_key(mk));
             }
             break;
+        case SDL_JOYDEVICEADDED:
+        case SDL_JOYDEVICEREMOVED:
         case SDL_CONTROLLERDEVICEADDED:
         case SDL_CONTROLLERDEVICEREMOVED:
             open_pads();
@@ -675,7 +720,7 @@ static int run_net_frame(void)
     uint8_t mine = 0, pads2[2];
     if (!menu_is_open()) {                      /* the game cannot wait for the menu */
         for (int p = 0; p < 2; p++)
-            ctl_pad[p] = controller_state(pads[p]);
+            ctl_pad[p] = controller_state(p);
         mine = key_pad[0] | key_pad[1] | ctl_pad[0] | ctl_pad[1] | touch_pad;
     }
     net_local_input(mine);
@@ -702,7 +747,7 @@ static void run_one(void)
     }
     if (have_rom && !paused && !menu_is_open()) {
         for (int p = 0; p < 2; p++) {
-            ctl_pad[p] = controller_state(pads[p]);
+            ctl_pad[p] = controller_state(p);
             md.pad[p] = key_pad[p] | ctl_pad[p] | (p == 0 ? touch_pad : 0);
         }
         md_run_frame();
@@ -799,6 +844,7 @@ int main(int argc, char **argv)
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1"); /* Back opens the menu */
+    SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0"); /* the phone itself is not a pad */
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) < 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
