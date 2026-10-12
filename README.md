@@ -88,6 +88,8 @@ builder/      the HTML builder page
   * In a 1-player game the top of the screen shows the floor above Robo, following
     his camera, instead of the "press 2P start" panel (option: Top (1P)). It is
     drawn from the level map, so it stays correct while he walks up or down stairs.
+    It never goes above the top floor: where the floor above is only roof and sky,
+    the top of the screen shows Robo's own floor, characters included.
   * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
     plus brightness, contrast, saturation and hue.
   * Player characters: separate shirt, pants and skin-tone colours for Robo and Mobo.

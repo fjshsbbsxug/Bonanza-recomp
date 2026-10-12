@@ -611,6 +611,7 @@ int vdp_out_width(void)
 #define VIEW_BOT_Y0 135
 #define VIEW_H 80
 static struct { uint32_t frame; int hsA, hsB, vsA, vsB; } bottom_view;
+static int room_above_wy;   /* world y of the room-above view's first line */
 
 /* ---- level map (what the game draws into plane A during play) ----
  *   $FF1838.l  map: words (metatile numbers), $FF2CCC words per row, one row per 16 px
@@ -631,6 +632,24 @@ static int level_load(void)
     level.meta = ram32(0x183C);
     level.w = ram16s(0x2CCC);
     return level.map < md.rom_size && level.meta < md.rom_size && level.w > 16 && level.w < 512;
+}
+
+/* how much of the level at world (x0..x0+w, y0..y0+80) is empty (sky), in percent */
+static int map_blank_percent(int x0, int y0, int w)
+{
+    int blank = 0, n = 0;
+    for (int y = y0 + 4; y < y0 + VIEW_H; y += 8)
+        for (int x = x0 + 4; x < x0 + w; x += 8, n++) {
+            uint16_t e = map_entry(x, y);
+            int b = e == 0xFFFF;
+            if (!b) {
+                const uint8_t *t = &vdp.vram[(e & 0x07FF) << 5];
+                b = 1;
+                for (int i = 0; i < 32 && b; i++) b = !t[i];
+            }
+            blank += b;
+        }
+    return n ? blank * 100 / n : 100;
 }
 
 static uint16_t map_entry(int wx, int wy)
@@ -893,7 +912,8 @@ void vdp_render_line(int y)
     map_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
     draw_plane(a, y, width, m, 0);
     map_on = 0;
-    int room_view = line_opaque(a, m, width);   /* a real room is shown on this line */
+    /* a real room is shown on this line (the outer 16 pixels may come from the map) */
+    int room_view = line_opaque(a, m + 16, width - 32);
     int room_above = 0;
     if (in_top && !room_view) {
         /* 1-player game: the game shows nothing in plane A here (the 2P panel) */
@@ -904,6 +924,21 @@ void vdp_render_line(int y)
     }
     /* the backdrop repeats every 256 pixels; also on lines that show only sky (above a
      * roof), which is what plane B to the right of the backdrop must never show */
+    if (room_above) {
+        /* Never above the top floor: where the floor above is (almost) only sky, the
+         * top view shows player 1's own floor instead, copying player 1's lines from
+         * the previous frame's picture (with the characters). Decided once a frame. */
+        static int own_floor;
+        if (y == VIEW_TOP_Y0) {
+            int sky = map_blank_percent(bottom_view.hsA - m, bottom_view.vsA - VIEW_H, width + 2 * m);
+            own_floor = own_floor ? sky > 55 : sky > 75;
+        }
+        room_above_wy = bottom_view.vsA - VIEW_H;
+        if (own_floor) {
+            memcpy(fb, vdp.fbmd[VIEW_BOT_Y0 + (y - VIEW_TOP_Y0)], sizeof(vdp.fbmd[0]));
+            return;
+        }
+    }
     wrap_margins = m && playing && in_view && (room_view || map_view);
     draw_plane(b, y, width, m, 1);
     wrap_margins = 0;
@@ -917,7 +952,7 @@ void vdp_render_line(int y)
         ovr_hs = ovr_vs = -1;
         map_on = map_all = 1;
         map_camx = bottom_view.hsA;
-        map_wy = bottom_view.vsA - VIEW_H + (y - VIEW_TOP_Y0);
+        map_wy = room_above_wy + (y - VIEW_TOP_Y0);
         draw_plane(a, y, width, m, 0);
         map_on = map_all = 0;
     }
