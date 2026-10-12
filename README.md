@@ -71,8 +71,9 @@ builder/      the HTML builder page
     ROM (map $FF1838, metatiles $FF183C, width $FF2CCC, cameras $FF1844/$FF1846 and
     $FF2288/$FF228A, floor rows $FF187A/$FF22BE). Each frame the map is checked against
     what the game drew (allowing for the floor number changing a few frames before the
-    scroll on stairs); outside the building the backdrop shows. Columns that video
-    memory still holds are taken from there. Cutscenes and the title are shown 4:3
+    scroll on stairs); outside the building the backdrop shows. The outer 16 pixels of
+    the picture also come from the map: the game may leave the edge column half
+    updated, which a TV hid in its overscan. Cutscenes and the title are shown 4:3
     (option), game over / time-up screens stay wide.
   * The game only turns objects within 144 pixels of a view's centre into sprites
     (sub_058B4), so in widescreen the renderer builds the missing ones itself from the

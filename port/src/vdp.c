@@ -268,8 +268,6 @@ static int wrap_margins;               /* widescreen: repeat the 4:3 picture's c
  * at world position (map_camx + x, map_wy) - only outside the real screen (map_all = 0)
  * or everywhere (map_all = 1, the room-above view). Outside the building: transparent. */
 static int map_on, map_all, map_camx, map_wy;
-static const uint8_t *map_vcol;   /* columns where video memory is valid (or NULL) */
-static int map_vcol0;
 static uint16_t map_entry(int wx, int wy);
 
 static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
@@ -310,15 +308,10 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
             last_tile = tile;
             last_py = py;
         }
-        if (map_on && !plane_b && (map_all || x < 0 || x >= width)) {
+        /* the game may leave the column at the screen edge half updated (a TV hid it
+         * in the overscan): beside the picture and in its outer 16 pixels, use the map */
+        if (map_on && !plane_b && (map_all || x < 16 || x >= width - 16)) {
             int wx = map_camx + x;
-            if (map_vcol) {
-                int i = (wx >> 3) - map_vcol0;
-                if (i >= 0 && i < VDP_FB_W / 8 + 2 && map_vcol[i]) {
-                    out[x + m] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
-                    continue;
-                }
-            }
             uint16_t me = map_entry(wx, map_wy);
             out[x + m] = me == 0xFFFF ? 0 : (uint8_t)tile_pixel(me, wx & 7, map_wy & 7);
             continue;
@@ -694,11 +687,6 @@ typedef struct {
     uint32_t good_frame; /* frame (+1) of the last successful check */
     int dwy;             /* correction to the camera's world y (see view_check) */
     int camx, wy0;
-    /* side areas: tile columns (world column vcol0 + i) for which video memory really
-     * holds this part of the level. The game keeps a few columns beyond the screen;
-     * they also show what the map cannot: opened trap doors, levers, presses... */
-    int vcol0;
-    uint8_t vcol[VDP_FB_W / 8 + 2];
 } view_map;
 static view_map views[2];   /* 0 = player 1 (bottom), 1 = player 2 (top) */
 
@@ -745,39 +733,6 @@ static int view_matches_map(int y, int camx, int wy, int width)
     return inside >= 4 && inside_good * 4 >= inside * 3 && good * 4 >= tested * 3;
 }
 
-int line_hscroll_pub(int y, int plane_b);
-
-static uint16_t plane_a_entry(int x, int y)
-{
-    static const int sizes[4] = {32, 64, 32, 128};
-    int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
-    uint32_t name = (vdp.reg[2] & 0x38) << 10;
-    int px = (x - line_hscroll_pub(y, 0)) & (pw * 8 - 1), py = (y + vdp.vsram[0]) & (ph * 8 - 1);
-    uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
-    return (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
-}
-
-static void view_valid_columns(view_map *v, int y0, int camx, int wy0, int width)
-{
-    int m = vdp_margin();
-    v->vcol0 = (camx - m) >> 3;
-    int n = ((camx + width + m) >> 3) - v->vcol0 + 1;
-    if (n > (int)sizeof(v->vcol)) n = sizeof(v->vcol);
-    for (int i = 0; i < n; i++) {
-        int x = ((v->vcol0 + i) << 3) - camx + 4, inside = 0, same = 0;
-        if (x >= 0 && x < width) { v->vcol[i] = 1; continue; }
-        for (int k = 4; k < VIEW_H; k += 8) {
-            uint16_t me = map_entry(camx + x, wy0 + k);
-            if (me == 0xFFFF) continue;
-            inside++;
-            same += plane_a_entry(x, y0 + k) == me;
-        }
-        v->vcol[i] = inside >= 3 && same * 10 >= inside * 6;
-    }
-    for (int i = n; i < (int)sizeof(v->vcol); i++)
-        v->vcol[i] = 0;
-}
-
 /* Check a whole view against the map, once per frame, at its first line. While the
  * camera moves to another floor the game updates its floor number a few frames before
  * (or after) the scroll registers, so the floor above and below are tried as well. */
@@ -801,8 +756,6 @@ static void view_check(view_map *v, int y0, int camx, int wy0, int width)
     }
     /* a frame or two without a match (a door being redrawn...) keeps the map */
     v->ok = md.frame + 1 - v->good_frame < 8;
-    if (v->ok)
-        view_valid_columns(v, y0, camx, wy0 + v->dwy, width);
 }
 
 static int line_opaque(const uint8_t *buf, int m, int width)
@@ -936,8 +889,6 @@ void vdp_render_line(int y)
     int clamp_edges = m && (playing || hud_screen) && (!in_view || !playing);   /* extend edge colours */
     map_on = m && map_view;
     map_all = 0;
-    map_vcol = in_view ? views[vi].vcol : NULL;
-    map_vcol0 = views[vi].vcol0;
     map_camx = camx;
     map_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
     draw_plane(a, y, width, m, 0);
@@ -967,7 +918,6 @@ void vdp_render_line(int y)
         map_on = map_all = 1;
         map_camx = bottom_view.hsA;
         map_wy = bottom_view.vsA - VIEW_H + (y - VIEW_TOP_Y0);
-        map_vcol = NULL;
         draw_plane(a, y, width, m, 0);
         map_on = map_all = 0;
     }
