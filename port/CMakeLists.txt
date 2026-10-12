@@ -61,6 +61,16 @@ if(EMSCRIPTEN)
     target_link_libraries(bonanza bonanza_core)
   endif()
   set_target_properties(bonanza PROPERTIES LINK_FLAGS "${EMFLAGS}" SUFFIX ".js")
+  # The same runtime in one file (wasm inside the .js): the level maker's test play uses
+  # it, also when its page is opened from disk, where browsers do not load .wasm files.
+  add_executable(bonanza-single src/main_sdl.c)
+  get_target_property(BONANZA_LIBS bonanza LINK_LIBRARIES)
+  get_target_property(BONANZA_COPTS bonanza COMPILE_OPTIONS)
+  target_link_libraries(bonanza-single ${BONANZA_LIBS})
+  if(BONANZA_COPTS)
+    target_compile_options(bonanza-single PRIVATE ${BONANZA_COPTS})
+  endif()
+  set_target_properties(bonanza-single PROPERTIES LINK_FLAGS "${EMFLAGS} -sSINGLE_FILE=1" SUFFIX ".js")
   return()
 endif()
 

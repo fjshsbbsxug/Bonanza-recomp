@@ -122,12 +122,15 @@ contents:
                          4652: 00 C4
     levels/            ignored by the game (the level maker keeps its levels there)
 
-Level maker: levelmaker.html (next to the HTML builder, on the project's site) edits
-a stage in your browser and saves it as a .bbro: copy and paste whole rooms, walls,
-doors and stairs (always with their picture), widen or shorten the building, paint
-blocks, place guards, treasures and other items. The start position, graphics,
-music and time limit stay as in the original stage. Open the .bbro again in the
-level maker to keep working on it.
+Bonanza Maker (levelmaker.html, next to the HTML builder on the project's site, or
+the BonanzaMaker zip): build your own version of any of the 10 stages in your browser.
+Pick parts from the tray - stairs, exit stairs, doors, walls and hallways taken from the
+stage itself (they always bring their walls and floor with them), guards, loot and
+gadgets, single blocks to paint - and click to place them; the eraser removes things,
+the hand moves them or selects an area to make your own stamp, add space or remove it.
+Press Play to try the level right away, and save it as a .bbro. Open the .bbro again to
+keep building. The start position, graphics, music and time limit stay as in the
+original stage.
 
 Patches that change the game's code work too: that code then runs on the built-in
 68000 interpreter instead of the recompiled code. With no mods on, the game is the

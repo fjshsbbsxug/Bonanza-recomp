@@ -9,7 +9,7 @@ The site layout is what builder/index.html expects:
   index.html, levelmaker.html (+ levelcore.js, jszip.min.js)
   packages/manifest.json
   packages/bonanza-windows-x64.zip, bonanza-linux-x64.zip, bonanza-android.apk
-  web/bonanza.js, web/bonanza.wasm
+  web/bonanza.js, web/bonanza.wasm, web/bonanza-single.js (level maker test play)
 """
 import argparse
 import json
@@ -43,7 +43,9 @@ def native(args):
 
 def web(args):
     os.makedirs(args.out, exist_ok=True)
-    for name in ("bonanza.js", "bonanza.wasm"):
+    for name in ("bonanza.js", "bonanza.wasm", "bonanza-single.js"):
+        if name == "bonanza-single.js" and not os.path.exists(os.path.join(args.build, name)):
+            continue                     # (older build directories)
         shutil.copy(os.path.join(args.build, name), os.path.join(args.out, name))
     print("copied web runtime to", args.out)
 
@@ -51,7 +53,7 @@ def web(args):
 def site(args):
     out = args.out
     os.makedirs(os.path.join(out, "packages"), exist_ok=True)
-    for name in ("index.html", "jszip.min.js", "levelmaker.html", "levelcore.js"):
+    for name in ("index.html", "jszip.min.js", "levelmaker.html", "levelcore.js", "play.html"):
         shutil.copy(os.path.join(ROOT, "builder", name), os.path.join(out, name))
     pk = {}
     for key, name in (("windows", "packages/bonanza-windows-x64.zip"), ("linux", "packages/bonanza-linux-x64.zip"),

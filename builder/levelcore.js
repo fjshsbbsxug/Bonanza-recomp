@@ -19,7 +19,7 @@
     11: [9, 'Art Museum'], 13: [10, 'Pyramid'] };
   LC.stageNumber = e => (LC.STAGE_NAMES[e] || [e])[0];
   LC.stageLabel = e => LC.STAGE_NAMES[e] ? 'Stage ' + LC.STAGE_NAMES[e][0] + ': ' + LC.STAGE_NAMES[e][1] : 'Entry ' + e;
-  LC.STAGES = [1, 2, 3, 5, 6, 7, 9, 11, 13];    /* entries that can be edited (not 10: Deluxe Liner, see below) */
+  LC.STAGES = [1, 2, 3, 5, 6, 7, 9, 10, 11, 13];
   LC.MAX_W = 127;                               /* 2 x W collision columns must fit 255 */
   LC.KIND = { TREASURE: 0x00, DOOR: 0x04, EXIT: 0x2C };
   LC.KIND_NAMES = { 0x00: 'Treasure', 0x04: 'Door', 0x08: 'Spring', 0x0C: 'Zip wire', 0x10: 'Trip hazard',
@@ -131,7 +131,7 @@
       recs.forEach((v, i) => { const c = first / 4 + i; if (c < a.length) a[c] = v; });
       col.push(a);
     }
-    return { col, floorBuf };
+    return { col, floorBuf, nbuf };
   }
 
   /* start routines draw the first screen from the map with a 14-byte descriptor:
@@ -150,11 +150,15 @@
     const r = R(rom);
     const W = r.u16(0x54E2 + 4 * (st - 1)), H = r.u16(0x54E2 + 4 * (st - 1) + 2);
     const mapPtr = r.u32(0x5516 + 8 * (st - 1)), metaPtr = r.u32(0x5516 + 8 * (st - 1) + 4);
-    const nf = r.u16(0xFF86 + 2 * (st - 1)) + 1;
-    if (!mapPtr || H !== 5 * nf) throw new Error(LC.stageLabel(st) + ' cannot be edited yet (its floors are set up differently).');
+    /* Floors with collision; normally one per 5 map rows. Deluxe Liner has one more on top
+     * than its map (a copy of the next one): its objects are 80 px lower than the map. */
+    const nfCol = r.u16(0xFF86 + 2 * (st - 1)) + 1, nf = H / 5, base = nfCol - nf;
+    const all = mapPtr && nf === Math.floor(nf) ? readCollision(r, st, nfCol, W) : null;
+    if (!all || base < 0 || base > 1 || (base && all.floorBuf[0] !== all.floorBuf[1]))
+      throw new Error(LC.stageLabel(st) + ' cannot be edited (its floors are set up differently).');
     const map = [];
     for (let i = 0; i < W * H; i++) map.push(r.u16(mapPtr + 2 * i));
-    const { col, floorBuf } = readCollision(r, st, nf, W);
+    const col = all.col.slice(base);
     /* objects */
     let p = r.u32(0x3E000 + 4 * (st - 1));
     const groups = [];
@@ -171,8 +175,9 @@
     groups[3].forEach((o, i) => { o.kind = i < kn ? r.u16(kp + 2 + 2 * i) : 0; });
     const gp = r.u32(0x14AB8 + 4 * (st - 1));
     groups[2].forEach((o, i) => { o.template = r.u16(gp + 2 * i); });
+    for (const g of groups) for (const o of g) o.y -= 80 * base;     /* map coordinates */
     const level = {
-      format: 'bbro-level', version: 1, stage: st, W, floors: nf, map,
+      format: 'bbro-level', version: 1, stage: st, W, floors: nf, base, map,
       col, players: groups[0], guards: groups[2], items: groups[3].filter(o => o.kind !== LC.KIND.EXIT),
     };
     return level;
@@ -320,6 +325,73 @@
     level.W = W - n;
   };
 
+  /* ---------- stamps: ready-made parts taken from the stage itself ---------- */
+  const bits = v => { let n = 0; for (; v; v >>= 1) n += v & 1; return n; };
+  const plainCol = v => (v >>> 16) === 0x0101 && !(v & 0xFFFF);
+  const wallCol = v => (v >>> 16) === 0xFFFF && !(v & 0xFFFF);
+  LC.makeStamps = function (level) {
+    const out = [], nf = level.floors, W = level.W;
+    const clean = (clip, keepDoors) => {
+      clip.guards = [];
+      clip.items = keepDoors ? clip.items.filter(o => o.kind === LC.KIND.DOOR) : [];
+      return clip;
+    };
+    /* stairs: the ramp is on the lower floor (back-lane masks 03 07 0F ...), the opening and
+     * landing on the floor above; a stamp covers both floors */
+    const seenStairs = {};
+    for (let f = 1; f < nf; f++) {
+      const c = level.col[f];
+      for (let i = 0; i < c.length; i++) {
+        const back = (c[i] >>> 16) & 255;
+        if (!LC.isStairInfo(c[i] & 0xFFFF) || bits(back) < 2 || bits(back) > 7) continue;
+        let j = i;
+        while (j + 1 < c.length && LC.isStairInfo(c[j + 1] & 0xFFFF)) j++;
+        /* the part on the floor above */
+        let lo = i, hi = j;
+        const up = level.col[f - 1];
+        for (let k = Math.max(0, i - 6); k <= Math.min(up.length - 1, j + 6); k++)
+          if (LC.isStairInfo(up[k] & 0xFFFF)) { lo = Math.min(lo, k); hi = Math.max(hi, k); }
+        let exit = false;
+        for (let k = lo; k <= hi; k++) if (LC.isExitInfo(c[k] & 0xFFFF) || LC.isExitInfo(up[k] & 0xFFFF)) exit = true;
+        const dir = c[i] & 3;
+        const kind = exit ? 'exit' : dir === 2 ? 'up-right' : 'up-left';
+        if (!seenStairs[kind]) {
+          seenStairs[kind] = 1;
+          const s0 = Math.max(0, (lo >> 1) - 1), s1 = Math.min(W - 1, (hi >> 1) + 1);
+          out.push({ id: 'stairs-' + kind, group: 'build', floors: 2,
+                     name: exit ? 'Exit stairs' : dir === 2 ? 'Stairs up \u2197' : 'Stairs up \u2196',
+                     clip: clean(LC.copyRegion(level, f - 1, f, s0, s1), false) });
+        }
+        i = j;
+      }
+    }
+    /* a door, a wall, and the hallway pieces the stage uses most */
+    let door = null, wall = null;
+    const hall = new Map();
+    for (let f = 0; f < nf; f++) {
+      const c = level.col[f];
+      for (let s = 1; s < W - 1; s++) {
+        const a = c[2 * s], b = c[2 * s + 1];
+        if (!door && (LC.isDoorInfo(a & 0xFFFF) || LC.isDoorInfo(b & 0xFFFF)))
+          door = { name: 'Door', id: 'door', group: 'build', floors: 1, clip: clean(LC.copyRegion(level, f, f, s - 1, s + 1), true) };
+        if (!wall && wallCol(a) && wallCol(b) && wallCol(c[2 * s + 2]) && wallCol(c[2 * s - 1]))
+          wall = { name: 'Wall', id: 'wall', group: 'build', floors: 1, clip: clean(LC.copyRegion(level, f, f, s, s), false) };
+        if (plainCol(a) && plainCol(b)) {
+          const key = [0, 1, 2, 3, 4].map(r => level.map[(f * 5 + r) * W + s]).join();
+          const h = hall.get(key) || { n: 0, f, s };
+          h.n++;
+          hall.set(key, h);
+        }
+      }
+    }
+    if (door) out.push(door);
+    if (wall) out.push(wall);
+    [...hall.values()].sort((x, y) => y.n - x.n).slice(0, 8).forEach((h, k) =>
+      out.push({ name: k ? 'Hallway ' + (k + 1) : 'Hallway', id: 'hall' + k, group: 'build', floors: 1,
+                 clip: clean(LC.copyRegion(level, h.f, h.f, h.s, h.s), false) }));
+    return out;
+  };
+
   /* ---------- checking and writing ---------- */
   /* doors (paired with their door columns, numbered) first, then the other items, then the exit */
   LC.resolveItems = function (level) {
@@ -367,18 +439,23 @@
     const emit = bytes => { const a = base + out.length; out.push(...bytes); if (out.length & 1) out.push(0xFF); return a; };
     const words = ws => { const b = []; for (const w of ws) b.push((w >> 8) & 255, w & 255); return b; };
     const longs = ls => { const b = []; for (const l of ls) b.push((l >>> 24) & 255, (l >>> 16) & 255, (l >>> 8) & 255, l & 255); return b; };
-    /* map */
+    const yb = 80 * (level.base || 0);
+    /* map (a stage with a floor above its map gets that floor's rows before it: the
+     * game draws them at the start, out of sight) */
     if (level.map.length !== W * H) throw new Error('map size');
-    const mapAddr = emit(words(level.map));
+    const pre = [];
+    for (let k = 0; k < 5 * (level.base || 0); k++) pre.push(...level.map.slice(0, W));
+    const mapAddr = emit(words(pre.concat(level.map))) + 2 * pre.length;
     /* collision, numbered door columns; buffers in the original RAM order */
     const col = level.col.map(c => c.slice());
     res.doors.forEach((d, k) => { col[d.f][d.c] = ((col[d.f][d.c] & 0xFFFFFF00) | (0x90 + 2 * k)) >>> 0; });
-    const orig = readCollision(r, st, nf, W);
+    const base_ = level.base || 0;
+    const orig = readCollision(r, st, nf + base_, W);
     const bufFloor = [];
-    orig.floorBuf.forEach((b, f) => { bufFloor[b] = f; });
+    orig.floorBuf.forEach((b, f) => { if (f >= base_) bufFloor[b] = f - base_; });
     const cb = [];
-    for (let b = 0; b < nf; b++) {
-      const c = col[bufFloor[b]];
+    for (let b = 0; b < orig.nbuf; b++) {
+      const c = bufFloor[b] !== undefined ? col[bufFloor[b]] : new Array(2 * W).fill(WALL);
       cb.push(...words([0]));
       for (let i = 0; i < c.length;) {
         let n = 1;
@@ -392,7 +469,7 @@
     }
     const colAddr = emit(cb);
     /* objects */
-    const ent = o => words([o.x & 0xFFFF, o.y & 0xFFFF, o.z & 0xFFFF, o.frame & 0xFFFF, o.beh & 0xFFFF, o.dir & 0xFFFF, o.attr & 0xFFFF]);
+    const ent = o => words([o.x & 0xFFFF, (o.y + yb) & 0xFFFF, o.z & 0xFFFF, o.frame & 0xFFFF, o.beh & 0xFFFF, o.dir & 0xFFFF, o.attr & 0xFFFF]);
     const pl = [];
     pl.push(...words([level.players.length - 1]));
     level.players.forEach(o => pl.push(...ent(o)));
@@ -416,7 +493,7 @@
     const oldMap = r.u32(0x5516 + 8 * (st - 1)), oldW = r.u16(0x54E2 + 4 * (st - 1));
     w32(rom2, 0x5516 + 8 * (st - 1), mapAddr);
     w32(rom2, 0x100FA + 8 * (st - 1), colAddr);
-    w32(rom2, 0x100FA + 8 * (st - 1) + 4, nf - 1);
+    w32(rom2, 0x100FA + 8 * (st - 1) + 4, orig.nbuf - 1);
     w32(rom2, 0x3E000 + 4 * (st - 1), placeAddr);
     w32(rom2, 0x1ADE2 + 4 * (st - 1), kindAddr);
     w32(rom2, 0x14AB8 + 4 * (st - 1), guardAddr);

@@ -131,15 +131,21 @@ builder/      the HTML builder page
     hash of the loaded (modded) ROM. `bonanza-headless --mods-dir DIR --set mods=X.bbro`
     for tests; the HTML builder adds mods to packages.
 
-  * *Level maker* (`builder/levelmaker.html` + `builder/levelcore.js`): a browser
-    editor that reads a stage from the ROM (map, metatiles, the per-floor collision
-    columns, object placement, item kinds, guard templates; tiles decoded from the
-    stage's VRAM loads) and edits it in "slices" (one floor tall, 16 px wide = 5 map
-    blocks + 2 collision columns), so pictures, walls, stairs and doors stay together.
-    Export writes new tables after 0x80000, repoints the stage's entries, renumbers
-    door columns (info 0x90+2k = k-th item), places the exit at the EXIT column, fixes
-    the first-screen descriptors, ROM end and checksum, and saves an IPS patch plus the
-    level source in a `.bbro`. `levelcore.js` also runs in node for tests.
+  * *Bonanza Maker* (`builder/levelmaker.html` + `builder/levelcore.js`, test play in
+    `builder/play.html`): a Mario Maker style stage editor. `levelcore.js` reads a stage
+    from the ROM (map, metatiles, the per-floor collision columns, object placement, item
+    kinds, guard templates; tiles decoded from the stage's VRAM loads) and edits it in
+    "slices" (one floor tall, 16 px wide = 5 map blocks + 2 collision columns), so
+    pictures, walls, stairs and doors stay together; `makeStamps()` cuts ready-made parts
+    (stairs, exit stairs, door, wall, hallways) out of the stage. Export writes new
+    tables after 0x80000, repoints the stage's entries, renumbers door columns (info
+    0x90+2k = k-th item), places the exit at the EXIT column, fixes the first-screen
+    descriptors, ROM end and checksum, and saves an IPS patch plus the level source in a
+    `.bbro`. Deluxe Liner has one more collision floor than map floors (objects 80 px
+    lower): `level.base`. Play runs the browser runtime (`web/bonanza-single.js`, wasm
+    inside, so it also works from disk) with `--play-stage ENTRY`, which presses Start
+    through the title and sets the stage number. `levelcore.js` also runs in node.
+    The ROM's 13 stage entries are the 10 stages plus the scenes between them (4, 8, 12).
 
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert
   they only change the picture, so recompiled-vs-interpreted runs stay bit-identical.

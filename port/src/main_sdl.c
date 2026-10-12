@@ -246,7 +246,7 @@ static int find_rom_in(const char *dir)
 static void find_rom(int argc, char **argv)
 {
     for (int i = 1; i < argc; i++) {
-        if (i > 1 && (!strcmp(argv[i - 1], "--join") ||
+        if (i > 1 && (!strcmp(argv[i - 1], "--join") || !strcmp(argv[i - 1], "--play-stage") ||
                       (!strcmp(argv[i - 1], "--host") && atoi(argv[i]) > 0)))
             continue;                            /* an address or port, not a ROM */
         if (argv[i][0] != '-' && try_rom(argv[i], 1))
@@ -828,6 +828,27 @@ static void net_update(void)
     }
 }
 
+/* --play-stage E (level maker test play): a 1-player game straight into stage entry E.
+ * Start is pressed through the title as a player would, and the stage number is set
+ * before the stage loads; the frames before that are run at once, without showing them. */
+static void start_stage(int entry)
+{
+    int16_t buf[2048 * 2];
+    for (int f = 0; f < 912; f++) {
+        int start = (f >= 620 && f < 630) || (f >= 760 && f < 770) || (f >= 900 && f < 910);
+        md.pad[0] = start ? PAD_START : 0;
+        md.pad[1] = 0;
+        if (f == 765) {
+            md.ram[0xC05A] = 0;
+            md.ram[0xC05B] = (uint8_t)entry;
+        }
+        md_run_frame();
+        while (md_audio_take(buf, 2048) > 0) {
+        }
+    }
+    md.pad[0] = 0;
+}
+
 static int run_net_frame(void)
 {
     uint8_t mine = 0, pads2[2];
@@ -948,8 +969,11 @@ int main(int argc, char **argv)
             use_recomp = 0;
     }
     const char *host_port = NULL, *join_addr = NULL;
+    int play_stage = 0;
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--host"))
+        if (!strcmp(argv[i], "--play-stage") && i + 1 < argc)
+            play_stage = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--host"))
             host_port = i + 1 < argc && argv[i + 1][0] != '-' ? argv[++i] : "";
         else if (!strcmp(argv[i], "--join") && i + 1 < argc)
             join_addr = argv[++i];
@@ -1014,6 +1038,8 @@ int main(int argc, char **argv)
     else if (join_addr)
         net_join(join_addr);
     md.use_recomp = use_recomp;
+    if (play_stage > 0 && play_stage <= 13 && have_rom)
+        start_stage(play_stage);
     set_title();
 
 #ifdef __EMSCRIPTEN__
