@@ -30,7 +30,6 @@ enum { PART_SHIRT, PART_PANTS, PART_SKIN, PART_COUNT };
 typedef struct {
     int screen;              /* SCREEN_* */
     int smooth;              /* 1 = smooth scaling, 0 = sharp pixels */
-    int smooth_motion;       /* fast displays: pictures in between game frames (display only) */
     int show_2p_panel;       /* 1-player game: 0 = show the room above, 1 = original 2P panel */
     int crop_cutscenes;      /* widescreen: show cutscenes/title 4:3 (game overs stay wide) */
     int patrol_return;       /* widescreen: guards leaving the 4:3 picture walk back to their posts */

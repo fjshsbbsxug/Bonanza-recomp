@@ -61,10 +61,6 @@ button or the MENU button (top left) on Android.
                include the side areas): guards you can see keep going, off screen
                they wait or go back to their posts as in the original.
   Scaling      Sharp pixels or smooth.
-  Smooth Motion  For 120 Hz and faster screens: pictures in between the game's
-               60 frames a second, so scrolling glides instead of stepping. The game
-               itself runs exactly as before (adds about one frame of delay). No
-               effect on 60 Hz screens.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
                Inverted.
   Brightness, Contrast, Saturation, Hue

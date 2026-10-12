@@ -168,9 +168,6 @@
       <label>Scaling
         <select id="o-smooth"><option value="0">Sharp pixels</option><option value="1">Smooth</option></select>
       </label>
-      <label>Smooth Motion (120 Hz and faster screens)
-        <select id="o-smooth_motion"><option value="off">Off</option><option value="on">On: smoother scrolling in between game frames</option></select>
-      </label>
       <label>Color style
         <select id="o-colors">
           <option value="original">Original</option><option value="vivid">Vivid</option><option value="soft">Soft</option>
@@ -477,7 +474,7 @@
                      'mobo.shirt': '#0000ff', 'mobo.pants': '#000000', 'mobo.skin': '#ff9200' };
   const SKIN_TONES = ['#ffe0c8', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#6b4226', '#3b2219'];
   const CLOTHES = ['#101010', '#f0f0f0', '#e02020', '#f08020', '#f0d020', '#20b040', '#2050e0', '#8030c0', '#f070b0'];
-  const freshOpts = () => ({ screen: 'original', upper: 'room', cutscenes: '4:3', guards: 'return', floor_alert: 'off', smooth: '0', smooth_motion: 'off', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
+  const freshOpts = () => ({ screen: 'original', upper: 'room', cutscenes: '4:3', guards: 'return', floor_alert: 'off', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
                              recolor: {}, chars: {} });
   const OPT = freshOpts();
   const SLIDERS = ['brightness', 'contrast', 'saturation', 'hue'];
@@ -485,7 +482,7 @@
   const mdHex = key => '#' + [0, 1, 2].map(i => mdLevel(+key[i]).toString(16).padStart(2, '0')).join('');
   function toIni() {
     let t = '# Bonanza Bros port settings (made with the port builder)\n';
-    t += `screen = ${OPT.screen}\nupper_view = ${OPT.upper}\ncutscenes = ${OPT.cutscenes}\nguards = ${OPT.guards}\nfloor_alert = ${OPT.floor_alert}\nsmooth = ${OPT.smooth}\nsmooth_motion = ${OPT.smooth_motion}\ncolors = ${OPT.colors}\n`;
+    t += `screen = ${OPT.screen}\nupper_view = ${OPT.upper}\ncutscenes = ${OPT.cutscenes}\nguards = ${OPT.guards}\nfloor_alert = ${OPT.floor_alert}\nsmooth = ${OPT.smooth}\ncolors = ${OPT.colors}\n`;
     for (const k of SLIDERS) t += `${k} = ${OPT[k]}\n`;
     for (const [c] of CHARS) for (const [p] of PARTS) {
       const v = OPT.chars[c + '.' + p];
@@ -567,7 +564,6 @@
     syncChars();
     $('o-screen').value = OPT.screen;
     $('o-smooth').value = OPT.smooth;
-    $('o-smooth_motion').value = OPT.smooth_motion;
     $('o-upper').value = OPT.upper;
     $('o-cutscenes').value = OPT.cutscenes;
     $('o-guards').value = OPT.guards;
@@ -613,7 +609,7 @@
       try { Module.ccall('bonanza_set', 'number', ['string', 'string'], [key, String(value)]); } catch (e) { /* not ready */ }
     }
   }
-  ['screen', 'smooth', 'smooth_motion', 'colors', 'guards', 'floor_alert'].forEach(k => $('o-' + k).addEventListener('change', e => { OPT[k] = e.target.value; gameSet(k, OPT[k]); }));
+  ['screen', 'smooth', 'colors', 'guards', 'floor_alert'].forEach(k => $('o-' + k).addEventListener('change', e => { OPT[k] = e.target.value; gameSet(k, OPT[k]); }));
   $('o-upper').addEventListener('change', e => { OPT.upper = e.target.value; gameSet('upper_view', OPT.upper); });
   $('o-cutscenes').addEventListener('change', e => { OPT.cutscenes = e.target.value; gameSet('cutscenes', OPT.cutscenes); });
   SLIDERS.forEach(k => $('o-' + k).addEventListener('input', e => {

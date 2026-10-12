@@ -497,11 +497,6 @@ static int char_part(int ch, int c, int row, int lx, const char_info *ci)
 static wobj_sprite wobj_list[256];
 static int wobj_count;
 
-int vdp_layers_on;
-uint16_t vdp_layer[LAYER_COUNT][224][VDP_FB_W];
-vdp_band vdp_bands[2];
-static uint8_t *sprite_grp;     /* Smooth Motion: per pixel, 1 = sprite of an object fixed in the level */
-
 /* sprites built by wideobj.c, below the real ones */
 static void draw_wobj(uint8_t *out, int y, int width, int m, const wobj_sprite *list, int count)
 {
@@ -522,7 +517,6 @@ static void draw_wobj(uint8_t *out, int y, int width, int m, const wobj_sprite *
                 if (w->only_outside && x >= 0 && x < width)
                     continue;
                 out[x + m] = (uint8_t)tile_pixel(e, px, py);
-                if (sprite_grp) sprite_grp[x + m] = (uint8_t)w->world_static;
             }
         }
     }
@@ -540,7 +534,6 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
     int chars = any_char_colors();
     memset(out, 0, width + 2 * m);
     memset(part, 0, width + 2 * m);
-    if (sprite_grp) memset(sprite_grp, 0, width + 2 * m);
     do {
         const uint8_t *s = &vdp.vram[(sat + link * 8) & 0xFFFF];
         int sy = ((s[0] << 8) | s[1]) & 0x3FF;
@@ -560,7 +553,6 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
             }
             /* player colours only for the players' own pieces */
             int ch = chars && char_of(attr) >= 0 ? wobj_player_of(attr) : -1;
-            int fixed = sprite_grp ? wobj_piece_static(sx - 128, sy - 128, attr) : 0;
             const char_info *ci = ch >= 0 ? char_analyse(attr, hsz, vsz, ch) : NULL;
             int cy = row >> 3, py = row & 7;
             if (attr & 0x1000) { cy = vsz - 1 - cy; py = 7 - py; }
@@ -579,7 +571,6 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
                     /* flip already applied to py; tile_pixel would flip again */
                     uint16_t e = tile & ~0x1000;
                     out[x + m] = (uint8_t)tile_pixel(e, px, py);
-                    if (sprite_grp) sprite_grp[x + m] = (uint8_t)fixed;
                     if (ci && (out[x + m] & 0x0F))
                         part[x + m] = (uint8_t)char_part(ch, out[x + m] & 0x0F, row, cx * 8 + px, ci);
                 }
@@ -836,15 +827,12 @@ void vdp_render_line(int y)
     for (int i = 0; i < 64; i++)
         pal[i] = md_color_index(vdp.cram[i]);
     uint16_t bg = pal[vdp.reg[7] & 0x3F];
-    if (y == 0)
-        vdp_bands[0].valid = vdp_bands[1].valid = 0;   /* set again by the views' lines */
     if (!(vdp.reg[1] & 0x40)) {
         for (int x = 0; x < VDP_FB_W; x++)
             fb[x] = bg;
         return;
     }
-    uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W], part[VDP_FB_W], grp[VDP_FB_W];
-    sprite_grp = vdp_layers_on ? grp : NULL;
+    uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W], part[VDP_FB_W];
     /* Widescreen during play: the side areas of each view are drawn from the level map,
      * the backdrop is repeated, the HUD rows extend their edges. In a 1-player game the
      * top view shows the floor above player 1 (also from the map). */
@@ -1029,35 +1017,6 @@ void vdp_render_line(int y)
     } else {
         draw_sprites(s, part, y, width, m);
     }
-    if (vdp_layers_on && in_view) {
-        /* Smooth Motion: keep this line of a play view as layers (back to front) */
-        int bi = in_bot ? 1 : 0, y0 = in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0;
-        int ok = playing && (map_view || room_above) && !crop;
-        vdp_band *bd = &vdp_bands[bi];
-        if (y == y0) {
-            bd->valid = ok;
-            bd->y0 = y0;
-            bd->camx = room_above ? bottom_view.hsA : camx;
-            bd->wy = room_above ? room_above_wy : stacked ? stacked_top + VIEW_H : wy0;
-            bd->hsB = room_above ? bottom_view.hsB : line_hscroll(y, 1);
-            bd->vsB = room_above ? ((bottom_view.vsB + VIEW_BOT_Y0 - VIEW_TOP_Y0) & 0x3FF) : vdp.vsram[1];
-        } else if (!ok) {
-            bd->valid = 0;
-        }
-        for (int l = 0; l < LAYER_COUNT; l++)
-            memset(vdp_layer[l][y], 0xFF, sizeof(vdp_layer[l][y]));
-        for (int x = 0; x < ow; x++) {
-            int sp = s[x], ap = a[x], bp = b[x];
-            vdp_layer[LAYER_B_LO][y][x] = bg;       /* the backdrop colour behind everything */
-            if (bp & 0x0F) vdp_layer[(bp & 0x80) ? LAYER_B_HI : LAYER_B_LO][y][x] = pal[bp & 0x3F];
-            if (ap & 0x0F) vdp_layer[(ap & 0x80) ? LAYER_A_HI : LAYER_A_LO][y][x] = pal[ap & 0x3F];
-            if (sp & 0x0F) {
-                int l = grp[x] ? ((sp & 0x80) ? LAYER_SW_HI : LAYER_SW_LO) : ((sp & 0x80) ? LAYER_SS_HI : LAYER_SS_LO);
-                vdp_layer[l][y][x] = part[x] ? (uint16_t)(VDP_CHAR_BASE + part[x] - 1) : pal[sp & 0x3F];
-            }
-        }
-    }
-    sprite_grp = NULL;
     for (int x = 0; x < ow; x++) {
         int p;
         int sp = s[x], ap = a[x], bp = b[x];

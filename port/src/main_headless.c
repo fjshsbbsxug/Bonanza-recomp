@@ -11,7 +11,6 @@
 #include <string.h>
 #include "md.h"
 #include "vdp.h"
-#include "smooth.h"
 #include "settings.h"
 
 extern uint64_t cpu_stat_recomp_insns, cpu_stat_interp_insns;
@@ -34,12 +33,13 @@ static uint8_t parse_buttons(const char *s)
     return b;
 }
 
-static void write_ppm_from(const char *path, const uint32_t *fb)
+static void write_ppm(const char *path)
 {
     FILE *f = fopen(path, "wb");
     if (!f) { perror(path); return; }
     int w = md_screen_width();
     fprintf(f, "P6\n%d %d\n255\n", w, MD_SCREEN_H);
+    const uint32_t *fb = md_framebuffer();
     for (int y = 0; y < MD_SCREEN_H; y++)
         for (int x = 0; x < w; x++) {
             uint32_t p = fb[y * MD_FB_W + x];
@@ -48,8 +48,6 @@ static void write_ppm_from(const char *path, const uint32_t *fb)
         }
     fclose(f);
 }
-
-static void write_ppm(const char *path) { write_ppm_from(path, md_framebuffer()); }
 
 static void wav_header(FILE *f, int rate, uint32_t frames)
 {
@@ -91,8 +89,6 @@ int main(int argc, char **argv)
     struct { int frame; char path[256]; } shots[64];
     struct { int frame, pad; uint8_t b; } inputs[256];
     struct { int frame; unsigned addr, val; } pokes[64];
-    struct { int frame; double t; char path[256]; } sshots[64];   /* Smooth Motion pictures */
-    int nsshots = 0;
     int npokes = 0;
     int nshots = 0, ninputs = 0;
     const char *wav = NULL;
@@ -127,15 +123,6 @@ int main(int argc, char **argv)
             shots[nshots].frame = atoi(argv[i]);
             snprintf(shots[nshots].path, sizeof(shots[nshots].path), "%s", c + 1);
             nshots++;
-        } else if (!strcmp(argv[i], "--smooth-shot") && i + 1 < argc && nsshots < 64) {
-            /* --smooth-shot FRAME:T:file.ppm - the picture between FRAME-1 (T=0) and FRAME (T=1) */
-            char *c1 = strchr(argv[++i], ':'), *c2 = c1 ? strchr(c1 + 1, ':') : NULL;
-            if (!c2) continue;
-            sshots[nsshots].frame = atoi(argv[i]);
-            sshots[nsshots].t = atof(c1 + 1);
-            snprintf(sshots[nsshots].path, sizeof(sshots[nsshots].path), "%s", c2 + 1);
-            nsshots++;
-            vdp_layers_on = 1;
         } else if (!strcmp(argv[i], "--poke") && i + 1 < argc && npokes < 64) {
             /* --poke FRAME:ADDR:WORD (hex address/value in 68k RAM), for tests */
             if (sscanf(argv[++i], "%d:%x:%x", &pokes[npokes].frame, &pokes[npokes].addr, &pokes[npokes].val) == 3)
@@ -169,13 +156,6 @@ int main(int argc, char **argv)
                 md.ram[(pokes[k].addr & 0xFFFE) + 1] = pokes[k].val;
             }
         md_run_frame();
-        smooth_frame_done();
-        for (int k = 0; k < nsshots; k++)
-            if (sshots[k].frame == fr) {
-                static uint32_t pic[MD_SCREEN_H * MD_FB_W];
-                smooth_compose(sshots[k].t, pic);
-                write_ppm_from(sshots[k].path, pic);
-            }
         int16_t abuf[4096 * 2];
         int got;
         while ((got = md_audio_take(abuf, 4096)) > 0) {

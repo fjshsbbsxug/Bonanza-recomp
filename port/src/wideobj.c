@@ -175,7 +175,6 @@ static int is_guard(const snap_t *s, int i)
 /* ---- sprite output ---- */
 static wobj_sprite *out_list;
 static int out_n, out_max;
-static int emit_static;     /* world_static for the sprites emitted next */
 
 static void emit_frame(const snap_t *s, int v, uint16_t frame, int x, int y, int z, int flip,
                        uint16_t attr_or, int only_outside, int width)
@@ -213,15 +212,9 @@ static void emit_frame(const snap_t *s, int v, uint16_t frame, int x, int y, int
         e->ymin = top;
         e->ymax = top + 80;
         e->only_outside = only_outside;
-        e->world_static = emit_static;
         (void)width;
         out_n++;
     }
-}
-
-static int obj_static(const snap_t *s, const snap_t *p, int i)
-{
-    return p->valid && s->o[i].x == p->o[i].x && s->o[i].y == p->o[i].y && s->o[i].z == p->o[i].z;
 }
 
 /* ---- guards: learning and ghosts ---- */
@@ -375,7 +368,6 @@ static void ghosts(const snap_t *s, const snap_t *prev, int extra, int width)
         if (g->ghost == 1 && !g->recover) {
             ghost_on[i] = 1; ghost_x[i] = gx; ghost_y[i] = g->gy; ghost_dir[i] = post > gx ? 1 : -1;
         }
-        emit_static = g->ghost != 1;
         emit_frame(s, v, frame, gx, g->gy, g->gz, flip, b->attr, 1, width);
     }
 }
@@ -416,7 +408,6 @@ int wobj_build(int margin, int width, int patrol_return, wobj_sprite *list, int 
                 if (!in_range(s, v, b->x, b->y, b->z, b->w, b->h, extra)) continue;
                 /* a door the game shows closed may be opened by a ghost */
                 uint16_t f = doors[i].phase && is_door(b) ? door_frame(i, b->frame) : b->frame;
-                emit_static = obj_static(s, older, i);
                 emit_frame(s, v, f, b->x, b->y, b->z, b->flip != 0, b->attr, 0, width);
             }
     }
@@ -450,7 +441,6 @@ int wobj_build_stacked(int vtop, int real_wy0, wobj_sprite *list, int max)
             int fv = feet + shift;
             if (fv < 135 || fv >= 215 + 48) continue;  /* not on the floor shown */
             int n0 = out_n;
-            emit_static = obj_static(s, &snaps[(cur + 2) % 3], i);
             emit_frame(s, 0, b->frame, b->x, b->y, b->z, b->flip != 0, b->attr, 0, 0);
             for (int k = n0; k < out_n; k++)
                 list[k].y += shift;
@@ -488,34 +478,4 @@ int wobj_player_of(uint16_t attr)
             if (tiles[c][i] == (attr & 0x07FF))
                 return c;
     return -1;
-}
-
-int wobj_piece_static(int x, int y, uint16_t attr)
-{
-    static uint32_t built = 0xFFFFFFFF;
-    static wobj_sprite pieces[256];
-    static int n;
-    if (built != md.frame) {
-        built = md.frame;
-        n = 0;
-        const snap_t *s = &snaps[cur], *p = &snaps[(cur + 2) % 3];
-        if (s->valid && p->valid) {
-            wobj_sprite *save_list = out_list;
-            int save_n = out_n, save_max = out_max;
-            out_list = pieces; out_n = 0; out_max = 256;
-            emit_static = 1;
-            for (int v = 0; v < 2; v++)
-                if (view_on(s, v))
-                    for (int i = 0; i < NOBJ; i++)
-                        if (s->o[i].st && s->o[i].frame && obj_static(s, p, i))
-                            emit_frame(s, v, s->o[i].frame, s->o[i].x, s->o[i].y, s->o[i].z,
-                                       s->o[i].flip != 0, s->o[i].attr, 0, 0);
-            n = out_n;
-            out_list = save_list; out_n = save_n; out_max = save_max;
-        }
-    }
-    for (int i = 0; i < n; i++)
-        if (pieces[i].x == x && pieces[i].y == y && (pieces[i].attr & 0x07FF) == (attr & 0x07FF))
-            return 1;
-    return 0;
 }

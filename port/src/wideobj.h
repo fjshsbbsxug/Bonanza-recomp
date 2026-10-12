@@ -9,7 +9,6 @@ typedef struct {
     uint16_t attr;          /* name table style attribute word */
     int ymin, ymax;         /* lines of the view it belongs to */
     int only_outside;       /* draw only outside the 4:3 picture */
-    int world_static;       /* its object did not move in the level since last frame */
 } wobj_sprite;
 
 /* Call once per frame, before the first line is drawn. Returns the number of sprites. */
@@ -18,9 +17,6 @@ void wobj_reset(void);
 /* objects on the floor shown by player 1's view while the views are stacked (vdp.c) */
 /* the player (0 Robo, 1 Mobo) a sprite piece belongs to, or -1 */
 int wobj_player_of(uint16_t attr);
-/* 1 if a sprite piece (screen position, attribute) belongs to an object that did not
- * move in the level since the previous frame (it scrolls with the level) */
-int wobj_piece_static(int x, int y, uint16_t attr);
 int wobj_build_stacked(int vtop, int real_wy0, wobj_sprite *list, int max);
 
 #endif

@@ -226,7 +226,6 @@ int settings_set(const char *key, const char *value)
         return 0;
     }
     if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
-    if (!strcmp(key, "smooth_motion")) { settings.smooth_motion = !strcmp(value, "on") || atoi(value) == 1; return 1; }
     if (!strcmp(key, "cutscenes")) { settings.crop_cutscenes = strcmp(value, "wide") != 0; return 1; }
     if (!strcmp(key, "floor_alert")) {
         settings.floor_alert = !strcmp(value, "semi") ? FLOOR_ALERT_SEMI
@@ -298,9 +297,6 @@ int settings_save(const char *path)
     fprintf(f, "# screen: original, 16:9, 16:10, 21:9, stretch\n");
     fprintf(f, "screen = %s\n", screen_keys[settings.screen]);
     fprintf(f, "smooth = %d\n", settings.smooth);
-    fprintf(f, "# Smooth Motion: on 120 Hz and faster displays, pictures in between game frames\n");
-    fprintf(f, "# (smoother scrolling; the game itself runs as always)\n");
-    fprintf(f, "smooth_motion = %s\n", settings.smooth_motion ? "on" : "off");
     fprintf(f, "# top of the screen in a 1-player game: room (the floor above) or panel (original)\n");
     fprintf(f, "upper_view = %s\n", settings.show_2p_panel ? "panel" : "room");
     fprintf(f, "# widescreen during cutscenes/title: 4:3 (cropped, game overs stay wide) or wide\n");
