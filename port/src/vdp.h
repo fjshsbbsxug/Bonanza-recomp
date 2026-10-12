@@ -47,4 +47,20 @@ int      vdp_irq_level(void);   /* highest pending & enabled interrupt (0, 4 or 
 void     vdp_ack_irq(int level);
 void     vdp_line_start(int line); /* raster bookkeeping (HINT/VINT) */
 
+/* Smooth Motion (smooth.c): while vdp_layers_on, the lines of the two play views are
+ * also kept as separate layers, so a frontend can redraw them in between game frames
+ * with the scroll moved on by a fraction. Display only. Layer pixels are colour
+ * indices like fbmd, VDP_LAYER_EMPTY where transparent. */
+enum { LAYER_B_LO, LAYER_A_LO, LAYER_SW_LO, LAYER_SS_LO, LAYER_B_HI, LAYER_A_HI, LAYER_SW_HI, LAYER_SS_HI, LAYER_COUNT };
+#define VDP_LAYER_EMPTY 0xFFFF
+typedef struct {
+    int valid;          /* a play view drawn from the level this frame */
+    int y0;             /* first line */
+    int camx, wy;       /* plane A: world position of the view's top left */
+    int hsB, vsB;       /* plane B scroll */
+} vdp_band;
+extern int vdp_layers_on;
+extern uint16_t vdp_layer[LAYER_COUNT][224][VDP_FB_W];
+extern vdp_band vdp_bands[2];      /* 0 = top view, 1 = bottom view */
+
 #endif

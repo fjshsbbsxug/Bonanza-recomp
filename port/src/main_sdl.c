@@ -13,6 +13,9 @@
 #include <string.h>
 #include "md.h"
 #include "settings.h"
+#include "smooth.h"
+#include "vdp.h"
+#include <math.h>
 #include "menu.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -363,6 +366,8 @@ static void draw_touch(int ww, int wh)
 
 /* ------------------------------------------------------------------ video */
 
+static void present_smooth(const SDL_Rect *dst, int sw);
+
 static void present(void)
 {
     int ww, wh;
@@ -400,6 +405,7 @@ static void present(void)
             dst.h = dh;
         }
         SDL_RenderCopy(renderer, texture, &src, &dst);
+        present_smooth(&dst, sw);
         if (show_touch && !menu_is_open())
             draw_touch(ww, wh);
     }
@@ -608,7 +614,7 @@ static void queue_audio(int16_t *buf, int n)
     SDL_QueueAudio(audio_dev, buf, (Uint32)n * 4);
 }
 
-static void run_one(void)
+static int run_one(void)
 {
     if (have_rom && !paused && !menu_is_open()) {
         for (int p = 0; p < 2; p++) {
@@ -621,14 +627,73 @@ static void run_one(void)
         while ((n = md_audio_take(buf, 2048)) > 0)
             if (audio_dev)
                 queue_audio(buf, n);
+        smooth_frame_done();
+        return 1;
     } else {
         int16_t buf[2048 * 2];
         while (md_audio_take(buf, 2048) > 0) {
         }
     }
+    return 0;
 }
 
 #define MD_FRAME_MS (1000.0 / 59.922743)
+
+/* ---- Smooth Motion: the play views' layers as textures, moved on each refresh ---- */
+static int smooth_on, layers_ready;
+static double smooth_t = 1.0;
+static SDL_Texture *layer_tex[LAYER_COUNT];
+
+static void upload_layers(void)
+{
+    static uint32_t rows[80 * MD_FB_W];
+    int w = md_screen_width();
+    layers_ready = 0;
+    for (int l = 0; l < LAYER_COUNT; l++) {
+        if (!layer_tex[l]) {
+            layer_tex[l] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, MD_FB_W, MD_SCREEN_H);
+            if (!layer_tex[l]) return;
+            SDL_SetTextureBlendMode(layer_tex[l], SDL_BLENDMODE_BLEND);
+        }
+        for (int band = 0; band < 2; band++) {
+            if (!vdp_bands[band].valid) continue;
+            int y0 = vdp_bands[band].y0;
+            for (int y = 0; y < 80; y++)
+                for (int x = 0; x < w; x++) {
+                    uint16_t c = vdp_layer[l][y0 + y][x];
+                    rows[y * MD_FB_W + x] = c == VDP_LAYER_EMPTY ? 0
+                        : 0xFF000000u | (c < 512 ? md_color_lut[c] : c >= VDP_CHAR_BASE ? char_color_lut[(c - VDP_CHAR_BASE) & 15] : 0);
+                }
+            SDL_Rect r = {0, y0, w, 80};
+            SDL_UpdateTexture(layer_tex[l], &r, rows, MD_FB_W * 4);
+        }
+    }
+    layers_ready = 1;
+}
+
+/* draw the two play views again, moved back to smooth_t, over the picture at dst */
+static void present_smooth(const SDL_Rect *dst, int sw)
+{
+    if (!smooth_on || !layers_ready || smooth_t >= 1.0)
+        return;
+    float scx = (float)dst->w / sw, scy = (float)dst->h / MD_SCREEN_H;
+    for (int band = 0; band < 2; band++) {
+        smooth_band b;
+        if (!smooth_band_at(band, smooth_t, &b))
+            continue;
+        SDL_Rect clip = {dst->x, dst->y + (int)lroundf(b.y0 * scy), dst->w, (int)lroundf(b.h * scy)};
+        SDL_RenderSetClipRect(renderer, &clip);
+        for (int l = 0; l < LAYER_COUNT; l++) {
+            float dx, dy;
+            smooth_layer_shift(&b, l, &dx, &dy);
+            SDL_Rect src = {0, b.y0, sw, b.h};
+            SDL_FRect d = {dst->x + dx * scx, dst->y + (b.y0 + dy) * scy, sw * scx, b.h * scy};
+            SDL_SetTextureScaleMode(layer_tex[l], settings.smooth ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+            SDL_RenderCopyF(renderer, layer_tex[l], &src, &d);
+        }
+        SDL_RenderSetClipRect(renderer, NULL);
+    }
+}
 
 static double now_ms(void)
 {
@@ -651,19 +716,26 @@ static void frame(void)
     avg = avg * 0.95 + dt * 0.05;
     handle_events();
     int locked = vsync_on && avg > 15.6 && avg < 17.6;
+    /* Smooth Motion: on displays well above 60 Hz, pictures in between game frames */
+    smooth_on = settings.smooth_motion && vsync_on && !locked && avg < 13.0;
+    vdp_layers_on = smooth_on;
+    int ran = 0;
     if (locked) {
         acc = 0;
-        run_one();
+        ran = run_one();
     } else {
         acc += dt;
         if (acc > 100) acc = 100;
         int n = 0;
         while (acc >= MD_FRAME_MS && n < 4) {
             acc -= MD_FRAME_MS;
-            run_one();
+            ran |= run_one();
             n++;
         }
     }
+    if (smooth_on && ran)
+        upload_layers();
+    smooth_t = smooth_on ? acc / MD_FRAME_MS : 1.0;
     present();
 }
 

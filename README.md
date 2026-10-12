@@ -113,6 +113,13 @@ builder/      the HTML builder page
 
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert
   they only change the picture, so recompiled-vs-interpreted runs stay bit-identical.
+* *Smooth Motion* (option, 120 Hz+ displays): the renderer keeps each play view as
+  layers (planes A/B low/high, sprites of objects standing still in the level, other
+  sprites; `vdp_layer`, `port/src/smooth.c`), and the frontend redraws the views on
+  every refresh with the level layers moved back by the part of the last camera step
+  not yet reached (`SDL_RenderCopyF`, sub-pixel). The game still runs at 59.92 Hz and
+  never sees these pictures; at t = 1 they equal the real frame exactly
+  (`bonanza-headless --smooth-shot FRAME:T:file.ppm`).
 * Frame pacing: on a ~60 Hz display with vsync the game runs exactly one frame per
   refresh (the audio queue absorbs the 59.92 / 60 Hz difference by dropping or
   repeating a few samples); on other displays frames are run by elapsed time.
