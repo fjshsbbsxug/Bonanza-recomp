@@ -4,6 +4,7 @@
 
 #include "md.h"
 #include "recomp.h"
+#include "gamemods.h"
 #include "m68k.h"
 #include "m68kcpu.h"
 #include "m68kops.h"

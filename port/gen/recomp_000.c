@@ -31476,6 +31476,7 @@ L_0058AC: CHK(0x58ACu)  /* jsr $5c98.l */
 L_0058B2: CHK(0x58B2u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0058B4: CHK(0x58B4u)  /* moveq #$0, d5 */
+	if (game_hooks && game_hook(0x58B4u)) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		uint res = REG_D[5] = MAKE_INT_8(MASK_OUT_ABOVE_8(0x7A00u));
 	
@@ -32102,6 +32103,7 @@ L_0059C0: CHK(0x59C0u)  /* or.w d5, (a6, d0.w) */
 L_0059C4: CHK(0x59C4u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0059C6: CHK(0x59C6u)  /* lea.l $ff32fe.l, a6 */
+	if (game_hooks && game_hook(0x59C6u)) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[6] = 0xFF32FEu;
 	}

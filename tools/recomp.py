@@ -45,6 +45,10 @@ FORBIDDEN = re.compile(r"\b(REG_PC|REG_PPC|m68ki_jump\w*|m68ki_branch_\w+|m68ki_
 # Musashi tables
 # --------------------------------------------------------------------------
 
+# routines that port/src/gamemods.c can take over (subroutine entries reached by jsr)
+HOOKS = {0x58B4, 0x59C6}
+
+
 class Musashi:
     def __init__(self):
         src = open(os.path.join(MUSASHI, "m68kops.c")).read()
@@ -327,6 +331,9 @@ class Gen:
         op = struct.unpack(">H", i.raw[:2])[0]
         name, cyc = self.mu.lookup(op)
         L = ["L_%06X: CHK(0x%Xu)  /* %s */" % (a, a, self.fm_text(i))]
+        if a in HOOKS:
+            # optional game changes (port/src/gamemods.c): the routine may be replaced
+            L.append("\tif (game_hooks && game_hook(0x%Xu)) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }" % a)
         flow = self.emit_flow(i, op, cyc, inchunk)
         if flow is not None:
             self.stats["flow"] += 1

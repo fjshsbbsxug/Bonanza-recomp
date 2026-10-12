@@ -50,6 +50,10 @@ button or the MENU button (top left) on Android.
                it get up and hurry back there (three times walking speed), opening
                and shutting the doors on its way, and guards you have not met yet stand at their posts. Off: they vanish at the edge of the 4:3 picture, as in the
                original. Either way the game itself plays exactly as the original.
+  Floor Alert  Changes the game (off by default). Every guard on your floor keeps
+               going even off screen: it keeps chasing you, never jumps back to its
+               post and never disappears, until you change floors. Guards on other
+               floors behave as in the original. Turns Patrol Return off.
   Scaling      Sharp pixels or smooth.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
                Inverted.
@@ -65,6 +69,7 @@ otherwise in your user data folder). It is a plain text file, e.g.
 
     screen = 16:9
     guards = return         # Patrol Return on ("original" = off)
+    floor_alert = on        # Floor Alert: guards on your floor stay after you
     colors = vivid
     robo.shirt = 20B040     # player 1 shirt
     mobo.skin = 8D5524      # player 2 skin tone ("original" = unchanged)

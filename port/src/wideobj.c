@@ -26,6 +26,8 @@
 #include <string.h>
 #include "md.h"
 #include "wideobj.h"
+#include "gamemods.h"
+#include "settings.h"
 
 #define NOBJ 0x56
 #define FRAMES_TBL 0x24B80
@@ -127,7 +129,9 @@ static void take_snapshot(snap_t *s)
         uint32_t o = i * 2;
         obj_t *b = &s->o[i];
         b->st = u16(0x2EF6 + o);
-        b->vis = u16(0x2FA2 + o);
+        /* with Floor Alert the game runs more guards than it draws: what counts here is
+         * whether the game made sprites for it */
+        b->vis = settings.floor_alert ? game_drawn_vis[i] : u16(0x2FA2 + o);
         b->frame = u16(0x3252 + o);
         b->flip = u16(0x32FE + o);
         b->attr = u16(0x3C66 + o);

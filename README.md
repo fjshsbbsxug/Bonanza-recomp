@@ -99,8 +99,16 @@ builder/      the HTML builder page
     keep their colours.
   * A recolour tool that replaces any Mega Drive colour with one you choose.
 
-  Settings live in `bonanza.ini` (see `port/dist/README.txt`). They only change the
-  picture, so recompiled-vs-interpreted runs stay bit-identical with any settings.
+  * *Floor Alert* (option, off by default, the only one that changes the game): every
+    guard on a player's floor keeps running off screen - it chases you and never jumps
+    back to its post until you change floors. `tools/recomp.py` puts hooks at the
+    start of sub_058B4 (visibility) and sub_059C6 (sprites); `port/src/gamemods.c`
+    widens the visibility for guards on the player's floor and still only makes
+    sprites for those near the picture. With the option off the hooks do nothing and
+    runs stay bit-identical to the original.
+
+  Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert
+  they only change the picture, so recompiled-vs-interpreted runs stay bit-identical.
 * Frame pacing: on a ~60 Hz display with vsync the game runs exactly one frame per
   refresh (the audio queue absorbs the 59.92 / 60 Hz difference by dropping or
   repeating a few samples); on other displays frames are run by elapsed time.

@@ -826,7 +826,7 @@ void vdp_render_line(int y)
     if (y == 0 && !level_load())
         views[0].ok = views[1].ok = 0;
     if (y == 0)   /* objects beside the picture (also keeps its snapshots up to date) */
-        wobj_count = wobj_build(m && playing ? m : 0, width, settings.patrol_return,
+        wobj_count = wobj_build(m && playing ? m : 0, width, settings.patrol_return && !settings.floor_alert,
                                 wobj_list, (int)(sizeof(wobj_list) / sizeof(wobj_list[0])));
     if (y == 0 && wobj_count) {
         /* drop pieces the game's own sprite table already shows */
