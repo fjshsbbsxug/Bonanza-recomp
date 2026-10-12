@@ -12,7 +12,14 @@
   const LC = {};
   LC.ROM_SIZE = 0x80000;
   LC.SHA1 = 'f7313ecaf7143873597e3a6ebf58d542d06c3ef3';
-  LC.STAGES = [1, 2, 3, 5, 6, 7, 9, 11, 13];    /* bonus stages and stage 10 use other rules */
+  /* The ROM has 13 stage entries: the game's 10 stages plus the scenes between them
+   * (entries 4, 8 and 12). Tables are indexed by the entry; the game shows its own number. */
+  LC.STAGE_NAMES = { 1: [1, 'Company'], 2: [2, "Millionaire's Mansion"], 3: [3, 'Casino'], 5: [4, 'Mint'],
+    6: [5, 'Underground Gold Bars'], 7: [6, 'Jewelry Store'], 9: [7, 'Laboratory'], 10: [8, 'Deluxe Liner'],
+    11: [9, 'Art Museum'], 13: [10, 'Pyramid'] };
+  LC.stageNumber = e => (LC.STAGE_NAMES[e] || [e])[0];
+  LC.stageLabel = e => LC.STAGE_NAMES[e] ? 'Stage ' + LC.STAGE_NAMES[e][0] + ': ' + LC.STAGE_NAMES[e][1] : 'Entry ' + e;
+  LC.STAGES = [1, 2, 3, 5, 6, 7, 9, 11, 13];    /* entries that can be edited (not 10: Deluxe Liner, see below) */
   LC.MAX_W = 127;                               /* 2 x W collision columns must fit 255 */
   LC.KIND = { TREASURE: 0x00, DOOR: 0x04, EXIT: 0x2C };
   LC.KIND_NAMES = { 0x00: 'Treasure', 0x04: 'Door', 0x08: 'Spring', 0x0C: 'Zip wire', 0x10: 'Trip hazard',
@@ -144,7 +151,7 @@
     const W = r.u16(0x54E2 + 4 * (st - 1)), H = r.u16(0x54E2 + 4 * (st - 1) + 2);
     const mapPtr = r.u32(0x5516 + 8 * (st - 1)), metaPtr = r.u32(0x5516 + 8 * (st - 1) + 4);
     const nf = r.u16(0xFF86 + 2 * (st - 1)) + 1;
-    if (!mapPtr || H !== 5 * nf) throw new Error('Stage ' + st + ' cannot be edited (bonus stage or irregular floors).');
+    if (!mapPtr || H !== 5 * nf) throw new Error(LC.stageLabel(st) + ' cannot be edited yet (its floors are set up differently).');
     const map = [];
     for (let i = 0; i < W * H; i++) map.push(r.u16(mapPtr + 2 * i));
     const { col, floorBuf } = readCollision(r, st, nf, W);

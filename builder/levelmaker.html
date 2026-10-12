@@ -175,7 +175,9 @@
     rom = b;
     $('romstatus').innerHTML = '<span class="ok">ROM OK.</span> Pick a stage, or open a level you saved.';
     const s = $('stage');
-    s.innerHTML = LC.STAGES.map(n => `<option value="${n}">Stage ${n}</option>`).join('');
+    s.innerHTML = Object.keys(LC.STAGE_NAMES).map(Number).map(n => LC.STAGES.includes(n)
+      ? `<option value="${n}">${LC.stageLabel(n)}</option>`
+      : `<option value="${n}" disabled>${LC.stageLabel(n)} (not yet)</option>`).join('');
     s.disabled = false;
     $('openfile').disabled = false;
     loadStage(1);
@@ -196,7 +198,7 @@
     buildGraphics();
     buildPalette();
     $('editor').classList.add('show');
-    $('m-name').value = $('m-name').value === 'My stage' || /^Stage \d+/.test($('m-name').value) ? 'Stage ' + st + ' remix' : $('m-name').value;
+    $('m-name').value = $('m-name').value === 'My stage' || /^Stage \d+/.test($('m-name').value) ? 'Stage ' + LC.stageNumber(st) + ' remix' : $('m-name').value;
     render();
     check();
   }
@@ -616,10 +618,10 @@
     try { ex = LC.exportLevel(rom, level); }
     catch (e) { status(e.message.replace(/\n/g, ' '), true); return; }
     const ips = LC.makeIps(rom, ex.rom);
-    const name = $('m-name').value.trim() || 'Stage ' + st;
+    const name = $('m-name').value.trim() || 'Stage ' + LC.stageNumber(st);
     const z = new JSZip();
     z.file('mod.ini', LC.modIni({ name, author: $('m-author').value, version: $('m-version').value,
-      description: $('m-desc').value || 'Custom stage ' + st + ' made with the level maker' }));
+      description: $('m-desc').value || 'Custom ' + LC.stageLabel(st) + ' made with the level maker' }));
     z.file('patches/stage' + String(st).padStart(2, '0') + '.ips', ips);
     z.file('levels/stage' + String(st).padStart(2, '0') + '.json', JSON.stringify(level));
     const out = await z.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
@@ -657,7 +659,7 @@
     } catch (err) { status(err.message, true); }
   });
   $('revert').onclick = () => {
-    if (!confirm('Throw away your changes to stage ' + st + '?')) return;
+    if (!confirm('Throw away your changes to ' + LC.stageLabel(st) + '?')) return;
     edit(() => { level = LC.readStage(rom, st); });
   };
 })();
