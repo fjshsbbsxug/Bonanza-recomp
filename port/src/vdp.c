@@ -969,10 +969,19 @@ void vdp_render_line(int y)
             if (win[x])
                 a[x] = wbuf[x];
     }
-    draw_sprites(s, part, y, width, m);
-    if (room_above) { /* the 2P panel's sprites do not belong to the room */
-        memset(s, 0, sizeof(s));
-        memset(part, 0, sizeof(part));
+    if (room_above) {
+        /* The 2P panel's sprites do not belong to the room. Where the top view shows
+         * the same part of the level as player 1's view (on the top floor, or on the
+         * stairs) it shows the same characters: the sprites of that line of his view. */
+        int yb = VIEW_BOT_Y0 + room_above_wy + (y - VIEW_TOP_Y0) - bottom_view.vsA;
+        if (yb >= VIEW_BOT_Y0 && yb < VIEW_BOT_Y0 + VIEW_H) {
+            draw_sprites(s, part, yb, width, m);
+        } else {
+            memset(s, 0, sizeof(s));
+            memset(part, 0, sizeof(part));
+        }
+    } else {
+        draw_sprites(s, part, y, width, m);
     }
     for (int x = 0; x < ow; x++) {
         int p;
