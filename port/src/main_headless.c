@@ -5,6 +5,10 @@
  *
  * buttons: any of U D L R A B C S (S = Start). An input entry stays active until the next one
  * for the same pad.
+ *
+ * Online testing: --net-host PORT / --net-join ADDR play a lockstep game against another
+ * runner (only this player's --input entries are used; frames count from the start of the
+ * online game). --player N renders player N's screen as in an online game.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +16,14 @@
 #include "md.h"
 #include "vdp.h"
 #include "settings.h"
+#include "net.h"
+#ifdef _WIN32
+#include <windows.h>
+static void nap(void) { Sleep(1); }
+#else
+#include <unistd.h>
+static void nap(void) { usleep(1000); }
+#endif
 
 extern uint64_t cpu_stat_recomp_insns, cpu_stat_interp_insns;
 
@@ -92,6 +104,7 @@ int main(int argc, char **argv)
     int npokes = 0;
     int nshots = 0, ninputs = 0;
     const char *wav = NULL;
+    const char *net_host_port = NULL, *net_join_addr = NULL;
     md.use_recomp = 1;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
@@ -127,6 +140,12 @@ int main(int argc, char **argv)
             /* --poke FRAME:ADDR:WORD (hex address/value in 68k RAM), for tests */
             if (sscanf(argv[++i], "%d:%x:%x", &pokes[npokes].frame, &pokes[npokes].addr, &pokes[npokes].val) == 3)
                 npokes++;
+        } else if (!strcmp(argv[i], "--player") && i + 1 < argc) {
+            vdp_local_player = atoi(argv[++i]);
+        } else if (!strcmp(argv[i], "--net-host") && i + 1 < argc) {
+            net_host_port = argv[++i];
+        } else if (!strcmp(argv[i], "--net-join") && i + 1 < argc) {
+            net_join_addr = argv[++i];
         } else if (!strcmp(argv[i], "--input") && i + 1 < argc && ninputs < 256) {
             int fr, pad; char btn[32] = "";
             if (sscanf(argv[++i], "%d:%d:%31s", &fr, &pad, btn) >= 2) {
@@ -145,11 +164,42 @@ int main(int argc, char **argv)
         if (wf) wav_header(wf, 48000, 0);
     }
     md_audio_set_rate(48000);
+    int online = net_host_port || net_join_addr;
+    if (online) {
+        if (!(net_host_port ? net_host(atoi(net_host_port)) : net_join(net_join_addr))) {
+            fprintf(stderr, "net: %s\n", net_status());
+            return 1;
+        }
+        while (!net_take_start()) {
+            net_poll();
+            if (net_state() == NET_OFF) { fprintf(stderr, "net: %s\n", net_status()); return 1; }
+            nap();
+        }
+        vdp_local_player = net_local_player();
+        fprintf(stderr, "net: playing as player %d\n", vdp_local_player + 1);
+    }
     md_reset();
+    uint8_t mine = 0;
     for (int fr = 0; fr < frames; fr++) {
         for (int k = 0; k < ninputs; k++)
-            if (inputs[k].frame == fr)
-                md.pad[inputs[k].pad & 1] = inputs[k].b;
+            if (inputs[k].frame == fr) {
+                if (!online)
+                    md.pad[inputs[k].pad & 1] = inputs[k].b;
+                else if ((inputs[k].pad & 1) == net_local_player())
+                    mine = inputs[k].b;
+            }
+        if (online) {
+            uint8_t pads2[2];
+            for (;;) {
+                net_poll();
+                if (net_state() != NET_PLAYING) { fprintf(stderr, "net: %s\n", net_status()); return 1; }
+                net_local_input(mine);
+                if (net_inputs_for_next_frame(pads2)) break;
+                nap();
+            }
+            md.pad[0] = pads2[0];
+            md.pad[1] = pads2[1];
+        }
         for (int k = 0; k < npokes; k++)
             if (pokes[k].frame == fr) {
                 md.ram[pokes[k].addr & 0xFFFE] = pokes[k].val >> 8;
@@ -164,8 +214,15 @@ int main(int argc, char **argv)
         for (int k = 0; k < nshots; k++)
             if (shots[k].frame == fr)
                 write_ppm(shots[k].path);
+        if (online)
+            net_frame_done(net_frame() % 60 == 59 ? md_state_hash() : 0);
         if (hash)
             printf("frame %d hash %08x pc %06x\n", fr, md_state_hash(), cpu_get_pc());
+    }
+    if (online) {
+        fprintf(stderr, "net: %s\n", net_status());
+        for (int k = 0; k < 1000; k++) { net_poll(); nap(); }   /* the other may still need our inputs */
+        net_stop();
     }
     if (hash) {
         printf("vdp regs:");

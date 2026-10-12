@@ -47,4 +47,8 @@ int      vdp_irq_level(void);   /* highest pending & enabled interrupt (0, 4 or 
 void     vdp_ack_irq(int level);
 void     vdp_line_start(int line); /* raster bookkeeping (HINT/VINT) */
 
+/* online games: the player at this screen (0 or 1), -1 = local game. Each player sees
+ * their own view at the bottom and the floor above them at the top. Display only. */
+extern int vdp_local_player;
+
 #endif

@@ -20,6 +20,12 @@ int  menu_pointer(int x, int y);        /* tap in overlay coordinates; returns M
 void menu_draw(uint32_t *buf);          /* MENU_W x MENU_H, ARGB with alpha */
 int  menu_highlight(void);              /* Mega Drive colour being recoloured, or -1 */
 
+/* the Online page's address box: while it is being edited the frontend sends typed
+ * text here (and only Enter / Escape / Backspace as keys) */
+int  menu_text_editing(void);
+void menu_text_typed(const char *utf8);
+void menu_text_backspace(void);
+
 /* small text helper shared with the frontend (8x8 font) */
 void menu_text(uint32_t *buf, int w, int h, int x, int y, const char *s, uint32_t color);
 

@@ -13,7 +13,7 @@ set(BONANZA_SDL_URL "https://github.com/libsdl-org/SDL/releases/download/release
     CACHE STRING "SDL2 source archive used with BONANZA_FETCH_SDL")
 
 set(CORE_SOURCES
-  src/md.c src/vdp.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c
+  src/md.c src/vdp.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c src/net.c
   ext/musashi/m68kcpu.c ext/musashi/m68kops.c ext/musashi/m68kdasm.c
   ext/musashi/softfloat/softfloat.c
   ext/z80/z80.c
@@ -39,6 +39,9 @@ else()
 endif()
 if(NOT WIN32 AND NOT EMSCRIPTEN)
   target_link_libraries(bonanza_core PUBLIC m)
+endif()
+if(WIN32)
+  target_link_libraries(bonanza_core PUBLIC ws2_32)   # online play (net.c)
 endif()
 
 if(EMSCRIPTEN)

@@ -5,11 +5,14 @@
 #include "md.h"
 #include "settings.h"
 #include "font8x8_basic.h"
+#include "net.h"
 
 int menu_allow_quit = 1;
 int menu_settings_dirty;
 
-enum { PAGE_MAIN, PAGE_RECOLOR, PAGE_EDIT, PAGE_CHARS };
+enum { PAGE_MAIN, PAGE_RECOLOR, PAGE_EDIT, PAGE_CHARS, PAGE_ONLINE };
+
+static int editing;                /* typing into the join address */
 
 static int open_, page, sel;
 static int recolor_sel;            /* index into colors[] on the recolour page */
@@ -38,7 +41,7 @@ static const uint32_t skin_presets[] = {
 #define PANEL_W (MENU_W - 24)
 #define PANEL_H (MENU_H - 16)
 #define ROW_Y0 34
-#define ROW_H 10
+#define ROW_H 9
 #define VALUE_X 150
 
 #define C_TEXT   0xFFF2F0F7u
@@ -99,11 +102,11 @@ static void slider(uint32_t *buf, int x, int y, int v, int lo, int hi, int selec
 /* ------------------------------------------------------------ items */
 
 enum {
-    IT_RESUME, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
+    IT_RESUME, IT_ONLINE, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
     IT_CHARS, IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
 };
 static const char *item_label[IT_COUNT] = {
-    "Resume", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
+    "Resume", "Online...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
     "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
@@ -183,7 +186,10 @@ static int adjust_main(int item, int dir)
     case IT_UPPER: settings.show_2p_panel = !settings.show_2p_panel; break;
     case IT_CUTSCENES: settings.crop_cutscenes = !settings.crop_cutscenes; break;
     case IT_GUARDS: settings.patrol_return = !settings.patrol_return; break;
-    case IT_ALERT: settings.floor_alert = (settings.floor_alert + dir + FLOOR_ALERT_COUNT) % FLOOR_ALERT_COUNT; break;
+    case IT_ALERT:
+        if (net_state() == NET_PLAYING) return 0;   /* both machines must play the same game */
+        settings.floor_alert = (settings.floor_alert + dir + FLOOR_ALERT_COUNT) % FLOOR_ALERT_COUNT;
+        break;
     case IT_COLORS: settings.preset = (settings.preset + dir + PRESET_COUNT) % PRESET_COUNT; break;
     case IT_BRIGHT: settings.brightness = clampi(settings.brightness + dir * 5, -100, 100); break;
     case IT_CONTRAST: settings.contrast = clampi(settings.contrast + dir * 5, -100, 100); break;
@@ -201,6 +207,7 @@ static int activate_main(int item)
     case IT_RESUME: open_ = 0; return MENU_ACT_CLOSE;
     case IT_RECOLOR: page = PAGE_RECOLOR; collect_colors(); return MENU_ACT_NONE;
     case IT_CHARS: page = PAGE_CHARS; sel = 0; return MENU_ACT_NONE;
+    case IT_ONLINE: page = PAGE_ONLINE; sel = 0; return MENU_ACT_NONE;
     case IT_RESETCOLORS: {
         int screen = settings.screen, smooth = settings.smooth;
         /* keeps character colours; they have their own reset */
@@ -239,6 +246,49 @@ static void edit_change(int row, int dir)
     changed();
 }
 
+/* ------------------------------------------------------------ online page */
+/* rows: Host, Join <address>, Search LAN, LAN games..., Leave / Back */
+static int online_rows(void) { return 3 + net_lan_count() + 1; }
+
+static int online_activate(int row)
+{
+    int lan = net_lan_count();
+    if (row == 0) { net_host(NET_DEFAULT_PORT); return MENU_ACT_NONE; }
+    if (row == 1) { editing = 1; return MENU_ACT_NONE; }
+    if (row == 2) { net_lan_search(); return MENU_ACT_NONE; }
+    if (row < 3 + lan) {
+        snprintf(settings.join_address, sizeof(settings.join_address), "%s", net_lan_address(row - 3));
+        menu_settings_dirty = 1;
+        net_join(settings.join_address);
+        return MENU_ACT_NONE;
+    }
+    if (net_state() != NET_OFF) { net_stop(); return MENU_ACT_NONE; }
+    page = PAGE_MAIN;
+    sel = IT_ONLINE;
+    return MENU_ACT_NONE;
+}
+
+int menu_text_editing(void) { return open_ && page == PAGE_ONLINE && editing; }
+
+void menu_text_typed(const char *t)
+{
+    for (; *t; t++) {
+        char c = *t;
+        int ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' || c == ':' || c == '-';
+        size_t l = strlen(settings.join_address);
+        if (ok && l + 1 < sizeof(settings.join_address)) {
+            settings.join_address[l] = c;
+            settings.join_address[l + 1] = 0;
+        }
+    }
+}
+
+void menu_text_backspace(void)
+{
+    size_t l = strlen(settings.join_address);
+    if (l) settings.join_address[l - 1] = 0;
+}
+
 /* ------------------------------------------------------------ API */
 
 int menu_is_open(void) { return open_; }
@@ -250,6 +300,9 @@ void menu_open(void)
     sel = 0;
     menu_settings_dirty = 0;
 }
+
+static uint32_t blink;
+#define CURSOR_ON ((++blink / 20) & 1)
 
 int menu_highlight(void)
 {
@@ -269,6 +322,10 @@ static int back(void)
         return MENU_ACT_NONE;
     }
     if (page == PAGE_CHARS) { page = PAGE_MAIN; sel = IT_CHARS; return MENU_ACT_NONE; }
+    if (page == PAGE_ONLINE) {
+        if (editing) { editing = 0; return MENU_ACT_NONE; }
+        page = PAGE_MAIN; sel = IT_ONLINE; return MENU_ACT_NONE;
+    }
     if (page == PAGE_EDIT) { page = PAGE_RECOLOR; collect_colors(); return MENU_ACT_NONE; }
     if (page == PAGE_RECOLOR) { page = PAGE_MAIN; sel = IT_RECOLOR; return MENU_ACT_NONE; }
     open_ = 0;
@@ -299,6 +356,20 @@ int menu_key(int key)
             page = PAGE_EDIT;
             sel = 0;
         }
+    } else if (page == PAGE_ONLINE) {
+        int n = online_rows();
+        if (editing) {
+            if (key == MK_OK) {
+                editing = 0;
+                menu_settings_dirty = 1;
+                if (settings.join_address[0]) net_join(settings.join_address);
+            }
+            return MENU_ACT_NONE;
+        }
+        if (sel >= n) sel = n - 1;
+        if (key == MK_UP) sel = (sel + n - 1) % n;
+        else if (key == MK_DOWN) sel = (sel + 1) % n;
+        else if (key == MK_OK) return online_activate(sel);
     } else if (page == PAGE_CHARS) {
         /* rows: 6 parts, reset, back */
         int n = CHAR_COUNT * PART_COUNT + 2;
@@ -362,13 +433,16 @@ int menu_pointer(int x, int y)
         return MENU_ACT_NONE;
     }
     int row;
-    int n = page == PAGE_MAIN ? main_count() : page == PAGE_CHARS ? CHAR_COUNT * PART_COUNT + 2 : 5;
-    int y0 = page == PAGE_EDIT ? ROW_Y0 + 40 : ROW_Y0;
+    int n = page == PAGE_MAIN ? main_count() : page == PAGE_CHARS ? CHAR_COUNT * PART_COUNT + 2
+          : page == PAGE_ONLINE ? online_rows() : 5;
+    int y0 = page == PAGE_EDIT ? ROW_Y0 + 40 : page == PAGE_ONLINE ? ROW_Y0 + 4 : ROW_Y0;
     row = (y - y0) / ROW_H;
     if (y < y0 || row < 0 || row >= n) return MENU_ACT_NONE;
     sel = row;
     int is_value = page == PAGE_MAIN ? (row >= IT_SCREEN && row <= IT_HUE)
-                 : page == PAGE_CHARS ? row < CHAR_COUNT * PART_COUNT : row <= 2;
+                 : page == PAGE_CHARS ? row < CHAR_COUNT * PART_COUNT
+                 : page == PAGE_ONLINE ? 0 : row <= 2;
+    if (page == PAGE_ONLINE && editing && row != 1) editing = 0;
     if (is_value && x >= VALUE_X)
         return menu_key(x < VALUE_X + 50 ? MK_LEFT : MK_RIGHT);
     return menu_key(MK_OK);
@@ -459,6 +533,42 @@ void menu_draw(uint32_t *buf)
         if (!ncolors)
             text(buf, SW_X0, SW_Y0, "No colors on screen.", C_DIM);
         text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 14, "Enter/tap again: edit  Esc: back", 0xFF6E6A7Eu);
+    } else if (page == PAGE_ONLINE) {
+        text(buf, PANEL_X + 12, PANEL_Y + 10, "ONLINE (2 PLAYERS)", C_GOLD);
+        text(buf, PANEL_X + PANEL_W - 48, PANEL_Y + 10, "Back", C_DIM);
+        int n = online_rows(), lan = net_lan_count();
+        for (int i = 0; i < n; i++) {
+            int y = ROW_Y0 + 4 + i * (ROW_H + 2);
+            int s = i == sel;
+            if (s) fill(buf, PANEL_X + 4, y - 3, PANEL_W - 8, ROW_H + 2, C_SEL);
+            if (s) fill(buf, PANEL_X + 4, y - 3, 2, ROW_H + 2, C_ACCENT);
+            const char *label = "";
+            if (i == 0) {
+                snprintf(t, sizeof(t), "Host a game (port %d)", NET_DEFAULT_PORT);
+                label = t;
+            } else if (i == 1) {
+                snprintf(t, sizeof(t), "Join: %s%s", settings.join_address, editing && (CURSOR_ON) ? "_" : "");
+                label = t;
+            } else if (i == 2) {
+                label = "Search LAN";
+            } else if (i < 3 + lan) {
+                snprintf(t, sizeof(t), "  %s", net_lan_entry(i - 3));
+                label = t;
+            } else {
+                label = net_state() != NET_OFF ? "Leave online game" : "Back";
+            }
+            text(buf, PANEL_X + 14, y, label, s ? C_TEXT : C_DIM);
+        }
+        /* status, wrapped over two lines */
+        const char *st = net_status();
+        char l1[40], l2[40];
+        snprintf(l1, sizeof(l1), "%.34s", st);
+        snprintf(l2, sizeof(l2), "%.34s", strlen(st) > 34 ? st + 34 : "");
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 50, l1, C_GOLD);
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 40, l2, C_GOLD);
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 26, editing ? "Type the address, Enter: join" :
+             "Internet: forward UDP 7777", 0xFF6E6A7Eu);
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 14, "Enter: choose  Esc: back", 0xFF6E6A7Eu);
     } else if (page == PAGE_CHARS) {
         text(buf, PANEL_X + 12, PANEL_Y + 10, "CHARACTERS", C_GOLD);
         text(buf, PANEL_X + PANEL_W - 48, PANEL_Y + 10, "Back", C_DIM);

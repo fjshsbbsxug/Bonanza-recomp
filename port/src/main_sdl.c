@@ -13,6 +13,9 @@
 #include <string.h>
 #include "md.h"
 #include "settings.h"
+#include "net.h"
+#include "gamemods.h"
+#include "vdp.h"
 #include "menu.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -173,9 +176,13 @@ static int find_rom_in(const char *dir)
 
 static void find_rom(int argc, char **argv)
 {
-    for (int i = 1; i < argc; i++)
+    for (int i = 1; i < argc; i++) {
+        if (i > 1 && (!strcmp(argv[i - 1], "--join") ||
+                      (!strcmp(argv[i - 1], "--host") && atoi(argv[i]) > 0)))
+            continue;                            /* an address or port, not a ROM */
         if (argv[i][0] != '-' && try_rom(argv[i], 1))
             return;
+    }
     char *pref = SDL_GetPrefPath(APP_ORG, APP_NAME);
     if (pref) {
         int ok = find_rom_in(pref);
@@ -423,9 +430,13 @@ static void present(void)
 
 static void set_title(void)
 {
+    char t[256];
     if (!have_rom)
         SDL_SetWindowTitle(window, status_msg);
-    else
+    else if (net_state() != NET_OFF) {
+        snprintf(t, sizeof(t), "Bonanza Bros - %s", net_status());
+        SDL_SetWindowTitle(window, t);
+    } else
         SDL_SetWindowTitle(window, paused ? "Bonanza Bros (paused)" : "Bonanza Bros");
 }
 
@@ -494,6 +505,10 @@ static void handle_events(void)
         case SDL_QUIT:
             running = 0;
             break;
+        case SDL_TEXTINPUT:
+            if (menu_text_editing())
+                menu_text_typed(e.text.text);
+            break;
         case SDL_DROPFILE:
             if (try_rom(e.drop.file, 1))
                 status_msg[0] = 0;
@@ -509,6 +524,12 @@ static void handle_events(void)
                     SDL_SetWindowFullscreen(window, fs ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
                     break;
                 }
+                if (menu_text_editing()) {          /* typing an address: only these keys */
+                    if (k == SDLK_RETURN || k == SDLK_KP_ENTER) menu_action(menu_key(MK_OK));
+                    else if (k == SDLK_ESCAPE || k == SDLK_AC_BACK) menu_action(menu_key(MK_BACK));
+                    else if (k == SDLK_BACKSPACE) menu_text_backspace();
+                    break;
+                }
                 if (!e.key.repeat && (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_F1 || k == SDLK_TAB)) {
                     toggle_menu();
                     break;
@@ -519,12 +540,12 @@ static void handle_events(void)
                         menu_action(menu_key(mk));
                     break;
                 }
-                if (!e.key.repeat && (k == SDLK_p || k == SDLK_PAUSE)) {
+                if (!e.key.repeat && (k == SDLK_p || k == SDLK_PAUSE) && net_state() != NET_PLAYING) {
                     paused = !paused;
                     set_title();
                     break;
                 }
-                if (!e.key.repeat && k == SDLK_F3 && have_rom) {
+                if (!e.key.repeat && k == SDLK_F3 && have_rom && net_state() != NET_PLAYING) {
                     md_reset();
                     break;
                 }
@@ -608,8 +629,77 @@ static void queue_audio(int16_t *buf, int n)
     SDL_QueueAudio(audio_dev, buf, (Uint32)n * 4);
 }
 
+/* ---- online games (net.c): both machines run the same frames with both players' buttons */
+static int saved_floor_alert = -1;
+
+static void net_update(void)
+{
+    static int text_on;
+    static Uint32 title_at;
+    net_poll();
+    if (net_take_start() && have_rom) {
+        if (net_local_player() == 1) {           /* the host's game options count */
+            if (saved_floor_alert < 0) saved_floor_alert = settings.floor_alert;
+            settings.floor_alert = net_option_floor_alert();
+            game_mods_apply();
+        }
+        md_reset();
+        paused = 0;
+        memset(key_pad, 0, sizeof(key_pad));
+        SDL_Log("online game started: player %d", net_local_player() + 1);
+    }
+    static int last_state = NET_OFF;
+    if (net_state() != last_state) {
+        last_state = net_state();
+        if (last_state == NET_OFF)
+            SDL_Log("online: %s", net_status());
+    }
+    if (net_state() != NET_PLAYING && saved_floor_alert >= 0) {
+        settings.floor_alert = saved_floor_alert;
+        saved_floor_alert = -1;
+        game_mods_apply();
+    }
+    vdp_local_player = net_state() == NET_PLAYING ? net_local_player() : -1;
+    if (menu_text_editing() != text_on) {
+        text_on = menu_text_editing();
+        if (text_on) SDL_StartTextInput(); else SDL_StopTextInput();
+    }
+    if (SDL_GetTicks() - title_at > 1000) {
+        title_at = SDL_GetTicks();
+        set_title();
+    }
+}
+
+static int run_net_frame(void)
+{
+    uint8_t mine = 0, pads2[2];
+    if (!menu_is_open()) {                      /* the game cannot wait for the menu */
+        for (int p = 0; p < 2; p++)
+            ctl_pad[p] = controller_state(pads[p]);
+        mine = key_pad[0] | key_pad[1] | ctl_pad[0] | ctl_pad[1] | touch_pad;
+    }
+    net_local_input(mine);
+    if (!net_inputs_for_next_frame(pads2))
+        return 0;                               /* the other player's buttons are not here yet */
+    md.pad[0] = pads2[0];
+    md.pad[1] = pads2[1];
+    md_run_frame();
+    int16_t buf[2048 * 2 + 64];
+    int n;
+    while ((n = md_audio_take(buf, 2048)) > 0)
+        if (audio_dev)
+            queue_audio(buf, n);
+    net_frame_done((net_frame() + 1) % 60 == 0 ? md_state_hash() : 0);
+    return 1;
+}
+
 static void run_one(void)
 {
+    if (have_rom && net_state() == NET_PLAYING) {
+        if (run_net_frame() && net_frames_waiting() > 2)
+            run_net_frame();                    /* behind the other player: catch up */
+        return;
+    }
     if (have_rom && !paused && !menu_is_open()) {
         for (int p = 0; p < 2; p++) {
             ctl_pad[p] = controller_state(pads[p]);
@@ -650,6 +740,7 @@ static void frame(void)
     if (dt > 250) dt = MD_FRAME_MS;          /* after a pause or a dragged window */
     avg = avg * 0.95 + dt * 0.05;
     handle_events();
+    net_update();
     int locked = vsync_on && avg > 15.6 && avg < 17.6;
     if (locked) {
         acc = 0;
@@ -697,6 +788,13 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--interp"))
             use_recomp = 0;
+    }
+    const char *host_port = NULL, *join_addr = NULL;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--host"))
+            host_port = i + 1 < argc && argv[i + 1][0] != '-' ? argv[++i] : "";
+        else if (!strcmp(argv[i], "--join") && i + 1 < argc)
+            join_addr = argv[++i];
     }
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
@@ -751,6 +849,10 @@ int main(int argc, char **argv)
     last_screen = settings.screen;
     fit_window();
     find_rom(argc, argv);
+    if (host_port)
+        net_host(atoi(host_port));
+    else if (join_addr)
+        net_join(join_addr);
     md.use_recomp = use_recomp;
     set_title();
 

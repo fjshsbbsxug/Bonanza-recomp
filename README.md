@@ -111,6 +111,17 @@ builder/      the HTML builder page
     screen shape: guards you can see keep going, off screen the original rules apply. With the option off the hooks do nothing and
     runs stay bit-identical to the original.
 
+  * *Online 2 players* (PC and Android, `port/src/net.c`): delay-based lockstep over
+    UDP like most emulator netplay - both machines run the same game and exchange
+    only pad states (with redundant resends), the input delay adapts to the ping,
+    and state hashes every 60 frames detect a desync. Host or join from the menu
+    (`Online...`) or with `--host [port]` / `--join address`; LAN games are found by
+    broadcast, internet games need UDP 7777 forwarded on the host (self-hosted, no
+    server). Each player gets his own screen: `vdp_local_player` makes the renderer
+    put that player's view at the bottom and the floor above him at the top.
+    `bonanza-headless --net-host PORT` / `--net-join ADDR` play scripted online games
+    for testing (both sides' `--hash` output must be identical).
+
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert
   they only change the picture, so recompiled-vs-interpreted runs stay bit-identical.
 * Frame pacing: on a ~60 Hz display with vsync the game runs exactly one frame per

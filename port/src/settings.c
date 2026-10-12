@@ -227,6 +227,7 @@ int settings_set(const char *key, const char *value)
     }
     if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
     if (!strcmp(key, "cutscenes")) { settings.crop_cutscenes = strcmp(value, "wide") != 0; return 1; }
+    if (!strcmp(key, "join")) { snprintf(settings.join_address, sizeof(settings.join_address), "%s", value); return 1; }
     if (!strcmp(key, "floor_alert")) {
         settings.floor_alert = !strcmp(value, "semi") ? FLOOR_ALERT_SEMI
                              : (!strcmp(value, "on") || atoi(value) == 1) ? FLOOR_ALERT_ON : FLOOR_ALERT_OFF;
@@ -307,6 +308,8 @@ int settings_save(const char *path)
     fprintf(f, "# Floor Alert (changes the game): on = guards on your floor keep chasing you off screen\n");
     fprintf(f, "# and never jump back to their posts until you change floors; semi = guards anywhere in\n");
     fprintf(f, "# the (wide) picture stay active, off screen they act as in the original; off = original\n");
+    fprintf(f, "# online: the address last joined\n");
+    fprintf(f, "join = %s\n", settings.join_address);
     fprintf(f, "floor_alert = %s\n", settings.floor_alert == FLOOR_ALERT_SEMI ? "semi" : settings.floor_alert ? "on" : "off");
     fprintf(f, "# colors: original, vivid, soft, arcade, grayscale, sepia, night, gameboy, inverted\n");
     fprintf(f, "colors = %s\n", preset_keys[settings.preset]);

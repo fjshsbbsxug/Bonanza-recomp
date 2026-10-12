@@ -34,6 +34,7 @@ typedef struct {
     int crop_cutscenes;      /* widescreen: show cutscenes/title 4:3 (game overs stay wide) */
     int patrol_return;       /* widescreen: guards leaving the 4:3 picture walk back to their posts */
     int floor_alert;         /* game change: FLOOR_ALERT_* */
+    char join_address[64];   /* online: last address joined */
     int preset;              /* PRESET_* */
     int brightness;          /* -100..100 */
     int contrast;            /* -100..100 */

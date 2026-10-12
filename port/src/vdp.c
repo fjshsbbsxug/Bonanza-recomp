@@ -618,7 +618,12 @@ int vdp_out_width(void)
 #define VIEW_TOP_Y0 7
 #define VIEW_BOT_Y0 135
 #define VIEW_H 80
-static struct { uint32_t frame; int hsA, hsB, vsA, vsB; } bottom_view;
+/* each view's camera at its first line: frame (+1), camera x, scroll of plane B, world y */
+static struct { uint32_t frame; int hsA, hsB, vsA, vsB; } view_rec[2];
+/* Online games: the player at this screen. His own view is always shown at the bottom
+ * and the floor above him at the top - the other player has his own screen. */
+int vdp_local_player = -1;
+static int focus;           /* this frame: the view shown at the bottom (0 = player 1) */
 static int room_above_wy;   /* world y of the room-above view's first line */
 static uint32_t stacked_frame;  /* frame (+1) in which the views are stacked (see below) */
 static int stacked_top;         /* world y of the top view's first line then */
@@ -822,7 +827,17 @@ void vdp_render_line(int y)
     int width = vdp_width();
     int m = vdp_margin();
     int ow = width + 2 * m;
-    uint16_t *fb = vdp.fbmd[y];
+    if (y == 0) {
+        /* player 2's screen in an online game: while he plays, his view (lines 7-86)
+         * moves to the bottom and the floor above him takes the top */
+        uint16_t on = (uint16_t)((md.ram[0x2EF8] << 8) | md.ram[0x2EF9]);
+        focus = vdp_local_player == 1 && on && on != 0x8000;
+    }
+    int online = vdp_local_player >= 0;
+    int real_y0 = focus ? VIEW_TOP_Y0 : VIEW_BOT_Y0, other_y0 = focus ? VIEW_BOT_Y0 : VIEW_TOP_Y0;
+    int in_real = y >= real_y0 && y < real_y0 + VIEW_H;
+    int in_other = y >= other_y0 && y < other_y0 + VIEW_H;
+    uint16_t *fb = vdp.fbmd[in_real ? VIEW_BOT_Y0 + y - real_y0 : in_other ? VIEW_TOP_Y0 + y - other_y0 : y];
     uint16_t pal[64];
     for (int i = 0; i < 64; i++)
         pal[i] = md_color_index(vdp.cram[i]);
@@ -888,16 +903,22 @@ void vdp_render_line(int y)
             if (vlog_top)
                 fprintf(stderr, "top %u hs %d vs %d\n", md.frame, line_hscroll(y, 0), vdp.vsram[0]);
         }
-        if (in_bot && y == VIEW_BOT_Y0) {
-            bottom_view.frame = md.frame + 1;
-            bottom_view.hsB = line_hscroll(y, 1);
-            bottom_view.vsB = vdp.vsram[1];
-            bottom_view.hsA = camx;      /* full camera x */
-            bottom_view.vsA = wy0;       /* world y of the view's first line */
+        if (y == (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0)) {
+            view_rec[vi].frame = md.frame + 1;
+            view_rec[vi].hsB = line_hscroll(y, 1);
+            view_rec[vi].vsB = vdp.vsram[1];
+            view_rec[vi].hsA = camx;      /* full camera x */
+            view_rec[vi].vsA = wy0;       /* world y of the view's first line */
             static int vlog_view = -1;
             if (vlog_view < 0) vlog_view = getenv("VIEWLOG") != NULL;
-            if (vlog_view)
-                fprintf(stderr, "view %u camx %d wy0 %d ok %d/%d hsB %d vsB %d\n", md.frame, camx, wy0, views[0].ok, views[1].ok, bottom_view.hsB, bottom_view.vsB);
+            if (vlog_view && in_bot)
+                fprintf(stderr, "view %u camx %d wy0 %d ok %d/%d hsB %d vsB %d\n", md.frame, camx, wy0, views[0].ok, views[1].ok, view_rec[0].hsB, view_rec[0].vsB);
+            if (focus && in_real && playing && wy0 < VIEW_H) {
+                /* player 2's screen: his view comes first, so the views are stacked
+                 * from his camera of this frame (see room_above below) */
+                stacked_frame = md.frame + 1;
+                stacked_top = wy0 < 0 ? wy0 : 0;
+            }
         }
     }
     if (y == HUD_Y && m) {
@@ -927,23 +948,27 @@ void vdp_render_line(int y)
      * views show two floors one above the other, so player 1's view shows the floor
      * below the top view's, from the map, with the characters where they really are -
      * instead of the same floor twice. */
-    int stacked = in_bot && map_view && stacked_frame == md.frame + 1;
+    int stacked = in_real && map_view && stacked_frame == md.frame + 1;
     map_on = m && map_view;
     map_all = 0;
     map_camx = camx;
     map_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
     if (stacked) {
         map_on = map_all = 1;
-        map_wy = stacked_top + VIEW_H + (y - VIEW_BOT_Y0);
+        map_wy = stacked_top + VIEW_H + (y - real_y0);
     }
     draw_plane(a, y, width, m, 0);
     map_on = map_all = 0;
     /* a real room is shown on this line (the outer 16 pixels may come from the map) */
     int room_view = line_opaque(a, m + 16, width - 32);
     int room_above = 0;
-    if (in_top && !room_view) {
+    int rec = view_rec[focus].frame == md.frame || view_rec[focus].frame == md.frame + 1;
+    if (in_other && online && playing && rec) {
+        /* online: the other player's view is on his own screen */
+        room_above = 1;
+    } else if (in_top && !room_view) {
         /* 1-player game: the game shows nothing in plane A here (the 2P panel) */
-        if (!settings.show_2p_panel && playing && bottom_view.frame == md.frame)
+        if (!settings.show_2p_panel && playing && view_rec[0].frame == md.frame)
             room_above = 1;
         else if (m && playing)
             clamp_edges = 1;   /* original 2P panel: extend its edges */
@@ -954,9 +979,9 @@ void vdp_render_line(int y)
         /* The floor above player 1, following his camera - but never above the top of
          * the level (the exit floor / roof): from there on it stays still, and as it
          * then shows player 1's own floor, he is seen in it (escaping, too). */
-        room_above_wy = bottom_view.vsA - VIEW_H;
+        room_above_wy = view_rec[focus].vsA - VIEW_H;
         if (room_above_wy < 0) {
-            room_above_wy = bottom_view.vsA < 0 ? bottom_view.vsA : 0;
+            room_above_wy = view_rec[focus].vsA < 0 ? view_rec[focus].vsA : 0;
             stacked_frame = md.frame + 1;     /* player 1's view: the floor below */
             stacked_top = room_above_wy;
         }
@@ -966,15 +991,15 @@ void vdp_render_line(int y)
     wrap_margins = 0;
     if (room_above) {
         /* the floor above player 1, straight from the level map, following his camera */
-        ovr_hs = bottom_view.hsB;          /* same sky/city background as below */
-        ovr_vs = (bottom_view.vsB + VIEW_BOT_Y0 - VIEW_TOP_Y0) & 0x3FF;
+        ovr_hs = view_rec[focus].hsB;          /* same sky/city background as below */
+        ovr_vs = (view_rec[focus].vsB + real_y0 - other_y0) & 0x3FF;
         wrap_margins = m != 0;
         draw_plane(b, y, width, m, 1);
         wrap_margins = 0;
         ovr_hs = ovr_vs = -1;
         map_on = map_all = 1;
-        map_camx = bottom_view.hsA;
-        map_wy = room_above_wy + (y - VIEW_TOP_Y0);
+        map_camx = view_rec[focus].hsA;
+        map_wy = room_above_wy + (y - other_y0);
         draw_plane(a, y, width, m, 0);
         map_on = map_all = 0;
     }
@@ -993,8 +1018,8 @@ void vdp_render_line(int y)
         /* The 2P panel's sprites do not belong to the room. Where the top view shows
          * the same part of the level as player 1's view (on the top floor, or on the
          * stairs) it shows the same characters: the sprites of that line of his view. */
-        int yb = VIEW_BOT_Y0 + room_above_wy + (y - VIEW_TOP_Y0) - bottom_view.vsA;
-        if (yb >= VIEW_BOT_Y0 && yb < VIEW_BOT_Y0 + VIEW_H) {
+        int yb = real_y0 + room_above_wy + (y - other_y0) - view_rec[focus].vsA;
+        if (yb >= real_y0 && yb < real_y0 + VIEW_H) {
             draw_sprites(s, part, yb, width, m);
         } else {
             memset(s, 0, sizeof(s));
@@ -1003,11 +1028,11 @@ void vdp_render_line(int y)
     } else if (stacked) {
         /* the characters of player 1's view that are on the floor shown here, and the
          * objects of that floor his view does not cover (they would vanish) */
-        if (y == VIEW_BOT_Y0)
-            stack_count = wobj_build_stacked(stacked_top + VIEW_H, wy0, stack_list,
+        if (y == real_y0)
+            stack_count = wobj_build_stacked(focus, stacked_top + VIEW_H, wy0, stack_list,
                                              (int)(sizeof(stack_list) / sizeof(stack_list[0])));
-        int yb = VIEW_BOT_Y0 + map_wy - wy0;
-        if (yb >= VIEW_BOT_Y0 && yb < VIEW_BOT_Y0 + VIEW_H) {
+        int yb = real_y0 + map_wy - wy0;
+        if (yb >= real_y0 && yb < real_y0 + VIEW_H) {
             draw_sprites(s, part, yb, width, m);
         } else {
             memset(s, 0, sizeof(s));

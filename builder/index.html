@@ -72,7 +72,7 @@
   .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 20px; }
   .opts label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
   .opts label .v { color: var(--ink); font-variant-numeric: tabular-nums; }
-  select, input[type=number] { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  select, input[type=number], input[type=text] { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
            border-radius: 8px; padding: 7px 9px; }
   input[type=range] { width: 100%; accent-color: var(--accent); }
   h3 { font-size: 15px; margin: 20px 0 6px; }
@@ -164,6 +164,9 @@
       </label>
       <label>Floor Alert (changes the game)
         <select id="o-floor_alert"><option value="off">Off: original game</option><option value="on">On: guards on your floor keep chasing you, even off screen</option><option value="semi">Semi: guards stay active anywhere on your (wide) screen, off screen as in the original</option></select>
+      </label>
+      <label>Online: address to join (PC / Android packages)
+        <input id="o-join" type="text" placeholder="e.g. 192.168.1.20 or myhost.net:7777" spellcheck="false">
       </label>
       <label>Scaling
         <select id="o-smooth"><option value="0">Sharp pixels</option><option value="1">Smooth</option></select>
@@ -474,7 +477,7 @@
                      'mobo.shirt': '#0000ff', 'mobo.pants': '#000000', 'mobo.skin': '#ff9200' };
   const SKIN_TONES = ['#ffe0c8', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#6b4226', '#3b2219'];
   const CLOTHES = ['#101010', '#f0f0f0', '#e02020', '#f08020', '#f0d020', '#20b040', '#2050e0', '#8030c0', '#f070b0'];
-  const freshOpts = () => ({ screen: 'original', upper: 'room', cutscenes: '4:3', guards: 'return', floor_alert: 'off', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
+  const freshOpts = () => ({ screen: 'original', upper: 'room', cutscenes: '4:3', guards: 'return', floor_alert: 'off', join: '', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
                              recolor: {}, chars: {} });
   const OPT = freshOpts();
   const SLIDERS = ['brightness', 'contrast', 'saturation', 'hue'];
@@ -483,6 +486,7 @@
   function toIni() {
     let t = '# Bonanza Bros port settings (made with the port builder)\n';
     t += `screen = ${OPT.screen}\nupper_view = ${OPT.upper}\ncutscenes = ${OPT.cutscenes}\nguards = ${OPT.guards}\nfloor_alert = ${OPT.floor_alert}\nsmooth = ${OPT.smooth}\ncolors = ${OPT.colors}\n`;
+    if (OPT.join) t += `join = ${OPT.join}\n`;
     for (const k of SLIDERS) t += `${k} = ${OPT[k]}\n`;
     for (const [c] of CHARS) for (const [p] of PARTS) {
       const v = OPT.chars[c + '.' + p];
@@ -568,6 +572,7 @@
     $('o-cutscenes').value = OPT.cutscenes;
     $('o-guards').value = OPT.guards;
     $('o-floor_alert').value = OPT.floor_alert;
+    $('o-join').value = OPT.join;
     $('o-colors').value = OPT.colors;
     for (const k of SLIDERS) { $('o-' + k).value = OPT[k]; $('v-' + k).textContent = (OPT[k] > 0 ? '+' : '') + OPT[k]; }
     const list = $('recolors');
@@ -610,6 +615,7 @@
     }
   }
   ['screen', 'smooth', 'colors', 'guards', 'floor_alert'].forEach(k => $('o-' + k).addEventListener('change', e => { OPT[k] = e.target.value; gameSet(k, OPT[k]); }));
+  $('o-join').addEventListener('change', e => { OPT.join = e.target.value.replace(/[^0-9a-zA-Z.:-]/g, ''); e.target.value = OPT.join; });
   $('o-upper').addEventListener('change', e => { OPT.upper = e.target.value; gameSet('upper_view', OPT.upper); });
   $('o-cutscenes').addEventListener('change', e => { OPT.cutscenes = e.target.value; gameSet('cutscenes', OPT.cutscenes); });
   SLIDERS.forEach(k => $('o-' + k).addEventListener('input', e => {
