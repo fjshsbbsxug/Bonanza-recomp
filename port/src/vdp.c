@@ -753,16 +753,31 @@ static void view_check(view_map *v, int y0, int camx, int wy0, int width)
     int order[3] = {v->dwy, 0, 0}, n = 1;
     for (int i = 0; i < 3; i++)
         if (tries[i] != v->dwy) order[n++] = tries[i];
-    /* The camera never moves a whole floor in one frame: try the floor closest to
-     * last frame's position first (near the top of a level, rows of sky match the
-     * map at more than one floor). */
-    if (md.frame + 1 - v->good_frame <= 2)
-        for (int i = 0; i < 3; i++)
-            for (int j = i + 1; j < 3; j++)
-                if (abs(wy0 + order[j] - v->wy0) < abs(wy0 + order[i] - v->wy0)) {
-                    int t = order[i]; order[i] = order[j]; order[j] = t;
-                }
     v->frame = md.frame + 1;
+    /* The camera only moves a few pixels a frame: while it is being followed, the
+     * floor that keeps it closest to last frame's position is the one, whatever the
+     * map says (near the top of a level, rows of sky match the map at more than one
+     * floor). The map check then only says whether the map can be trusted. */
+    if (md.frame + 1 - v->good_frame <= 2) {
+        int best = 0;
+        for (int i = 1; i < 3; i++)
+            if (abs(wy0 + tries[i] - v->wy0) < abs(wy0 + tries[best] - v->wy0)) best = i;
+        int d = tries[best];
+        if (abs(wy0 + d - v->wy0) <= 24) {
+            int good = 0;
+            for (int k = 8; k < VIEW_H; k += 24)
+                good += view_matches_map(y0 + k, camx, wy0 + d + k, width);
+            v->dwy = d;
+            v->wy0 = wy0 + d;
+            if (good >= 2) {
+                v->good_frame = md.frame + 1;
+                v->ok = 1;
+            } else {
+                v->ok = md.frame + 1 - v->good_frame < 8;
+            }
+            return;
+        }
+    }
     for (int i = 0; i < 3; i++) {
         int d = order[i], good = 0;
         for (int k = 8; k < VIEW_H; k += 24)   /* lines 8, 32, 56 */
