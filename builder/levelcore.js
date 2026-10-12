@@ -20,7 +20,10 @@
   LC.stageNumber = e => (LC.STAGE_NAMES[e] || [e])[0];
   LC.stageLabel = e => LC.STAGE_NAMES[e] ? 'Stage ' + LC.STAGE_NAMES[e][0] + ': ' + LC.STAGE_NAMES[e][1] : 'Entry ' + e;
   LC.STAGES = [1, 2, 3, 5, 6, 7, 9, 10, 11, 13];
-  LC.MAX_W = 127;                               /* 2 x W collision columns must fit 255 */
+  LC.MAX_W = 127;
+  LC.SLOT_SIZE = 0x20000;
+  /* ROM region for a level's data: stage entries 1-13, then the extra stages */
+  LC.slotBase = level => LC.ROM_SIZE + LC.SLOT_SIZE * (level.extra ? 13 + (level.extra.slot || 0) : level.stage - 1);                               /* 2 x W collision columns must fit 255 */
   LC.KIND = { TREASURE: 0x00, DOOR: 0x04, EXIT: 0x2C };
   LC.KIND_NAMES = { 0x00: 'Treasure', 0x04: 'Door', 0x08: 'Spring', 0x0C: 'Zip wire', 0x10: 'Trip hazard',
     0x14: 'Trip hazard 2', 0x18: 'Lever', 0x1C: 'Danger gate', 0x20: 'Floor hazard', 0x24: 'Machine',
@@ -600,7 +603,9 @@
     const res = LC.resolveItems(level);
     if (res.problems.some(p => /Too many|no exit|no treasures/.test(p))) throw new Error(res.problems.join('\n'));
     const out = [];
-    const base = LC.ROM_SIZE;
+    /* each stage (and each extra stage) has its own region, so several level mods can be
+     * turned on together */
+    const base = LC.slotBase(level);
     const emit = bytes => { const a = base + out.length; out.push(...bytes); if (out.length & 1) out.push(0xFF); return a; };
     const words = ws => { const b = []; for (const w of ws) b.push((w >> 8) & 255, w & 255); return b; };
     const longs = ls => { const b = []; for (const l of ls) b.push((l >>> 24) & 255, (l >>> 16) & 255, (l >>> 8) & 255, l & 255); return b; };
@@ -678,9 +683,10 @@
       loaderAddr = emit(code);
     }
     /* the new ROM */
+    if (out.length > LC.SLOT_SIZE) throw new Error('This level is too big (' + out.length + ' bytes of data).');
     const size = base + out.length;
-    const rom2 = new Uint8Array(size);
-    rom2.set(rom.subarray(0, base));
+    const rom2 = new Uint8Array(size).fill(0xFF);
+    rom2.set(rom.subarray(0, LC.ROM_SIZE));
     rom2.set(out, base);
     w16(rom2, 0x54E2 + 4 * (st - 1), W);
     w16(rom2, 0x54E2 + 4 * (st - 1) + 2, H);
@@ -711,10 +717,12 @@
   LC.makeIps = function (orig, patched) {
     const out = [0x50, 0x41, 0x54, 0x43, 0x48];
     const n = patched.length;
+    /* past the original ROM, 0xFF is empty space (the mod loader fills gaps with it) */
+    const same = i => i < orig.length ? orig[i] === patched[i] : patched[i] === 0xFF && patched[i + 1] === 0xFF && patched[i + 2] === 0xFF && patched[i + 3] === 0xFF;
     for (let a = 0; a < n;) {
-      if (a < orig.length && orig[a] === patched[a]) { a++; continue; }
+      if (same(a)) { a++; continue; }
       let e = a;
-      while (e < n && e - a < 0xFFFF && !(e < orig.length && orig[e] === patched[e] && e + 1 < orig.length && orig[e + 1] === patched[e + 1])) e++;
+      while (e < n && e - a < 0xFFFF && !(same(e) && same(e + 1))) e++;
       out.push((a >> 16) & 255, (a >> 8) & 255, a & 255, ((e - a) >> 8) & 255, (e - a) & 255);
       for (let i = a; i < e; i++) out.push(patched[i]);
       a = e;

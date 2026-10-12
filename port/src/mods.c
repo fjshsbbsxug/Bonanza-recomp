@@ -700,6 +700,16 @@ size_t mods_apply(const uint8_t *rom, size_t size, uint8_t *out, size_t cap)
     }
     free(tmp);
     if (n & 1) out[n++] = 0xFF;
+    /* several mods may each have set the header for their own changes: the ROM end and
+     * checksum (the game checks it at boot) are made right for all of them together */
+    if (applied && n >= 0x200) {
+        uint32_t end = (uint32_t)n - 1;
+        uint16_t sum = 0;
+        out[0x1A4] = (uint8_t)(end >> 24); out[0x1A5] = (uint8_t)(end >> 16);
+        out[0x1A6] = (uint8_t)(end >> 8); out[0x1A7] = (uint8_t)end;
+        for (size_t a = 0x200; a + 1 < n; a += 2) sum = (uint16_t)(sum + (out[a] << 8 | out[a + 1]));
+        out[0x18E] = (uint8_t)(sum >> 8); out[0x18F] = (uint8_t)sum;
+    }
     /* code the mods changed is interpreted */
     int code = 0;
     for (size_t a = 0; a < size && a < n; a++)
