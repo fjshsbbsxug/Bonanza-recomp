@@ -82,14 +82,15 @@ builder/      the HTML builder page
   * *Patrol Return* (option): a guard leaving the 4:3 picture is put back at its post
     by the game at once (sub_14232; posts at $9108/$9154). In the wider picture a copy
     of it is shown hurrying back there (3x walking speed, with the walk cycle it was
-    last seen with), opening the doors it passes.
+    last seen with; a knocked-down guard gets up first), opening the doors it passes
+    and shutting them right behind it.
     Like everything above this only reads the game's memory, so the game plays exactly
     as the original.
   * In a 1-player game the top of the screen shows the floor above Robo, following
     his camera, instead of the "press 2P start" panel (option: Top (1P)). It is
     drawn from the level map, so it stays correct while he walks up or down stairs.
-    It never goes above the top floor: where the floor above is only roof and sky,
-    the top of the screen shows Robo's own floor, characters included.
+    It never goes above the top floor: it stops before showing a floor that is only
+    roof and sky, so on the top floor it stays still on that floor.
   * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
     plus brightness, contrast, saturation and hue.
   * Player characters: separate shirt, pants and skin-tone colours for Robo and Mobo.

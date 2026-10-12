@@ -925,19 +925,21 @@ void vdp_render_line(int y)
     /* the backdrop repeats every 256 pixels; also on lines that show only sky (above a
      * roof), which is what plane B to the right of the backdrop must never show */
     if (room_above) {
-        /* Never above the top floor: where the floor above is (almost) only sky, the
-         * top view shows player 1's own floor instead, copying player 1's lines from
-         * the previous frame's picture (with the characters). Decided once a frame. */
-        static int own_floor;
+        /* Never above the top floor: the top view follows player 1's camera one floor
+         * up, but stops before its upper part would show a floor band (80 lines) that
+         * is (almost) only roof and sky - so on the top floor it stays still on that
+         * floor, drawn from the map. Decided once a frame, with some slack. */
+        static int top, stay_band = -1, stay;
         if (y == VIEW_TOP_Y0) {
-            int sky = map_blank_percent(bottom_view.hsA - m, bottom_view.vsA - VIEW_H, width + 2 * m);
-            own_floor = own_floor ? sky > 55 : sky > 75;
+            top = bottom_view.vsA - VIEW_H;
+            int band = (top >= 0 ? top : top - (VIEW_H - 1)) / VIEW_H * VIEW_H;
+            int sky = map_blank_percent(bottom_view.hsA - m, band, width + 2 * m);
+            stay = band == stay_band && stay ? sky > 55 : sky > 75;
+            stay_band = band;
+            if (stay && top < band + VIEW_H)
+                top = band + VIEW_H < bottom_view.vsA ? band + VIEW_H : bottom_view.vsA;
         }
-        room_above_wy = bottom_view.vsA - VIEW_H;
-        if (own_floor) {
-            memcpy(fb, vdp.fbmd[VIEW_BOT_Y0 + (y - VIEW_TOP_Y0)], sizeof(vdp.fbmd[0]));
-            return;
-        }
+        room_above_wy = top;
     }
     wrap_margins = m && playing && in_view && (room_view || map_view);
     draw_plane(b, y, width, m, 1);

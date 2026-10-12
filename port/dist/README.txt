@@ -41,15 +41,14 @@ button or the MENU button (top left) on Android.
                instead of stretching the picture.
   Top (1P)     In a 1-player game the top of the screen shows the floor above
                Robo (follows his camera) instead of the "press 2P start" panel.
-               On the top floor, where above is only roof and sky, it shows
-               Robo's own floor.
+               It never moves above the top floor: there it stays still.
                Guards there only appear once the game puts them on screen.
   Cutscenes    Widescreen only: show title/story/stage intros 4:3 with black bars
                (game over and time-up screens stay wide), or keep them wide.
   Patrol Return  Widescreen only. The game sends a guard that leaves the 4:3
                picture straight back to its post. On: in the wider picture you see
-               it hurry back there (three times walking speed), opening the doors
-               on its way, and guards you have not met yet stand at their posts. Off: they vanish at the edge of the 4:3 picture, as in the
+               it get up and hurry back there (three times walking speed), opening
+               and shutting the doors on its way, and guards you have not met yet stand at their posts. Off: they vanish at the edge of the 4:3 picture, as in the
                original. Either way the game itself plays exactly as the original.
   Scaling      Sharp pixels or smooth.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
