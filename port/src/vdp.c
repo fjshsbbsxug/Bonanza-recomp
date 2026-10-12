@@ -856,6 +856,23 @@ void vdp_render_line(int y)
     if (y == 0)   /* objects beside the picture (also keeps its snapshots up to date) */
         wobj_count = wobj_build(m && playing ? m : 0, width, settings.patrol_return,
                                 wobj_list, (int)(sizeof(wobj_list) / sizeof(wobj_list[0])));
+    if (y == 0 && wobj_count) {
+        /* drop pieces the game's own sprite table already shows */
+        int h40 = width == 320, n = 0;
+        uint32_t sat = (vdp.reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
+        for (int i = 0; i < wobj_count; i++) {
+            const wobj_sprite *w = &wobj_list[i];
+            int dup = 0, link = 0, count = 0;
+            do {
+                const uint8_t *e = &vdp.vram[(sat + link * 8) & 0xFFFF];
+                link = e[3] & 0x7F;
+                if ((((e[0] << 8) | e[1]) & 0x3FF) - 128 == w->y && (((e[6] << 8) | e[7]) & 0x1FF) - 128 == w->x &&
+                    ((e[4] << 8) | e[5]) == w->attr) { dup = 1; break; }
+            } while (link && ++count < 80);
+            if (!dup) wobj_list[n++] = *w;
+        }
+        wobj_count = n;
+    }
     if (y == 0) {
         static int wlog = -1;
         if (wlog < 0) wlog = getenv("WOBJLOG") != NULL;

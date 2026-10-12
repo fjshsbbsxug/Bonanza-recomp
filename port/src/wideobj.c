@@ -311,8 +311,9 @@ int wobj_build(int margin, int width, int patrol_return, wobj_sprite *list, int 
     }
     cur = (cur + 1) % 3;
     take_snapshot(&snaps[cur]);
-    /* what is on screen now was built from the previous snapshot */
-    const snap_t *s = &snaps[(cur + 2) % 3], *older = &snaps[(cur + 1) % 3];
+    /* the sprite table on screen matches this snapshot (or, around a change, the one
+     * before it) */
+    const snap_t *s = &snaps[cur], *older = &snaps[(cur + 2) % 3];
     out_list = list; out_n = 0; out_max = max;
     if (!margin || !s->valid || !older->valid)
         return 0;
@@ -328,7 +329,9 @@ int wobj_build(int margin, int width, int patrol_return, wobj_sprite *list, int 
         for (int pass = 2; pass >= 1; pass--)
             for (int i = 0; i < NOBJ; i++) {
                 const obj_t *b = &s->o[i];
-                if (b->st != pass || (b->vis & (1 << v)) || !b->frame || guards[i].ghost) continue;
+                /* hidden in either of the last two snapshots: the sprite table on screen
+                 * may come from either (pieces it already has are dropped by the renderer) */
+                if (b->st != pass || ((b->vis & older->o[i].vis) & (1 << v)) || !b->frame || guards[i].ghost) continue;
                 if (!in_range(s, v, b->x, b->y, b->z, b->w, b->h, extra)) continue;
                 emit_frame(s, v, b->frame, b->x, b->y, b->z, b->flip != 0, b->attr, 0, width);
             }
