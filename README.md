@@ -70,10 +70,21 @@ builder/      the HTML builder page
     around the camera there, so the extra columns come straight from the level map in
     ROM (map $FF1838, metatiles $FF183C, width $FF2CCC, cameras $FF1844/$FF1846 and
     $FF2288/$FF228A, floor rows $FF187A/$FF22BE). Each frame the map is checked against
-    what the game drew; outside the building the city backdrop shows. Cutscenes and the
-    title are shown 4:3 (option), game over / time-up screens stay wide.
+    what the game drew (allowing for the floor number changing a few frames before the
+    scroll on stairs); outside the building the backdrop shows. Columns that video
+    memory still holds are taken from there. Cutscenes and the title are shown 4:3
+    (option), game over / time-up screens stay wide.
+  * The game only turns objects within 144 pixels of a view's centre into sprites
+    (sub_058B4), so in widescreen the renderer builds the missing ones itself from the
+    object tables ($2EF6.. state, $304E x, $30FA y, $3252 frame, frames in tbl_24B80),
+    the way sub_059C6 does: props, levers, presses and trap doors stay visible.
+  * *Patrol Return* (option): a guard leaving the 4:3 picture is put back at its post
+    by the game at once (sub_14232; posts at $9108/$9154). In the wider picture a copy
+    of it is shown walking back there, using the walk cycle it was last seen with.
+    Like everything above this only reads the game's memory, so the game plays exactly
+    as the original.
   * In a 1-player game the top of the screen shows the floor above Robo, following
-    his camera, instead of the "press 2P start" panel (option: Top (1 player)). It is
+    his camera, instead of the "press 2P start" panel (option: Top (1P)). It is
     drawn from the level map, so it stays correct while he walks up or down stairs.
   * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
     plus brightness, contrast, saturation and hue.

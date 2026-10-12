@@ -88,6 +88,8 @@ int main(int argc, char **argv)
     const char *dumpvdp = NULL;
     struct { int frame; char path[256]; } shots[64];
     struct { int frame, pad; uint8_t b; } inputs[256];
+    struct { int frame; unsigned addr, val; } pokes[64];
+    int npokes = 0;
     int nshots = 0, ninputs = 0;
     const char *wav = NULL;
     md.use_recomp = 1;
@@ -121,6 +123,10 @@ int main(int argc, char **argv)
             shots[nshots].frame = atoi(argv[i]);
             snprintf(shots[nshots].path, sizeof(shots[nshots].path), "%s", c + 1);
             nshots++;
+        } else if (!strcmp(argv[i], "--poke") && i + 1 < argc && npokes < 64) {
+            /* --poke FRAME:ADDR:WORD (hex address/value in 68k RAM), for tests */
+            if (sscanf(argv[++i], "%d:%x:%x", &pokes[npokes].frame, &pokes[npokes].addr, &pokes[npokes].val) == 3)
+                npokes++;
         } else if (!strcmp(argv[i], "--input") && i + 1 < argc && ninputs < 256) {
             int fr, pad; char btn[32] = "";
             if (sscanf(argv[++i], "%d:%d:%31s", &fr, &pad, btn) >= 2) {
@@ -144,6 +150,11 @@ int main(int argc, char **argv)
         for (int k = 0; k < ninputs; k++)
             if (inputs[k].frame == fr)
                 md.pad[inputs[k].pad & 1] = inputs[k].b;
+        for (int k = 0; k < npokes; k++)
+            if (pokes[k].frame == fr) {
+                md.ram[pokes[k].addr & 0xFFFE] = pokes[k].val >> 8;
+                md.ram[(pokes[k].addr & 0xFFFE) + 1] = pokes[k].val;
+            }
         md_run_frame();
         int16_t abuf[4096 * 2];
         int got;

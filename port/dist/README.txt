@@ -39,11 +39,16 @@ button or the MENU button (top left) on Android.
   Screen       Original 4:3, Widescreen 16:9 / 16:10, Ultrawide 21:9, or Stretch.
                The widescreen modes show more of the level on the left and right
                instead of stretching the picture.
-  Top (1 player)  In a 1-player game the top of the screen shows the floor above
+  Top (1P)     In a 1-player game the top of the screen shows the floor above
                Robo (follows his camera) instead of the "press 2P start" panel.
                Guards there only appear once the game puts them on screen.
   Cutscenes    Widescreen only: show title/story/stage intros 4:3 with black bars
                (game over and time-up screens stay wide), or keep them wide.
+  Patrol Return  Widescreen only. The game sends a guard that leaves the 4:3
+               picture straight back to its post. On: in the wider picture you see
+               it walk back there, and guards you have not met yet stand at their
+               posts. Off: they vanish at the edge of the 4:3 picture, as in the
+               original. Either way the game itself plays exactly as the original.
   Scaling      Sharp pixels or smooth.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
                Inverted.
@@ -58,6 +63,7 @@ Settings are saved in bonanza.ini (next to the program if a bonanza.ini is there
 otherwise in your user data folder). It is a plain text file, e.g.
 
     screen = 16:9
+    guards = return         # Patrol Return on ("original" = off)
     colors = vivid
     robo.shirt = 20B040     # player 1 shirt
     mobo.skin = 8D5524      # player 2 skin tone ("original" = unchanged)

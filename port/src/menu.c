@@ -99,11 +99,11 @@ static void slider(uint32_t *buf, int x, int y, int v, int lo, int hi, int selec
 /* ------------------------------------------------------------ items */
 
 enum {
-    IT_RESUME, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
+    IT_RESUME, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
     IT_CHARS, IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
 };
 static const char *item_label[IT_COUNT] = {
-    "Resume", "Screen", "Top (1 player)", "Cutscenes", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
+    "Resume", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
     "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
@@ -182,6 +182,7 @@ static int adjust_main(int item, int dir)
     case IT_SCALING: settings.smooth = !settings.smooth; break;
     case IT_UPPER: settings.show_2p_panel = !settings.show_2p_panel; break;
     case IT_CUTSCENES: settings.crop_cutscenes = !settings.crop_cutscenes; break;
+    case IT_GUARDS: settings.patrol_return = !settings.patrol_return; break;
     case IT_COLORS: settings.preset = (settings.preset + dir + PRESET_COUNT) % PRESET_COUNT; break;
     case IT_BRIGHT: settings.brightness = clampi(settings.brightness + dir * 5, -100, 100); break;
     case IT_CONTRAST: settings.contrast = clampi(settings.contrast + dir * 5, -100, 100); break;
@@ -403,6 +404,9 @@ void menu_draw(uint32_t *buf)
                 break;
             case IT_CUTSCENES:
                 text(buf, VALUE_X - 16, y, settings.crop_cutscenes ? "< 4:3 >" : "< Wide >", C_TEXT);
+                break;
+            case IT_GUARDS:
+                text(buf, VALUE_X - 16, y, settings.patrol_return ? "< On >" : "< Off >", C_TEXT);
                 break;
             case IT_COLORS:
                 snprintf(t, sizeof(t), "< %s >", settings_preset_name(settings.preset));

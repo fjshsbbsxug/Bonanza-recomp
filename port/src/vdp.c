@@ -3,6 +3,7 @@
 #include "vdp.h"
 #include "md.h"
 #include "settings.h"
+#include "wideobj.h"
 
 vdp_t vdp;
 
@@ -267,6 +268,8 @@ static int wrap_margins;               /* widescreen: repeat the 4:3 picture's c
  * at world position (map_camx + x, map_wy) - only outside the real screen (map_all = 0)
  * or everywhere (map_all = 1, the room-above view). Outside the building: transparent. */
 static int map_on, map_all, map_camx, map_wy;
+static const uint8_t *map_vcol;   /* columns where video memory is valid (or NULL) */
+static int map_vcol0;
 static uint16_t map_entry(int wx, int wy);
 
 static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
@@ -309,6 +312,13 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
         }
         if (map_on && !plane_b && (map_all || x < 0 || x >= width)) {
             int wx = map_camx + x;
+            if (map_vcol) {
+                int i = (wx >> 3) - map_vcol0;
+                if (i >= 0 && i < VDP_FB_W / 8 + 2 && map_vcol[i]) {
+                    out[x + m] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
+                    continue;
+                }
+            }
             uint16_t me = map_entry(wx, map_wy);
             out[x + m] = me == 0xFFFF ? 0 : (uint8_t)tile_pixel(me, wx & 7, map_wy & 7);
             continue;
@@ -491,6 +501,9 @@ static int char_part(int ch, int c, int row, int lx, const char_info *ci)
     return 0;
 }
 
+static wobj_sprite wobj_list[256];
+static int wobj_count;
+
 static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
 {
     int h40 = width == 320;
@@ -543,7 +556,28 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
         }
     } while (link && ++count < max_sprites);
 done:
-    return;
+    /* widescreen: objects the game does not draw beside the 4:3 picture (wideobj.c),
+     * below the real sprites */
+    for (int i = 0; i < wobj_count; i++) {
+        const wobj_sprite *w = &wobj_list[i];
+        int row = y - w->y;
+        if (y < w->ymin || y >= w->ymax || row < 0 || row >= w->vsz * 8)
+            continue;
+        int cy = row >> 3, py = row & 7;
+        if (w->attr & 0x1000) { cy = w->vsz - 1 - cy; py = 7 - py; }
+        for (int cx = 0; cx < w->hsz; cx++) {
+            int tcx = (w->attr & 0x0800) ? w->hsz - 1 - cx : cx;
+            uint16_t e = (uint16_t)((w->attr & 0xE800) | ((w->attr + tcx * w->vsz + cy) & 0x07FF));
+            for (int px = 0; px < 8; px++) {
+                int x = w->x + cx * 8 + px;
+                if (x < -m || x >= width + m || (out[x + m] & 0x0F))
+                    continue;
+                if (w->only_outside && x >= 0 && x < width)
+                    continue;
+                out[x + m] = (uint8_t)tile_pixel(e, px, py);
+            }
+        }
+    }
 }
 
 static int margin40, margin32;
@@ -654,7 +688,18 @@ static void hud_entries(uint16_t *out, int width)
     }
 }
 
-typedef struct { int ok; uint32_t frame; int camx, wy0; } view_map;
+typedef struct {
+    int ok;              /* the map matches this view (recently) */
+    uint32_t frame;      /* frame (+1) of the last check */
+    uint32_t good_frame; /* frame (+1) of the last successful check */
+    int dwy;             /* correction to the camera's world y (see view_check) */
+    int camx, wy0;
+    /* side areas: tile columns (world column vcol0 + i) for which video memory really
+     * holds this part of the level. The game keeps a few columns beyond the screen;
+     * they also show what the map cannot: opened trap doors, levers, presses... */
+    int vcol0;
+    uint8_t vcol[VDP_FB_W / 8 + 2];
+} view_map;
 static view_map views[2];   /* 0 = player 1 (bottom), 1 = player 2 (top) */
 
 /* camera of a view on this line (from the scroll registers, made whole with RAM) */
@@ -678,17 +723,86 @@ static int view_matches_map(int y, int camx, int wy, int width)
         extern int line_hscroll_pub(int y, int plane_b);
         hs = line_hscroll_pub(y, 0);
     }
-    int good = 0, tested = 0;
+    int good = 0, tested = 0, inside = 0, inside_good = 0;
     for (int x = 4; x < width; x += 16) {
         uint16_t me = map_entry(camx + x, wy);
-        if (me == 0xFFFF) continue;
         int px = (x - hs) & (pw * 8 - 1), py = (y + vs) & (ph * 8 - 1);
         uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
         uint16_t ve = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
         tested++;
-        good += ve == me;
+        if (me == 0xFFFF) {
+            /* outside the building: the game shows an empty tile there */
+            const uint8_t *t = &vdp.vram[(ve & 0x07FF) << 5];
+            int blank = 1;
+            for (int i = 0; i < 32 && blank; i++) blank = !t[i];
+            good += blank;
+        } else {
+            inside++;
+            inside_good += ve == me;
+            good += ve == me;
+        }
     }
-    return tested >= 8 && good * 4 >= tested * 3;
+    return inside >= 4 && inside_good * 4 >= inside * 3 && good * 4 >= tested * 3;
+}
+
+int line_hscroll_pub(int y, int plane_b);
+
+static uint16_t plane_a_entry(int x, int y)
+{
+    static const int sizes[4] = {32, 64, 32, 128};
+    int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
+    uint32_t name = (vdp.reg[2] & 0x38) << 10;
+    int px = (x - line_hscroll_pub(y, 0)) & (pw * 8 - 1), py = (y + vdp.vsram[0]) & (ph * 8 - 1);
+    uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
+    return (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
+}
+
+static void view_valid_columns(view_map *v, int y0, int camx, int wy0, int width)
+{
+    int m = vdp_margin();
+    v->vcol0 = (camx - m) >> 3;
+    int n = ((camx + width + m) >> 3) - v->vcol0 + 1;
+    if (n > (int)sizeof(v->vcol)) n = sizeof(v->vcol);
+    for (int i = 0; i < n; i++) {
+        int x = ((v->vcol0 + i) << 3) - camx + 4, inside = 0, same = 0;
+        if (x >= 0 && x < width) { v->vcol[i] = 1; continue; }
+        for (int k = 4; k < VIEW_H; k += 8) {
+            uint16_t me = map_entry(camx + x, wy0 + k);
+            if (me == 0xFFFF) continue;
+            inside++;
+            same += plane_a_entry(x, y0 + k) == me;
+        }
+        v->vcol[i] = inside >= 3 && same * 10 >= inside * 6;
+    }
+    for (int i = n; i < (int)sizeof(v->vcol); i++)
+        v->vcol[i] = 0;
+}
+
+/* Check a whole view against the map, once per frame, at its first line. While the
+ * camera moves to another floor the game updates its floor number a few frames before
+ * (or after) the scroll registers, so the floor above and below are tried as well. */
+static void view_check(view_map *v, int y0, int camx, int wy0, int width)
+{
+    static const int tries[3] = {0, -80, 80};
+    int order[3] = {v->dwy, 0, 0}, n = 1;
+    for (int i = 0; i < 3; i++)
+        if (tries[i] != v->dwy) order[n++] = tries[i];
+    v->frame = md.frame + 1;
+    for (int i = 0; i < 3; i++) {
+        int d = order[i], good = 0;
+        for (int k = 8; k < VIEW_H; k += 24)   /* lines 8, 32, 56 */
+            good += view_matches_map(y0 + k, camx, wy0 + d + k, width);
+        if (good >= 2) {
+            v->dwy = d;
+            v->good_frame = md.frame + 1;
+            v->ok = 1;
+            return;
+        }
+    }
+    /* a frame or two without a match (a door being redrawn...) keeps the map */
+    v->ok = md.frame + 1 - v->good_frame < 8;
+    if (v->ok)
+        view_valid_columns(v, y0, camx, wy0 + v->dwy, width);
 }
 
 static int line_opaque(const uint8_t *buf, int m, int width)
@@ -739,16 +853,28 @@ void vdp_render_line(int y)
     int playing = views[0].ok && (views[0].frame == md.frame || views[0].frame == md.frame + 1);
     if (y == 0 && !level_load())
         views[0].ok = views[1].ok = 0;
+    if (y == 0)   /* objects beside the picture (also keeps its snapshots up to date) */
+        wobj_count = wobj_build(m && playing ? m : 0, width, settings.patrol_return,
+                                wobj_list, (int)(sizeof(wobj_list) / sizeof(wobj_list[0])));
+    if (y == 0) {
+        static int wlog = -1;
+        if (wlog < 0) wlog = getenv("WOBJLOG") != NULL;
+        if (wlog && wobj_count) {
+            fprintf(stderr, "wobj %u:", md.frame);
+            for (int i = 0; i < wobj_count; i++)
+                fprintf(stderr, " (%d,%d %04x%s)", wobj_list[i].x, wobj_list[i].y, wobj_list[i].attr, wobj_list[i].only_outside ? " g" : "");
+            fprintf(stderr, "\n");
+        }
+    }
     int vi = in_bot ? 0 : 1;
     int camx = 0, wy0 = 0, map_view = 0;
     if (in_view && level.w) {
         view_camera(vi, in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0, line_hscroll(y, 0), vdp.vsram[0], &camx, &wy0);
-        int wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
-        if (y == (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0) + 40) {
+        if (y == (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0)) {
             /* once per frame and view: check the map against what the game drew */
-            views[vi].ok = view_matches_map(y, camx, wy, width);
-            views[vi].frame = md.frame + 1;
+            view_check(&views[vi], y, camx, wy0, width);
         }
+        wy0 += views[vi].dwy;
         map_view = views[vi].ok && (views[vi].frame == md.frame || views[vi].frame == md.frame + 1);
         if (in_top && y == VIEW_TOP_Y0 + 40) {
             static int vlog_top = -1;
@@ -765,17 +891,24 @@ void vdp_render_line(int y)
             static int vlog_view = -1;
             if (vlog_view < 0) vlog_view = getenv("VIEWLOG") != NULL;
             if (vlog_view)
-                fprintf(stderr, "view %u camx %d wy0 %d ok %d/%d\n", md.frame, camx, wy0, views[0].ok, views[1].ok);
+                fprintf(stderr, "view %u camx %d wy0 %d ok %d/%d hsB %d vsB %d\n", md.frame, camx, wy0, views[0].ok, views[1].ok, bottom_view.hsB, bottom_view.vsB);
         }
     }
     if (y == HUD_Y && m) {
+        /* the HUD (plane B) counts only if it can be seen: a cutscene drawn in plane A
+         * may leave it in video memory, hidden behind its picture */
+        uint8_t pa[VDP_FB_W];
+        draw_plane(pa, y, width, m, 0);
+        int cover = 0;
+        for (int x = m; x < m + width; x++)
+            cover += (pa[x] & 0x0F) != 0;
         uint16_t e[16];
         hud_entries(e, width);
         if (playing) {
             memcpy(hud_sig, e, sizeof(hud_sig));
             hud_sig_ok = 1;
             hud_seen_frame = md.frame + 1;
-        } else if (hud_sig_ok) {
+        } else if (hud_sig_ok && cover * 4 < width) {
             int same = 0;
             for (int k = 0; k < 16; k++) same += e[k] == hud_sig[k];
             if (same >= 10) hud_seen_frame = md.frame + 1;
@@ -786,6 +919,8 @@ void vdp_render_line(int y)
     int clamp_edges = m && (playing || hud_screen) && (!in_view || !playing);   /* extend edge colours */
     map_on = m && map_view;
     map_all = 0;
+    map_vcol = in_view ? views[vi].vcol : NULL;
+    map_vcol0 = views[vi].vcol0;
     map_camx = camx;
     map_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
     draw_plane(a, y, width, m, 0);
@@ -799,7 +934,9 @@ void vdp_render_line(int y)
         else if (m && playing)
             clamp_edges = 1;   /* original 2P panel: extend its edges */
     }
-    wrap_margins = m && playing && in_view && room_view;
+    /* the backdrop repeats every 256 pixels; also on lines that show only sky (above a
+     * roof), which is what plane B to the right of the backdrop must never show */
+    wrap_margins = m && playing && in_view && (room_view || map_view);
     draw_plane(b, y, width, m, 1);
     wrap_margins = 0;
     if (room_above) {
@@ -813,9 +950,14 @@ void vdp_render_line(int y)
         map_on = map_all = 1;
         map_camx = bottom_view.hsA;
         map_wy = bottom_view.vsA - VIEW_H + (y - VIEW_TOP_Y0);
+        map_vcol = NULL;
         draw_plane(a, y, width, m, 0);
         map_on = map_all = 0;
     }
+    /* a view whose map could not be matched: rather than whatever video memory holds
+     * beside the picture, extend its edges */
+    if (m && playing && in_view && !map_view && !room_above)
+        clamp_edges = 1;
     /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
     if ((vdp.reg[17] & 0x9F) || (vdp.reg[18] & 0x9F)) {
         draw_window(wbuf, y, width, m, win);
