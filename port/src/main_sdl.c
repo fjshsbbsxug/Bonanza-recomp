@@ -674,6 +674,47 @@ static void queue_audio(int16_t *buf, int n)
     SDL_QueueAudio(audio_dev, buf, (Uint32)n * 4);
 }
 
+/* Online games: the game sometimes has to wait a frame for the other player's buttons,
+ * then runs two at once. The sound is kept further ahead (about 0.12 s) and played very
+ * slightly faster or slower to stay there - never repeated or cut, which sounds like
+ * an echo. */
+static void queue_audio_net(const int16_t *buf, int n)
+{
+    static double pos;                   /* read position into the input, carried over */
+    static int16_t last[2];
+    Uint32 queued = SDL_GetQueuedAudioSize(audio_dev) / 4;
+    Uint32 target = (Uint32)have.freq * 120 / 1000;
+    if (queued > target * 4) {           /* far too much (after a long stall): start over */
+        SDL_ClearQueuedAudio(audio_dev);
+        queued = 0;
+    }
+    if (queued == 0) {                   /* ran dry: put some silence ahead of us */
+        static int16_t zero[2048 * 2];
+        Uint32 pad = target / 2 < 2048 ? target / 2 : 2048;
+        SDL_QueueAudio(audio_dev, zero, pad * 4);
+    }
+    double err = ((double)target - (double)queued) / (double)target;   /* + = too little */
+    if (err > 1) err = 1;
+    if (err < -1) err = -1;
+    double step = 1.0 - 0.04 * err;      /* input samples per output sample */
+    int16_t out[4096 * 2];
+    int m = 0;
+    while (pos < n && m < 4096) {
+        int i = (int)pos;
+        double f = pos - i;
+        const int16_t *a = i == 0 ? last : &buf[(i - 1) * 2], *b = &buf[i * 2];
+        out[m * 2] = (int16_t)(a[0] + (b[0] - a[0]) * f);
+        out[m * 2 + 1] = (int16_t)(a[1] + (b[1] - a[1]) * f);
+        m++;
+        pos += step;
+    }
+    pos -= n;
+    if (pos < 0) pos = 0;
+    last[0] = buf[(n - 1) * 2];
+    last[1] = buf[(n - 1) * 2 + 1];
+    SDL_QueueAudio(audio_dev, out, (Uint32)m * 4);
+}
+
 /* ---- online games (net.c): both machines run the same frames with both players' buttons */
 static int saved_floor_alert = -1;
 
@@ -733,7 +774,7 @@ static int run_net_frame(void)
     int n;
     while ((n = md_audio_take(buf, 2048)) > 0)
         if (audio_dev)
-            queue_audio(buf, n);
+            queue_audio_net(buf, n);
     net_frame_done((net_frame() + 1) % 60 == 0 ? md_state_hash() : 0);
     return 1;
 }

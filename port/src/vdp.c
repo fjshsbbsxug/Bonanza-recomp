@@ -1060,10 +1060,15 @@ void vdp_render_line(int y)
         for (int x = m + width; x < ow; x++)
             fb[x] = VDP_BLACK;
     } else if (clamp_edges) {
+        /* the edge colour; a lone different pixel at the very edge (a border's corner)
+         * is not repeated across the side area */
+        uint16_t l = fb[m], r = fb[m + width - 1];
+        if (l != fb[m + 1] && fb[m + 1] == fb[m + 2]) l = fb[m + 1];
+        if (r != fb[m + width - 2] && fb[m + width - 2] == fb[m + width - 3]) r = fb[m + width - 2];
         for (int x = 0; x < m; x++)
-            fb[x] = fb[m];
+            fb[x] = l;
         for (int x = m + width; x < ow; x++)
-            fb[x] = fb[m + width - 1];
+            fb[x] = r;
     }
     for (int x = ow; x < VDP_FB_W; x++)
         fb[x] = VDP_BLACK;

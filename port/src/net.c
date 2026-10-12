@@ -463,11 +463,20 @@ void net_poll(void)
         return;
     }
     if (state != NET_PLAYING) return;
-    /* input delay from the round trip: half of it, rounded up to frames, plus one */
-    int want = (int)((rtt_ms / 2 + 16) / 17) + 1;
-    if (want < 1) want = 1;
-    if (want > 10) want = 10;
-    delay = want;
+    /* input delay from the round trip: half of it plus some room for jitter, in frames,
+     * plus one. It goes up at once, and down only after a few calm seconds, so that the
+     * game does not keep waiting for buttons on a connection whose ping varies. */
+    static uint32_t lower_since;
+    int want = (int)((rtt_ms / 2 + 12 + 16) / 17) + 1;
+    if (want < 2) want = 2;
+    if (want > 12) want = 12;
+    if (want >= delay) {
+        delay = want;
+        lower_since = t;
+    } else if (t - lower_since > 4000) {
+        delay--;
+        lower_since = t;
+    }
     if (local_player == 0 && remote_have == 0 && t - last_send > 100)
         send_welcome();
     if (t - last_send >= 15)
