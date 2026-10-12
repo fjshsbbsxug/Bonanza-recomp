@@ -146,6 +146,14 @@ builder/      the HTML builder page
     inside, so it also works from disk) with `--play-stage ENTRY`, which presses Start
     through the title and sets the stage number. `levelcore.js` also runs in node.
     The ROM's 13 stage entries are the 10 stages plus the scenes between them (4, 8, 12).
+    Loot and gadgets can come from any stage: a borrowed treasure gets new frames (the
+    frame table, read at 0x59E4/0x5B32/0x5DB2, is copied after 0x80000 with them at its
+    end) and its tiles in VRAM 0x7A0-0x7CF, free in every stage; a gadget's animation
+    tiles (frames from its tbl_1CCBC scripts) go where they were in its own stage when
+    this stage leaves them free; colours of palette lines 1-3 are matched to the stage.
+    The stage's tile loader is wrapped by a new routine that adds those loads. Guards are
+    drawn with the frame each guard type shows first in that stage (LC.GUARD_FRAMES,
+    recorded from the game).
 
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert
   they only change the picture, so recompiled-vs-interpreted runs stay bit-identical.

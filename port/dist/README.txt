@@ -126,7 +126,8 @@ Bonanza Maker (levelmaker.html, next to the HTML builder on the project's site, 
 the BonanzaMaker zip): build your own version of any of the 10 stages in your browser.
 Pick parts from the tray - stairs, exit stairs, doors, walls and hallways taken from the
 stage itself (they always bring their walls and floor with them), guards, loot and
-gadgets, single blocks to paint - and click to place them; the eraser removes things,
+gadgets from any stage (their pictures come along; gadgets whose pictures would cover
+the stage's own are greyed out), single blocks to paint - and click to place them; the eraser removes things,
 the hand moves them or selects an area to make your own stamp, add space or remove it.
 Press Play to try the level right away, and save it as a .bbro. Open the .bbro again to
 keep building. The start position, graphics, music and time limit stay as in the

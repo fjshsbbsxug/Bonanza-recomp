@@ -333,8 +333,9 @@
     return { meta, bg: toCanvas(img), spr: new Map() };
   }
   let G = null;
-  function sprite(frame, attrOr) {
-    const key = frame + ':' + attrOr;
+  function sprite(frame, attrOr, src) {
+    const inf = src && src !== st ? LC.info(rom, src) : info;
+    const key = frame + ':' + attrOr + ':' + (src || st);
     if (G.spr.has(key)) return G.spr.get(key);
     const pieces = LC.spritePieces(rom, frame);
     let res = null;
@@ -349,7 +350,7 @@
           for (let cx = 0; cx < p.w; cx++)
             for (let cy = 0; cy < p.h; cy++) {
               const ccx = hf ? p.w - 1 - cx : cx, ccy = vf ? p.h - 1 - cy : cy;
-              cellTo(img, info, p.dx - x0 + ccx * 8, p.dy - y0 + ccy * 8, (a & 0x7FF) + cx * p.h + cy, (a >> 13) & 3, hf, vf, w);
+              cellTo(img, inf, p.dx - x0 + ccx * 8, p.dy - y0 + ccy * 8, (a & 0x7FF) + cx * p.h + cy, (a >> 13) & 3, hf, vf, w);
             }
         }
         res = { canvas: toCanvas(img), ox: x0, oy: y0 };
@@ -443,15 +444,42 @@
         box.appendChild(partCard('Stamp ' + (k + 1), cx => fit(cx, pic, pic.width, pic.height), { type: 'stamp', clip: s, name: 'your stamp' }));
       });
     } else if (t === 'guards') {
-      info.guardPresets.forEach(g => box.appendChild(partCard('Guard ' + g.template + (g.z ? ' (back)' : ''), cx => guardIcon(cx, g.attr),
-                                                             Object.assign({ type: 'guard' }, g))));
-    } else if (t === 'loot' || t === 'gadgets') {
-      info.itemPresets.filter(o => (o.kind === LC.KIND.TREASURE) === (t === 'loot')).forEach(o => {
-        const s = sprite(o.frame, o.attr || 0);
-        box.appendChild(partCard(LC.KIND_NAMES[o.kind] || 'Gadget', cx => { if (s) fit(cx, s.canvas, s.canvas.width, s.canvas.height); },
-                                 Object.assign({ type: 'item' }, o)));
+      info.guardPresets.forEach(g => {
+        const s = sprite(LC.guardFrame(st, g.template), g.attr || 0);
+        box.appendChild(partCard('Guard ' + g.template + (g.z ? ' (back)' : ''),
+                                 cx => s ? fit(cx, s.canvas, s.canvas.width, s.canvas.height) : guardIcon(cx, g.attr),
+                                 Object.assign({ type: 'guard' }, g)));
       });
-      if (!box.children.length) box.innerHTML = '<p class="muted" style="margin:8px">This stage has none of these.</p>';
+    } else if (t === 'loot' || t === 'gadgets') {
+      /* this stage's own first, then everything from the other stages */
+      const all = LC.allItemPresets(rom).filter(o => (o.kind === LC.KIND.TREASURE) === (t === 'loot'));
+      all.sort((a, b) => (a.src === st ? 0 : 1) - (b.src === st ? 0 : 1) || LC.stageNumber(a.src) - LC.stageNumber(b.src));
+      let lastHome = null;
+      for (const o of all) {
+        const home = o.src === st;
+        if (home !== lastHome) {
+          const h = document.createElement('div');
+          h.className = 'muted';
+          h.style.cssText = 'flex:none;writing-mode:vertical-rl;transform:rotate(180deg);font-weight:600';
+          h.textContent = home ? 'This stage' : 'Other stages';
+          box.appendChild(h);
+          lastHome = home;
+        }
+        const use = LC.itemUse(rom, st, o);
+        const s = sprite(o.frame, o.attr || 0, o.src);
+        const label = (LC.KIND_NAMES[o.kind] || 'Gadget') + (home ? '' : ' \u00b7 St ' + LC.stageNumber(o.src));
+        const card = partCard(label, cx => { if (s) fit(cx, s.canvas, s.canvas.width, s.canvas.height); },
+                              Object.assign({ type: 'item' }, o, { src: home ? undefined : o.src }));
+        if (use.mode === 'none') {
+          card.disabled = true;
+          card.style.opacity = .4;
+          card.title = 'Its pictures would cover this stage\'s own, so it cannot be used here.';
+        } else if (use.mode !== 'own') {
+          card.title = o.kind === LC.KIND.TREASURE ? 'Brought over from stage ' + LC.stageNumber(o.src) + ' (room for about 10 kinds)'
+                     : 'Brought over from stage ' + LC.stageNumber(o.src) + ' (colours matched to this stage)';
+        }
+        box.appendChild(card);
+      }
     } else if (t === 'paint') {
       info.meta.forEach((m, i) => {
         const b = document.createElement('button');
@@ -494,8 +522,9 @@
   let dirty = true;
   function objBox(o, isGuard) {
     const ox = o.x - 32, oy = o.y - o.z - 32;
-    if (!isGuard && o.frame) {
-      const s = sprite(o.frame, o.attr || 0);
+    const frame = isGuard ? LC.guardFrame(st, o.template) : o.frame;
+    if (frame) {
+      const s = sprite(frame, o.attr || 0, isGuard ? 0 : o.src);
       if (s) return { x: ox + s.ox, y: oy + s.oy, w: s.canvas.width, h: s.canvas.height, s };
     }
     return { x: ox - 10, y: oy - 14, w: 20, h: 26, s: null };   /* a guard's size around its origin */
@@ -547,10 +576,12 @@
   }
   function drawGuard(b, attr, alpha) {
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = attr & 0x6000 ? '#ffaa28' : '#508cff';
-    ctx.fillRect(b.x + 4, b.y + 8, b.w - 8, b.h - 8);
-    ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y + 5, 5, 0, 7); ctx.fill();
-    ctx.fillStyle = '#1d1b22'; ctx.fillRect(b.x + 5, b.y, b.w - 10, 3);
+    if (b.s) ctx.drawImage(b.s.canvas, b.x, b.y);
+    else {
+      ctx.fillStyle = attr & 0x6000 ? '#ffaa28' : '#508cff';
+      ctx.fillRect(b.x + 4, b.y + 8, b.w - 8, b.h - 8);
+      ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y + 5, 5, 0, 7); ctx.fill();
+    }
     ctx.globalAlpha = 1;
   }
   function drawObjects() {
@@ -558,7 +589,6 @@
       const b = objBox(o, false);
       if (b.s) ctx.drawImage(b.s.canvas, b.x, b.y);
       if (o.kind === LC.KIND.TREASURE) tag(b, '$', '#ffd12a');
-      else if (o.kind !== LC.KIND.DOOR) tag(b, LC.KIND_NAMES[o.kind] || 'gadget', '#8fd0ff');
       if (o === selObj) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(b.x - 1.5, b.y - 1.5, b.w + 3, b.h + 3); }
     }
     for (const o of level.guards) {
@@ -639,7 +669,8 @@
 
   function newObject(p) {
     const o = { x: Math.round(p.x) + 32, y: 80 * p.f + part.yoff, z: part.z, frame: part.frame, beh: part.beh, dir: part.dir, attr: part.attr };
-    if (part.type === 'guard') o.template = part.template; else o.kind = part.kind;
+    if (part.type === 'guard') o.template = part.template;
+    else { o.kind = part.kind; if (part.src) o.src = part.src; }
     return o;
   }
   function hallway() { return stamps.find(s => s.id === 'hall0') || stamps.find(s => s.id === 'wall'); }
@@ -779,7 +810,7 @@
     const res = LC.resolveItems(level);
     $('counts').textContent = `${level.W} blocks wide, ${level.floors} floors · ${level.guards.length}/32 guards · ` +
       `${res.treasures} treasures · ${res.doors.length}/16 doors · ${res.items.length}/32 items`;
-    $('problems').innerHTML = res.problems.map(p => `<li class="bad">${p}</li>`).join('');
+    $('problems').innerHTML = res.problems.concat(LC.borrowProblems(rom, level)).map(p => `<li class="bad">${p}</li>`).join('');
     return res;
   }
 

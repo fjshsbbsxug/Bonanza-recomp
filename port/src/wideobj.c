@@ -30,7 +30,14 @@
 #include "settings.h"
 
 #define NOBJ 0x56
-#define FRAMES_TBL 0x24B80
+#define FRAMES_TBL frames_tbl()
+/* the sprite frame table (0x24B80); a mod may move it (the game reads it with
+ * lea (table).l,a6 at 0x59E4) */
+static uint32_t frames_tbl(void)
+{
+    uint32_t a = (uint32_t)md.rom[0x59E6] << 24 | md.rom[0x59E7] << 16 | md.rom[0x59E8] << 8 | md.rom[0x59E9];
+    return a < md.rom_size ? a : 0x24B80;
+}
 #define FIRST_GUARD 6
 
 static int16_t r16(uint32_t a) { return (int16_t)((md.ram[a & 0xFFFF] << 8) | md.ram[(a + 1) & 0xFFFF]); }
