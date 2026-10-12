@@ -35,6 +35,7 @@ typedef struct {
     int patrol_return;       /* widescreen: guards leaving the 4:3 picture walk back to their posts */
     int floor_alert;         /* game change: FLOOR_ALERT_* */
     char join_address[64];   /* online: last address joined */
+    char mods[1024];         /* enabled mods (file names in the mods folder), in order, '|' between */
     int preset;              /* PRESET_* */
     int brightness;          /* -100..100 */
     int contrast;            /* -100..100 */

@@ -6,6 +6,8 @@
  * buttons: any of U D L R A B C S (S = Start). An input entry stays active until the next one
  * for the same pad.
  *
+ * Mods: --mods-dir DIR --set "mods=a.bbro|b.bbro" applies those mods from DIR.
+ *
  * Online testing: --net-host PORT / --net-join ADDR play a lockstep game against another
  * runner (only this player's --input entries are used; frames count from the start of the
  * online game). --player N renders player N's screen as in an online game.
@@ -17,6 +19,7 @@
 #include "vdp.h"
 #include "settings.h"
 #include "net.h"
+#include "mods.h"
 #ifdef _WIN32
 #include <windows.h>
 static void nap(void) { Sleep(1); }
@@ -140,6 +143,8 @@ int main(int argc, char **argv)
             /* --poke FRAME:ADDR:WORD (hex address/value in 68k RAM), for tests */
             if (sscanf(argv[++i], "%d:%x:%x", &pokes[npokes].frame, &pokes[npokes].addr, &pokes[npokes].val) == 3)
                 npokes++;
+        } else if (!strcmp(argv[i], "--mods-dir") && i + 1 < argc) {
+            mods_add_dir(argv[++i]);     /* with --set mods=NAME.bbro */
         } else if (!strcmp(argv[i], "--player") && i + 1 < argc) {
             vdp_local_player = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--net-host") && i + 1 < argc) {
@@ -164,6 +169,16 @@ int main(int argc, char **argv)
         if (wf) wav_header(wf, 48000, 0);
     }
     md_audio_set_rate(48000);
+    if (mods_main_dir()[0]) {
+        static uint8_t modded[0x400000];
+        mods_scan();
+        size_t mn = mods_apply(buf, n, modded, sizeof(modded));
+        md_load_rom(modded, mn);
+        for (int k = 0; k < mods_count(); k++)
+            fprintf(stderr, "mod %s: %s%s%s\n", mods_get(k)->file, mods_get(k)->name,
+                    mods_get(k)->enabled ? " (on)" : "", mods_get(k)->error);
+        fprintf(stderr, "mods: %s\n", mods_status());
+    }
     int online = net_host_port || net_join_addr;
     if (online) {
         if (!(net_host_port ? net_host(atoi(net_host_port)) : net_join(net_join_addr))) {

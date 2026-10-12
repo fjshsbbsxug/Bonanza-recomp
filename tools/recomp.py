@@ -405,6 +405,7 @@ class Gen:
         for a in self.tr.ins:
             bitmap[a >> 4] |= 1 << ((a >> 1) & 7)
         L = list(hdr)
+        L.insert(2, "#include <string.h>")
         for s, e, name in index:
             L.append("void %s(void);" % name)
         L.append("")
@@ -418,20 +419,42 @@ class Gen:
             L.append("\t" + ",".join(str(b) for b in bitmap[k:k + 32]) + ",")
         L.append("};")
         L.append("""
-recomp_fn recomp_find(uint32_t pc)
+/* chunks whose code a mod has changed: the interpreter runs those */
+static unsigned char chunk_off[%d];
+
+static int chunk_of(uint32_t pc)
 {
-    if (pc >= %d || !(entry_bitmap[pc >> 4] & (1 << ((pc >> 1) & 7))))
-        return 0;
     int lo = 0, hi = %d - 1;
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
         if (pc < chunks[mid].start) hi = mid - 1;
         else if (pc >= chunks[mid].end) lo = mid + 1;
-        else return chunks[mid].fn;
+        else return mid;
     }
-    return 0;
+    return -1;
 }
-""" % (n, len(index)))
+
+recomp_fn recomp_find(uint32_t pc)
+{
+    if (pc >= %d || !(entry_bitmap[pc >> 4] & (1 << ((pc >> 1) & 7))))
+        return 0;
+    int c = chunk_of(pc);
+    return c >= 0 && !chunk_off[c] ? chunks[c].fn : 0;
+}
+
+int recomp_invalidate(uint32_t addr)
+{
+    int c = chunk_of(addr);
+    if (c < 0) return 0;
+    chunk_off[c] = 1;
+    return 1;
+}
+
+void recomp_validate_all(void)
+{
+    memset(chunk_off, 0, sizeof(chunk_off));
+}
+""" % (len(index), len(index), n))
         with open(os.path.join(OUT, "recomp_index.c"), "w") as fh:
             fh.write("\n".join(L))
         total = sum(self.stats.values())

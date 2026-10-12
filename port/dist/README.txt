@@ -42,6 +42,7 @@ Open the menu with Esc, F1, Tab or a right click; Back/Guide on a gamepad; the B
 button or the MENU button (top left) on Android.
 
   Online...    Play 2 players over the network (PC and Android; see below).
+  Mods...      Turn mods from the mods folder on and off (see below).
   Screen       Original 4:3, Widescreen 16:9 / 16:10, Ultrawide 21:9, or Stretch.
                The widescreen modes show more of the level on the left and right
                instead of stretching the picture.
@@ -92,6 +93,38 @@ Command line: bonanza [ROM file] [--interp] [--host [port]] [--join address]
             recompiled code (for comparison / debugging)
   --host    host an online game right away (port 7777 unless given)
   --join    join an online game, e.g. --join 192.168.1.20 or --join myhost.net:7777
+
+Mods (.bbro files)
+------------------
+Put mods in the "mods" folder and turn them on in Menu > Mods... ("Restart the game
+with these" applies them). The mods folder is next to bonanza.ini: next to the program
+when a bonanza.ini is there (packages made with the HTML builder), otherwise in your
+user data folder (Windows: %APPDATA%\bonanza-recomp\Bonanza Bros\mods, Linux:
+~/.local/share/bonanza-recomp/Bonanza Bros/mods). Android:
+Android/data/com.bonanzarecomp.port/files/mods on the phone's storage. The menu shows
+the folder when no mods are there yet. Mods are turned off when you delete them.
+
+Mods are applied in the order shown (newly turned on ones go last); where two change
+the same thing, the later one wins. Both players of an online game need the same mods.
+
+Making a mod: a .bbro file is a zip file (renamed), or use a plain folder with the same
+contents:
+
+    mod.ini            name = My Mod
+                       author = You
+                       version = 1.0
+                       description = One line about it
+    patches/           ROM patches, applied in file-name order:
+      level.ips          IPS patches (the usual ROM-hacking format; Lunar IPS, Floating
+                         IPS... make them). They may make the ROM bigger, up to 4 MiB.
+      tweaks.txt         text patches, one change per line:  ADDRESS: XX XX XX
+                         (hex ROM address and bytes; # starts a comment), e.g.
+                         4652: 00 C4
+    levels/            ignored by the game (the level maker keeps its levels there)
+
+Patches that change the game's code work too: that code then runs on the built-in
+68000 interpreter instead of the recompiled code. With no mods on, the game is the
+original.
 
 Online 2 players
 ----------------

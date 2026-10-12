@@ -182,13 +182,16 @@ static void put32(uint8_t *p, uint32_t v) { p[0] = v >> 24; p[1] = v >> 16; p[2]
 static uint32_t get32(const uint8_t *p) { return (uint32_t)p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]; }
 
 /* the ROM, as the first 8 bytes of its SHA-1 (both must play the same game) */
+/* the ROM as loaded, mods included: both players need the same */
 static void rom_id(uint8_t out[8])
 {
-    for (int i = 0; i < 8; i++) {
-        unsigned v;
-        sscanf(MD_ROM_SHA1 + i * 2, "%2x", &v);
-        out[i] = (uint8_t)v;
+    uint64_t h = 1469598103934665603ull;
+    for (uint32_t i = 0; i < md.rom_size; i++) {
+        h ^= md.rom[i];
+        h *= 1099511628211ull;
     }
+    for (int i = 0; i < 8; i++)
+        out[i] = (uint8_t)(h >> (i * 8));
 }
 
 static void reset_lockstep(void)
@@ -401,7 +404,7 @@ static void receive(void)
             rom_id(id);
             if (state == NET_HOSTING) {
                 if (b[3] != NET_VERSION || memcmp(b + 4, id, 8)) {
-                    send_simple(&from, 'X', b[3] != NET_VERSION ? "different version of the port" : "different ROM");
+                    send_simple(&from, 'X', b[3] != NET_VERSION ? "different version of the port" : "different ROM or mods");
                     continue;
                 }
                 peer = from;

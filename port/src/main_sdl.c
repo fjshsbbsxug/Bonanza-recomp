@@ -17,6 +17,12 @@
 #include "gamemods.h"
 #include "vdp.h"
 #include "menu.h"
+#include "mods.h"
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -33,7 +39,9 @@ static SDL_Joystick *joys[2];      /* pads SDL has no button layout for (generic
 static int running = 1, paused, have_rom, show_touch;
 static uint8_t key_pad[2], ctl_pad[2], touch_pad;
 static char status_msg[256] = "Drop the Bonanza Bros. ROM file onto this window";
-static uint8_t *rom_buf;
+static uint8_t *rom_buf;          /* the original ROM */
+static size_t rom_buf_size;
+static uint8_t *mod_rom;          /* the ROM with the enabled mods applied */
 static SDL_Texture *menu_tex;
 static uint32_t menu_buf[MENU_W * MENU_H];
 static SDL_Rect menu_rect;              /* where the menu overlay is drawn (window pixels) */
@@ -69,6 +77,65 @@ static void load_settings(void)
     if (settings_load(settings_path))
         SDL_Log("settings from %s", settings_path);
     settings_apply();
+}
+
+/* ------------------------------------------------------------------ mods */
+
+static void make_dir(const char *path)
+{
+#ifdef _WIN32
+    _mkdir(path);
+#else
+    mkdir(path, 0755);
+#endif
+}
+
+/* The mods folder sits next to bonanza.ini (on Android: in the app's folder on the
+ * phone's storage, Android/data/<app>/files/mods, reachable with a file manager). */
+static void setup_mods(void)
+{
+    char dir[1100];
+#if defined(__ANDROID__)
+    const char *ext = SDL_AndroidGetExternalStoragePath();
+    if (ext) {
+        snprintf(dir, sizeof(dir), "%s/mods/", ext);
+        make_dir(dir);
+        mods_add_dir(dir);
+    }
+#endif
+    snprintf(dir, sizeof(dir), "%s", settings_path);
+    char *slash = strrchr(dir, '/');
+#ifdef _WIN32
+    char *bs = strrchr(dir, '\\');
+    if (!slash || (bs && bs > slash)) slash = bs;
+#endif
+    if (slash) {
+        strcpy(slash + 1, "mods/");
+        make_dir(dir);
+        mods_add_dir(dir);
+    }
+    char *base = SDL_GetBasePath();       /* mods next to the program count too */
+    if (base) {
+        snprintf(dir, sizeof(dir), "%smods/", base);
+        SDL_free(base);
+        mods_add_dir(dir);
+    }
+    mods_scan();
+    SDL_Log("mods folder: %s (%d mods, %d enabled)", mods_main_dir(), mods_count(), mods_enabled_count());
+}
+
+/* (re)load the machine with the original ROM plus the enabled mods */
+static void load_rom_with_mods(void)
+{
+    if (!rom_buf) return;
+    if (!mod_rom && !(mod_rom = malloc(0x400000))) {
+        md_load_rom(rom_buf, rom_buf_size);
+        return;
+    }
+    size_t n = mods_apply(rom_buf, rom_buf_size, mod_rom, 0x400000);
+    md_load_rom(mod_rom, n);
+    if (mods_status()[0])
+        SDL_Log("%s", mods_status());
 }
 
 /* Give a windowed desktop window the shape of the picture (4:3, 16:9, ...). */
@@ -151,7 +218,8 @@ static int try_rom(const char *path, int report)
     }
     free(rom_buf);
     rom_buf = data;
-    md_load_rom(data, size);
+    rom_buf_size = size;
+    load_rom_with_mods();
     save_rom_copy(data, size);
     md_reset();
     have_rom = 1;
@@ -493,6 +561,10 @@ static void menu_action(int act)
     if (menu_settings_dirty) {
         save_settings();
         menu_settings_dirty = 0;
+    }
+    if (act == MENU_ACT_MODS && have_rom && net_state() != NET_PLAYING) {
+        load_rom_with_mods();
+        md_reset();
     }
     if (act == MENU_ACT_RESET && have_rom)
         md_reset();
@@ -933,6 +1005,7 @@ int main(int argc, char **argv)
     open_pads();
 
     load_settings();
+    setup_mods();
     last_screen = settings.screen;
     fit_window();
     find_rom(argc, argv);

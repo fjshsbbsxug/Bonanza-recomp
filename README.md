@@ -122,6 +122,15 @@ builder/      the HTML builder page
     `bonanza-headless --net-host PORT` / `--net-join ADDR` play scripted online games
     for testing (both sides' `--hash` output must be identical).
 
+  * *Mods* (`port/src/mods.c`): `.bbro` files (zip archives: `mod.ini`, IPS and text
+    ROM patches in `patches/`) or folders in a `mods` folder next to `bonanza.ini`,
+    turned on in the menu (`Mods...`, saved as `mods = a.bbro|b.bbro`) and applied to the
+    ROM at load time, in order. The zip reader has its own inflate. Recompiled blocks
+    whose bytes a mod changes are handed to the interpreter
+    (`recomp_invalidate()`, generated into `gen/recomp_index.c`). Online play compares a
+    hash of the loaded (modded) ROM. `bonanza-headless --mods-dir DIR --set mods=X.bbro`
+    for tests; the HTML builder adds mods to packages.
+
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert
   they only change the picture, so recompiled-vs-interpreted runs stay bit-identical.
 * Frame pacing: on a ~60 Hz display with vsync the game runs exactly one frame per

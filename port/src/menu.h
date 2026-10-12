@@ -8,7 +8,7 @@
 #define MENU_H 240
 
 enum { MK_UP, MK_DOWN, MK_LEFT, MK_RIGHT, MK_OK, MK_BACK };
-enum { MENU_ACT_NONE, MENU_ACT_CLOSE, MENU_ACT_RESET, MENU_ACT_QUIT };
+enum { MENU_ACT_NONE, MENU_ACT_CLOSE, MENU_ACT_RESET, MENU_ACT_QUIT, MENU_ACT_MODS /* re-apply mods, restart */ };
 
 extern int menu_allow_quit;     /* show the Quit entry (not in the browser) */
 extern int menu_settings_dirty; /* settings changed since the menu was opened */

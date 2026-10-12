@@ -227,6 +227,7 @@ int settings_set(const char *key, const char *value)
     }
     if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
     if (!strcmp(key, "cutscenes")) { settings.crop_cutscenes = strcmp(value, "wide") != 0; return 1; }
+    if (!strcmp(key, "mods")) { snprintf(settings.mods, sizeof(settings.mods), "%s", value); return 1; }
     if (!strcmp(key, "join")) { snprintf(settings.join_address, sizeof(settings.join_address), "%s", value); return 1; }
     if (!strcmp(key, "floor_alert")) {
         settings.floor_alert = !strcmp(value, "semi") ? FLOOR_ALERT_SEMI
@@ -274,7 +275,7 @@ int settings_load(const char *path)
     FILE *f = fopen(path, "r");
     if (!f)
         return 0;
-    char line[256];
+    char line[1280];
     while (fgets(line, sizeof(line), f)) {
         char *s = trim(line);
         if (!*s || *s == '#' || *s == ';' || *s == '[')
@@ -310,6 +311,8 @@ int settings_save(const char *path)
     fprintf(f, "# the (wide) picture stay active, off screen they act as in the original; off = original\n");
     fprintf(f, "# online: the address last joined\n");
     fprintf(f, "join = %s\n", settings.join_address);
+    fprintf(f, "# enabled mods from the mods folder, in order (later ones win)\n");
+    fprintf(f, "mods = %s\n", settings.mods);
     fprintf(f, "floor_alert = %s\n", settings.floor_alert == FLOOR_ALERT_SEMI ? "semi" : settings.floor_alert ? "on" : "off");
     fprintf(f, "# colors: original, vivid, soft, arcade, grayscale, sepia, night, gameboy, inverted\n");
     fprintf(f, "colors = %s\n", preset_keys[settings.preset]);

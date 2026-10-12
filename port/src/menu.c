@@ -6,11 +6,13 @@
 #include "settings.h"
 #include "font8x8_basic.h"
 #include "net.h"
+#include "mods.h"
 
 int menu_allow_quit = 1;
 int menu_settings_dirty;
 
-enum { PAGE_MAIN, PAGE_RECOLOR, PAGE_EDIT, PAGE_CHARS, PAGE_ONLINE };
+enum { PAGE_MAIN, PAGE_RECOLOR, PAGE_EDIT, PAGE_CHARS, PAGE_ONLINE, PAGE_MODS };
+static int mods_changed;            /* mods toggled since the game was restarted */
 
 static int editing;                /* typing into the join address */
 
@@ -102,11 +104,11 @@ static void slider(uint32_t *buf, int x, int y, int v, int lo, int hi, int selec
 /* ------------------------------------------------------------ items */
 
 enum {
-    IT_RESUME, IT_ONLINE, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
+    IT_RESUME, IT_ONLINE, IT_MODS, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
     IT_CHARS, IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
 };
 static const char *item_label[IT_COUNT] = {
-    "Resume", "Online...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
+    "Resume", "Online...", "Mods...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
     "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
@@ -208,6 +210,7 @@ static int activate_main(int item)
     case IT_RECOLOR: page = PAGE_RECOLOR; collect_colors(); return MENU_ACT_NONE;
     case IT_CHARS: page = PAGE_CHARS; sel = 0; return MENU_ACT_NONE;
     case IT_ONLINE: page = PAGE_ONLINE; sel = 0; return MENU_ACT_NONE;
+    case IT_MODS: page = PAGE_MODS; sel = 0; mods_scan(); return MENU_ACT_NONE;
     case IT_RESETCOLORS: {
         int screen = settings.screen, smooth = settings.smooth;
         /* keeps character colours; they have their own reset */
@@ -268,6 +271,53 @@ static int online_activate(int row)
     return MENU_ACT_NONE;
 }
 
+/* ------------------------------------------------------------ mods page */
+/* rows: the mods, "Apply", "Back" */
+#define MODS_VISIBLE 12
+static int mods_rows(void) { return mods_count() + 2; }
+
+/* first mod row shown (the list scrolls with the selection) */
+static int mods_top(void)
+{
+    int nm = mods_count();
+    if (sel >= nm || nm <= MODS_VISIBLE) return nm > MODS_VISIBLE ? nm - MODS_VISIBLE : 0;
+    int top = sel - MODS_VISIBLE / 2;
+    if (top < 0) top = 0;
+    if (top > nm - MODS_VISIBLE) top = nm - MODS_VISIBLE;
+    return top;
+}
+
+/* row on screen -> list row */
+static int mods_row_at(int r)
+{
+    int nm = mods_count(), top = mods_top();
+    int shown = nm - top < MODS_VISIBLE ? nm - top : MODS_VISIBLE;
+    if (r < shown) return top + r;
+    if (r - shown < 2) return nm + (r - shown);
+    return -1;
+}
+
+static int mods_activate(int row)
+{
+    int n = mods_count();
+    if (row < n) {
+        if (net_state() == NET_PLAYING) return MENU_ACT_NONE;
+        mods_toggle(row);
+        mods_changed = 1;
+        menu_settings_dirty = 1;
+        return MENU_ACT_NONE;
+    }
+    if (row == n) {
+        if (net_state() == NET_PLAYING) return MENU_ACT_NONE;
+        mods_changed = 0;
+        open_ = 0;
+        return MENU_ACT_MODS;
+    }
+    page = PAGE_MAIN;
+    sel = IT_MODS;
+    return MENU_ACT_NONE;
+}
+
 int menu_text_editing(void) { return open_ && page == PAGE_ONLINE && editing; }
 
 void menu_text_typed(const char *t)
@@ -322,6 +372,7 @@ static int back(void)
         return MENU_ACT_NONE;
     }
     if (page == PAGE_CHARS) { page = PAGE_MAIN; sel = IT_CHARS; return MENU_ACT_NONE; }
+    if (page == PAGE_MODS) { page = PAGE_MAIN; sel = IT_MODS; return MENU_ACT_NONE; }
     if (page == PAGE_ONLINE) {
         if (editing) { editing = 0; return MENU_ACT_NONE; }
         page = PAGE_MAIN; sel = IT_ONLINE; return MENU_ACT_NONE;
@@ -370,6 +421,12 @@ int menu_key(int key)
         if (key == MK_UP) sel = (sel + n - 1) % n;
         else if (key == MK_DOWN) sel = (sel + 1) % n;
         else if (key == MK_OK) return online_activate(sel);
+    } else if (page == PAGE_MODS) {
+        int n = mods_rows();
+        if (sel >= n) sel = n - 1;
+        if (key == MK_UP) sel = (sel + n - 1) % n;
+        else if (key == MK_DOWN) sel = (sel + 1) % n;
+        else if (key == MK_OK || ((key == MK_LEFT || key == MK_RIGHT) && sel < mods_count())) return mods_activate(sel);
     } else if (page == PAGE_CHARS) {
         /* rows: 6 parts, reset, back */
         int n = CHAR_COUNT * PART_COUNT + 2;
@@ -431,6 +488,21 @@ int menu_pointer(int x, int y)
             }
         }
         return MENU_ACT_NONE;
+    }
+    if (page == PAGE_MODS) {
+        int r = (y - ROW_Y0) / ROW_H, row = y >= ROW_Y0 ? mods_row_at(r) : -1;
+        if (row < 0) return MENU_ACT_NONE;
+        if (row == sel || row >= mods_count()) { sel = row; return mods_activate(row); }
+        sel = row;
+        return MENU_ACT_NONE;
+    }
+    if (page == PAGE_ONLINE) {
+        /* its rows are 2 pixels further apart */
+        int row = (y - (ROW_Y0 + 4) + 3) / (ROW_H + 2);
+        if (y < ROW_Y0 + 1 || row < 0 || row >= online_rows()) return MENU_ACT_NONE;
+        if (editing && row != 1) editing = 0;
+        sel = row;
+        return menu_key(MK_OK);
     }
     int row;
     int n = page == PAGE_MAIN ? main_count() : page == PAGE_CHARS ? CHAR_COUNT * PART_COUNT + 2
@@ -506,6 +578,12 @@ void menu_draw(uint32_t *buf)
                 }
                 break;
             }
+            case IT_MODS:
+                if (mods_enabled_count()) {
+                    snprintf(t, sizeof(t), "%d on%s", mods_enabled_count(), mods_changed ? " (Apply!)" : "");
+                    text(buf, VALUE_X, y, t, mods_changed ? C_GOLD : C_DIM);
+                }
+                break;
             case IT_RECOLOR:
                 if (settings.nrecolor) {
                     snprintf(t, sizeof(t), "%d changed", settings.nrecolor);
@@ -569,6 +647,45 @@ void menu_draw(uint32_t *buf)
         text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 26, editing ? "Type the address, Enter: join" :
              "Internet: forward UDP 7777", 0xFF6E6A7Eu);
         text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 14, "Enter: choose  Esc: back", 0xFF6E6A7Eu);
+    } else if (page == PAGE_MODS) {
+        text(buf, PANEL_X + 12, PANEL_Y + 10, "MODS", C_GOLD);
+        text(buf, PANEL_X + PANEL_W - 48, PANEL_Y + 10, "Back", C_DIM);
+        int nm = mods_count(), i;
+        for (int r = 0; (i = mods_row_at(r)) >= 0; r++) {
+            int y = ROW_Y0 + r * ROW_H;
+            int s = i == sel;
+            if (s) fill(buf, PANEL_X + 4, y - 3, PANEL_W - 8, ROW_H, C_SEL);
+            if (s) fill(buf, PANEL_X + 4, y - 3, 2, ROW_H, C_ACCENT);
+            if (i < nm) {
+                const mod_info *m = mods_get(i);
+                snprintf(t, sizeof(t), "[%c] %.22s", m->error[0] ? '!' : m->enabled ? 'x' : ' ', m->name);
+                text(buf, PANEL_X + 14, y, t, m->error[0] ? 0xFFB06060u : s ? C_TEXT : C_DIM);
+                if (m->version[0]) text(buf, PANEL_X + PANEL_W - 64, y, m->version, C_DIM);
+            } else {
+                text(buf, PANEL_X + 14, y, i == nm ? (mods_changed ? "Apply (restarts the game)" : "Restart the game with these")
+                                                    : "Back", i == nm && mods_changed ? C_GOLD : s ? C_TEXT : C_DIM);
+            }
+        }
+        /* about the selected mod, or where to put mods */
+        const mod_info *m = mods_get(sel);
+        char l1[40], l2[40], l3[40];
+        if (m) {
+            snprintf(l1, sizeof(l1), "%.34s", m->error[0] ? m->error : m->author[0] ? m->author : m->file);
+            if (m->author[0] && !m->error[0]) snprintf(l1, sizeof(l1), "by %.31s", m->author);
+            snprintf(l2, sizeof(l2), "%.34s", m->description);
+            snprintf(l3, sizeof(l3), "%.34s", strlen(m->description) > 34 ? m->description + 34 : "");
+        } else {
+            snprintf(l1, sizeof(l1), "%s", nm ? (net_state() == NET_PLAYING ? "Not during an online game" : mods_status())
+                                              : "No mods yet. Put .bbro files in:");
+            const char *d = mods_main_dir();
+            size_t dl = strlen(d);
+            snprintf(l2, sizeof(l2), "%.34s", dl > 68 ? d + dl - 68 : d);
+            snprintf(l3, sizeof(l3), "%.34s", dl > 68 ? d + dl - 34 : dl > 34 ? d + 34 : "");
+        }
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 50, l1, C_GOLD);
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 40, l2, C_DIM);
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 30, l3, C_DIM);
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 14, "Enter: on/off  Later ones win", 0xFF6E6A7Eu);
     } else if (page == PAGE_CHARS) {
         text(buf, PANEL_X + 12, PANEL_Y + 10, "CHARACTERS", C_GOLD);
         text(buf, PANEL_X + PANEL_W - 48, PANEL_Y + 10, "Back", C_DIM);
