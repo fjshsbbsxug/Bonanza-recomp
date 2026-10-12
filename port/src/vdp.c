@@ -634,24 +634,6 @@ static int level_load(void)
     return level.map < md.rom_size && level.meta < md.rom_size && level.w > 16 && level.w < 512;
 }
 
-/* how much of the level at world (x0..x0+w, y0..y0+80) is empty (sky), in percent */
-static int map_blank_percent(int x0, int y0, int w)
-{
-    int blank = 0, n = 0;
-    for (int y = y0 + 4; y < y0 + VIEW_H; y += 8)
-        for (int x = x0 + 4; x < x0 + w; x += 8, n++) {
-            uint16_t e = map_entry(x, y);
-            int b = e == 0xFFFF;
-            if (!b) {
-                const uint8_t *t = &vdp.vram[(e & 0x07FF) << 5];
-                b = 1;
-                for (int i = 0; i < 32 && b; i++) b = !t[i];
-            }
-            blank += b;
-        }
-    return n ? blank * 100 / n : 100;
-}
-
 static uint16_t map_entry(int wx, int wy)
 {
     if (wx < 0 || wy < 0 || wx >= level.w * 16 || wy >= 64 * 16)
@@ -925,21 +907,12 @@ void vdp_render_line(int y)
     /* the backdrop repeats every 256 pixels; also on lines that show only sky (above a
      * roof), which is what plane B to the right of the backdrop must never show */
     if (room_above) {
-        /* Never above the top floor: the top view follows player 1's camera one floor
-         * up, but stops before its upper part would show a floor band (80 lines) that
-         * is (almost) only roof and sky - so on the top floor it stays still on that
-         * floor, drawn from the map. Decided once a frame, with some slack. */
-        static int top, stay_band = -1, stay;
-        if (y == VIEW_TOP_Y0) {
-            top = bottom_view.vsA - VIEW_H;
-            int band = (top >= 0 ? top : top - (VIEW_H - 1)) / VIEW_H * VIEW_H;
-            int sky = map_blank_percent(bottom_view.hsA - m, band, width + 2 * m);
-            stay = band == stay_band && stay ? sky > 55 : sky > 75;
-            stay_band = band;
-            if (stay && top < band + VIEW_H)
-                top = band + VIEW_H < bottom_view.vsA ? band + VIEW_H : bottom_view.vsA;
-        }
-        room_above_wy = top;
+        /* The floor above player 1, following his camera - but never above the top of
+         * the level (the exit floor / roof): from there on it stays still, and as it
+         * then shows player 1's own floor, he is seen in it (escaping, too). */
+        room_above_wy = bottom_view.vsA - VIEW_H;
+        if (room_above_wy < 0)
+            room_above_wy = bottom_view.vsA < 0 ? bottom_view.vsA : 0;
     }
     wrap_margins = m && playing && in_view && (room_view || map_view);
     draw_plane(b, y, width, m, 1);
