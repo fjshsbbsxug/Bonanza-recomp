@@ -42,7 +42,8 @@ button or the MENU button (top left) on Android.
   Top (1P)     In a 1-player game the top of the screen shows the floor above
                Robo (follows his camera) instead of the "press 2P start" panel.
                On the top floor it shows the exit floor (roof); on the exit
-               floor it stays still and you see Robo escaping in it.
+               floor it stays still and you see Robo escaping in it, with the
+               floor below on the bottom of the screen.
                Guards there only appear once the game puts them on screen.
   Cutscenes    Widescreen only: show title/story/stage intros 4:3 with black bars
                (game over and time-up screens stay wide), or keep them wide.

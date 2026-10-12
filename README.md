@@ -90,8 +90,9 @@ builder/      the HTML builder page
     his camera, instead of the "press 2P start" panel (option: Top (1P)). It is
     drawn from the level map, so it stays correct while he walks up or down stairs.
     It never goes above the top of the level: on the top floor it shows the exit
-    floor (roof), and once Robo is up there it stays still and shows him escaping
-    (his view's sprites at the same place).
+    floor (roof), and once Robo is up there it stays still and shows him escaping,
+    while the lower view shows the floor below instead of the same floor twice
+    (drawn from the map, characters where they really are).
   * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
     plus brightness, contrast, saturation and hue.
   * Player characters: separate shirt, pants and skin-tone colours for Robo and Mobo.

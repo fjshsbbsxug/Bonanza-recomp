@@ -612,6 +612,8 @@ int vdp_out_width(void)
 #define VIEW_H 80
 static struct { uint32_t frame; int hsA, hsB, vsA, vsB; } bottom_view;
 static int room_above_wy;   /* world y of the room-above view's first line */
+static uint32_t stacked_frame;  /* frame (+1) in which the views are stacked (see below) */
+static int stacked_top;         /* world y of the top view's first line then */
 
 /* ---- level map (what the game draws into plane A during play) ----
  *   $FF1838.l  map: words (metatile numbers), $FF2CCC words per row, one row per 16 px
@@ -888,12 +890,21 @@ void vdp_render_line(int y)
     int hud_screen = !playing && (hud_seen_frame == md.frame || hud_seen_frame == md.frame + 1);
     int crop = m && settings.crop_cutscenes && !playing && !hud_screen;
     int clamp_edges = m && (playing || hud_screen) && (!in_view || !playing);   /* extend edge colours */
+    /* Stacked views (1 player, top view stopped at the top of the level): the two
+     * views show two floors one above the other, so player 1's view shows the floor
+     * below the top view's, from the map, with the characters where they really are -
+     * instead of the same floor twice. */
+    int stacked = in_bot && map_view && stacked_frame == md.frame + 1;
     map_on = m && map_view;
     map_all = 0;
     map_camx = camx;
     map_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
+    if (stacked) {
+        map_on = map_all = 1;
+        map_wy = stacked_top + VIEW_H + (y - VIEW_BOT_Y0);
+    }
     draw_plane(a, y, width, m, 0);
-    map_on = 0;
+    map_on = map_all = 0;
     /* a real room is shown on this line (the outer 16 pixels may come from the map) */
     int room_view = line_opaque(a, m + 16, width - 32);
     int room_above = 0;
@@ -911,8 +922,11 @@ void vdp_render_line(int y)
          * the level (the exit floor / roof): from there on it stays still, and as it
          * then shows player 1's own floor, he is seen in it (escaping, too). */
         room_above_wy = bottom_view.vsA - VIEW_H;
-        if (room_above_wy < 0)
+        if (room_above_wy < 0) {
             room_above_wy = bottom_view.vsA < 0 ? bottom_view.vsA : 0;
+            stacked_frame = md.frame + 1;     /* player 1's view: the floor below */
+            stacked_top = room_above_wy;
+        }
     }
     wrap_margins = m && playing && in_view && (room_view || map_view);
     draw_plane(b, y, width, m, 1);
@@ -947,6 +961,15 @@ void vdp_render_line(int y)
          * the same part of the level as player 1's view (on the top floor, or on the
          * stairs) it shows the same characters: the sprites of that line of his view. */
         int yb = VIEW_BOT_Y0 + room_above_wy + (y - VIEW_TOP_Y0) - bottom_view.vsA;
+        if (yb >= VIEW_BOT_Y0 && yb < VIEW_BOT_Y0 + VIEW_H) {
+            draw_sprites(s, part, yb, width, m);
+        } else {
+            memset(s, 0, sizeof(s));
+            memset(part, 0, sizeof(part));
+        }
+    } else if (stacked) {
+        /* the characters of player 1's view that are on the floor shown here */
+        int yb = VIEW_BOT_Y0 + map_wy - wy0;
         if (yb >= VIEW_BOT_Y0 && yb < VIEW_BOT_Y0 + VIEW_H) {
             draw_sprites(s, part, yb, width, m);
         } else {
