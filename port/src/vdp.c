@@ -497,6 +497,34 @@ static int char_part(int ch, int c, int row, int lx, const char_info *ci)
 static wobj_sprite wobj_list[256];
 static int wobj_count;
 
+/* sprites built by wideobj.c, below the real ones */
+static void draw_wobj(uint8_t *out, int y, int width, int m, const wobj_sprite *list, int count)
+{
+    for (int i = 0; i < count; i++) {
+        const wobj_sprite *w = &list[i];
+        int row = y - w->y;
+        if (y < w->ymin || y >= w->ymax || row < 0 || row >= w->vsz * 8)
+            continue;
+        int cy = row >> 3, py = row & 7;
+        if (w->attr & 0x1000) { cy = w->vsz - 1 - cy; py = 7 - py; }
+        for (int cx = 0; cx < w->hsz; cx++) {
+            int tcx = (w->attr & 0x0800) ? w->hsz - 1 - cx : cx;
+            uint16_t e = (uint16_t)((w->attr & 0xE800) | ((w->attr + tcx * w->vsz + cy) & 0x07FF));
+            for (int px = 0; px < 8; px++) {
+                int x = w->x + cx * 8 + px;
+                if (x < -m || x >= width + m || (out[x + m] & 0x0F))
+                    continue;
+                if (w->only_outside && x >= 0 && x < width)
+                    continue;
+                out[x + m] = (uint8_t)tile_pixel(e, px, py);
+            }
+        }
+    }
+}
+
+static wobj_sprite stack_list[256];
+static int stack_count;
+
 static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
 {
     int h40 = width == 320;
@@ -549,28 +577,7 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
         }
     } while (link && ++count < max_sprites);
 done:
-    /* widescreen: objects the game does not draw beside the 4:3 picture (wideobj.c),
-     * below the real sprites */
-    for (int i = 0; i < wobj_count; i++) {
-        const wobj_sprite *w = &wobj_list[i];
-        int row = y - w->y;
-        if (y < w->ymin || y >= w->ymax || row < 0 || row >= w->vsz * 8)
-            continue;
-        int cy = row >> 3, py = row & 7;
-        if (w->attr & 0x1000) { cy = w->vsz - 1 - cy; py = 7 - py; }
-        for (int cx = 0; cx < w->hsz; cx++) {
-            int tcx = (w->attr & 0x0800) ? w->hsz - 1 - cx : cx;
-            uint16_t e = (uint16_t)((w->attr & 0xE800) | ((w->attr + tcx * w->vsz + cy) & 0x07FF));
-            for (int px = 0; px < 8; px++) {
-                int x = w->x + cx * 8 + px;
-                if (x < -m || x >= width + m || (out[x + m] & 0x0F))
-                    continue;
-                if (w->only_outside && x >= 0 && x < width)
-                    continue;
-                out[x + m] = (uint8_t)tile_pixel(e, px, py);
-            }
-        }
-    }
+    draw_wobj(out, y, width, m, wobj_list, wobj_count);
 }
 
 static int margin40, margin32;
@@ -968,7 +975,11 @@ void vdp_render_line(int y)
             memset(part, 0, sizeof(part));
         }
     } else if (stacked) {
-        /* the characters of player 1's view that are on the floor shown here */
+        /* the characters of player 1's view that are on the floor shown here, and the
+         * objects of that floor his view does not cover (they would vanish) */
+        if (y == VIEW_BOT_Y0)
+            stack_count = wobj_build_stacked(stacked_top + VIEW_H, wy0, stack_list,
+                                             (int)(sizeof(stack_list) / sizeof(stack_list[0])));
         int yb = VIEW_BOT_Y0 + map_wy - wy0;
         if (yb >= VIEW_BOT_Y0 && yb < VIEW_BOT_Y0 + VIEW_H) {
             draw_sprites(s, part, yb, width, m);
@@ -976,6 +987,7 @@ void vdp_render_line(int y)
             memset(s, 0, sizeof(s));
             memset(part, 0, sizeof(part));
         }
+        draw_wobj(s, y, width, m, stack_list, stack_count);
     } else {
         draw_sprites(s, part, y, width, m);
     }

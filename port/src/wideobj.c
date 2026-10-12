@@ -412,3 +412,32 @@ void wobj_reset(void)
 {
     level_id = 0;
 }
+
+/* Stacked views (see vdp.c): player 1's view shows a fixed floor of the map while the
+ * game's camera is elsewhere (on the last stair, on the exit floor). Objects on that
+ * floor that the game's own view does not cover are drawn here, at their place in it:
+ * line = their line in the game's view + (real_wy0 - vtop). */
+int wobj_build_stacked(int vtop, int real_wy0, wobj_sprite *list, int max)
+{
+    const snap_t *s = &snaps[cur];
+    if (!s->valid || !view_on(s, 0))
+        return 0;
+    out_list = list; out_n = 0; out_max = max;
+    int shift = real_wy0 - vtop;
+    for (int pass = 2; pass >= 1; pass--)
+        for (int i = 0; i < NOBJ; i++) {
+            const obj_t *b = &s->o[i];
+            if (b->st != pass || !b->frame) continue;
+            /* line of its feet in the game's view of player 1 */
+            int feet = b->y - b->z - s->cam[0][0] + 0x105 + 0x14 - 128;
+            int inside_real = (b->vis & 1) && feet >= 135 && feet < 215;
+            if (inside_real) continue;                 /* the game draws it */
+            int fv = feet + shift;
+            if (fv < 135 || fv >= 215 + 48) continue;  /* not on the floor shown */
+            int n0 = out_n;
+            emit_frame(s, 0, b->frame, b->x, b->y, b->z, b->flip != 0, b->attr, 0, 0);
+            for (int k = n0; k < out_n; k++)
+                list[k].y += shift;
+        }
+    return out_n;
+}
