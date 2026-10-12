@@ -56,6 +56,10 @@ button or the MENU button (top left) on Android.
                going even off screen: it keeps chasing you, never jumps back to its
                post and never disappears, until you change floors. Guards on other
                floors behave as in the original. Turns Patrol Return off.
+               Semi: the original rules, but "on screen" means your whole picture
+               for the screen shape you chose (4:3 as in the original, wider shapes
+               include the side areas): guards you can see keep going, off screen
+               they wait or go back to their posts as in the original.
   Scaling      Sharp pixels or smooth.
   Colors       Original, Vivid, Soft, Arcade, Grayscale, Sepia, Night, Game Boy,
                Inverted.
@@ -71,7 +75,7 @@ otherwise in your user data folder). It is a plain text file, e.g.
 
     screen = 16:9
     guards = return         # Patrol Return on ("original" = off)
-    floor_alert = on        # Floor Alert: guards on your floor stay after you
+    floor_alert = on        # Floor Alert: guards on your floor stay after you (or semi)
     colors = vivid
     robo.shirt = 20B040     # player 1 shirt
     mobo.skin = 8D5524      # player 2 skin tone ("original" = unchanged)

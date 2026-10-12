@@ -17,6 +17,10 @@ enum {
     PRESET_NIGHT, PRESET_GAMEBOY, PRESET_INVERTED, PRESET_COUNT
 };
 
+/* Floor Alert (changes the game): off, on (guards on your floor stay active off screen),
+ * semi (guards active while anywhere in the picture of the chosen screen shape) */
+enum { FLOOR_ALERT_OFF, FLOOR_ALERT_ON, FLOOR_ALERT_SEMI, FLOOR_ALERT_COUNT };
+
 #define MAX_RECOLOR 128
 
 /* player characters: Robo (player 1, red) and Mobo (player 2, blue) */
@@ -29,7 +33,7 @@ typedef struct {
     int show_2p_panel;       /* 1-player game: 0 = show the room above, 1 = original 2P panel */
     int crop_cutscenes;      /* widescreen: show cutscenes/title 4:3 (game overs stay wide) */
     int patrol_return;       /* widescreen: guards leaving the 4:3 picture walk back to their posts */
-    int floor_alert;         /* game change: guards on a player's floor stay active off screen */
+    int floor_alert;         /* game change: FLOOR_ALERT_* */
     int preset;              /* PRESET_* */
     int brightness;          /* -100..100 */
     int contrast;            /* -100..100 */

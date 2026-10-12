@@ -106,7 +106,9 @@ builder/      the HTML builder page
     back to its post until you change floors. `tools/recomp.py` puts hooks at the
     start of sub_058B4 (visibility) and sub_059C6 (sprites); `port/src/gamemods.c`
     widens the visibility for guards on the player's floor and still only makes
-    sprites for those near the picture. With the option off the hooks do nothing and
+    sprites for those near the picture. *Semi* instead widens the game's visibility
+    tests (also the "is the post on screen" one) by the side areas of the chosen
+    screen shape: guards you can see keep going, off screen the original rules apply. With the option off the hooks do nothing and
     runs stay bit-identical to the original.
 
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert

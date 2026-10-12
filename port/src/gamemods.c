@@ -1,4 +1,8 @@
 /* Floor Alert (option): guards on a player's floor keep going when they are off screen.
+ * Semi: the game's own rules, but "on screen" is the whole picture of the chosen
+ * screen shape (4:3 = the original 144 pixels, wider shapes add their side areas):
+ * guards you can see keep going; off screen they wait or go back to their posts as in
+ * the original (only when the post is out of sight, too).
  *
  * The game only runs a guard while it is near a view (sub_058B4: within 144 pixels plus
  * its half width of the view's centre, same floor). A guard that drops out of that is
@@ -14,6 +18,7 @@
 #include "gamemods.h"
 #include "md.h"
 #include "settings.h"
+#include "vdp.h"
 #include "m68k.h"
 #include "m68kcpu.h"
 
@@ -24,12 +29,12 @@ static int16_t r16(uint32_t a) { return (int16_t)((md.ram[a & 0xFFFF] << 8) | md
 static void w16(uint32_t a, int v) { md.ram[a & 0xFFFF] = (uint8_t)(v >> 8); md.ram[(a + 1) & 0xFFFF] = (uint8_t)v; }
 
 /* sub_058B4 for one view: 1 if the object is near the view's centre */
-static int near_view(int o, int v)
+static int near_view(int o, int v, int extra)
 {
     uint16_t on = (uint16_t)r16(v ? 0x2EF8 : 0x2EF6);
     if (!on || on == 0x8000) return 0;
     uint16_t dx = (uint16_t)abs((int16_t)(r16(v ? 0x229A : 0x1856) - r16(0x304E + o)));
-    if (dx > (uint16_t)(r16(0x3706 + o) + 0x90)) return 0;
+    if (dx > (uint16_t)(r16(0x3706 + o) + 0x90 + extra)) return 0;
     uint16_t dy = (uint16_t)abs((int16_t)(r16(v ? 0x2298 : 0x1854) + 0x10 + r16(0x31A6 + o) - r16(0x30FA + o)));
     return dy <= (uint16_t)(r16(0x37B2 + o) + 0x28);
 }
@@ -51,11 +56,20 @@ int game_hook(uint32_t pc)
     if (o >= 0x56 * 2 || (o & 1)) return 0;
     uint32_t ret = m68ki_read_32(REG_A[7]) & 0xFFFFFF;
     if (pc == GAME_HOOK_VISIBILITY) {
-        /* only the per-frame pass over all objects (sub_0582E) is widened; the guard
-         * loop's own "is its post on screen" test stays as it was */
-        if (ret < 0x582E || ret >= 0x58B4) return 0;
-        int drawn = near_view(o, 0) | near_view(o, 1) << 1;
-        int run = drawn | on_players_floor(o, 0) | on_players_floor(o, 1) << 1;
+        int semi = settings.floor_alert == FLOOR_ALERT_SEMI;
+        int extra = vdp_margin();             /* the side areas of this screen shape */
+        int wide = near_view(o, 0, extra) | near_view(o, 1, extra) << 1;
+        if (ret < 0x582E || ret >= 0x58B4) {
+            /* the guard loop's "is its post on screen" test: in Semi mode the whole
+             * picture counts, so nobody is sent back to a post you can see */
+            if (!semi) return 0;
+            w16(0x2FA2 + o, wide);
+            REG_D[5] = 0;
+            return 1;
+        }
+        int drawn = near_view(o, 0, 0) | near_view(o, 1, 0) << 1;
+        int run = semi ? (drawn | wide)
+                       : (drawn | on_players_floor(o, 0) | on_players_floor(o, 1) << 1);
         game_drawn_vis[o >> 1] = (uint8_t)drawn;
         w16(0x2FA2 + o, run);
         REG_D[5] = 0;

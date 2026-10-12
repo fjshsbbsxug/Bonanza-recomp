@@ -183,7 +183,7 @@ static int adjust_main(int item, int dir)
     case IT_UPPER: settings.show_2p_panel = !settings.show_2p_panel; break;
     case IT_CUTSCENES: settings.crop_cutscenes = !settings.crop_cutscenes; break;
     case IT_GUARDS: settings.patrol_return = !settings.patrol_return; break;
-    case IT_ALERT: settings.floor_alert = !settings.floor_alert; break;
+    case IT_ALERT: settings.floor_alert = (settings.floor_alert + dir + FLOOR_ALERT_COUNT) % FLOOR_ALERT_COUNT; break;
     case IT_COLORS: settings.preset = (settings.preset + dir + PRESET_COUNT) % PRESET_COUNT; break;
     case IT_BRIGHT: settings.brightness = clampi(settings.brightness + dir * 5, -100, 100); break;
     case IT_CONTRAST: settings.contrast = clampi(settings.contrast + dir * 5, -100, 100); break;
@@ -411,7 +411,7 @@ void menu_draw(uint32_t *buf)
                      settings.floor_alert ? C_DIM : C_TEXT);
                 break;
             case IT_ALERT:
-                text(buf, VALUE_X - 16, y, settings.floor_alert ? "< On >" : "< Off >", C_TEXT);
+                text(buf, VALUE_X - 16, y, settings.floor_alert == FLOOR_ALERT_SEMI ? "< Semi >" : settings.floor_alert ? "< On >" : "< Off >", C_TEXT);
                 break;
             case IT_COLORS:
                 snprintf(t, sizeof(t), "< %s >", settings_preset_name(settings.preset));

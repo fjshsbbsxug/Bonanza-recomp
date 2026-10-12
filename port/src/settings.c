@@ -227,7 +227,11 @@ int settings_set(const char *key, const char *value)
     }
     if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
     if (!strcmp(key, "cutscenes")) { settings.crop_cutscenes = strcmp(value, "wide") != 0; return 1; }
-    if (!strcmp(key, "floor_alert")) { settings.floor_alert = atoi(value) != 0 || !strcmp(value, "on"); return 1; }
+    if (!strcmp(key, "floor_alert")) {
+        settings.floor_alert = !strcmp(value, "semi") ? FLOOR_ALERT_SEMI
+                             : (!strcmp(value, "on") || atoi(value) == 1) ? FLOOR_ALERT_ON : FLOOR_ALERT_OFF;
+        return 1;
+    }
     if (!strcmp(key, "guards")) { settings.patrol_return = strcmp(value, "original") != 0; return 1; }
     if (!strcmp(key, "upper_view")) { settings.show_2p_panel = !strcmp(value, "panel"); return 1; }
     if (!strcmp(key, "brightness")) { settings.brightness = clampi(atoi(value), -100, 100); return 1; }
@@ -300,9 +304,10 @@ int settings_save(const char *path)
     fprintf(f, "# widescreen, Patrol Return: guards leaving the 4:3 picture walk back to their posts (return)\n");
     fprintf(f, "# instead of vanishing (original)\n");
     fprintf(f, "guards = %s\n", settings.patrol_return ? "return" : "original");
-    fprintf(f, "# Floor Alert (changes the game): guards on your floor keep chasing you off screen\n");
-    fprintf(f, "# and never jump back to their posts until you change floors (on), or original (off)\n");
-    fprintf(f, "floor_alert = %s\n", settings.floor_alert ? "on" : "off");
+    fprintf(f, "# Floor Alert (changes the game): on = guards on your floor keep chasing you off screen\n");
+    fprintf(f, "# and never jump back to their posts until you change floors; semi = guards anywhere in\n");
+    fprintf(f, "# the (wide) picture stay active, off screen they act as in the original; off = original\n");
+    fprintf(f, "floor_alert = %s\n", settings.floor_alert == FLOOR_ALERT_SEMI ? "semi" : settings.floor_alert ? "on" : "off");
     fprintf(f, "# colors: original, vivid, soft, arcade, grayscale, sepia, night, gameboy, inverted\n");
     fprintf(f, "colors = %s\n", preset_keys[settings.preset]);
     fprintf(f, "brightness = %d\ncontrast = %d\nsaturation = %d\nhue = %d\n",
