@@ -199,6 +199,8 @@
     for (const m of orig.map) nmeta = Math.max(nmeta, m + 1);
     const meta = [];
     for (let i = 0; i < nmeta; i++) meta.push([0, 1, 2, 3].map(k => r.u16(metaPtr + i * 8 + k * 2)));
+    /* mirrored copies (for flipped stamps) at m + nmeta: tiles swapped left/right, hflip toggled */
+    for (let i = 0; i < nmeta; i++) { const [a, b, c, d] = meta[i]; meta.push([b ^ 0x800, a ^ 0x800, d ^ 0x800, c ^ 0x800]); }
     /* background plane: {vram addr, cols-1, rows-1, tile base, src} */
     const bgp = r.u32(0x5598 + 4 * (st - 1));
     const bg = { cols: r.u16(bgp + 2) + 1, rows: r.u16(bgp + 4) + 1, base: r.u16(bgp + 6), src: r.u32(bgp + 8) };
@@ -224,7 +226,7 @@
     }
     const d1 = startDescriptors(r, r.u32(0x4566 + 4 * (st - 1)));
     const d2 = startDescriptors(r, r.u32(0x459A + 4 * (st - 1)));
-    return { vram, pal: palette(r, st), meta, bg, guardPresets, itemPresets, descriptors: d1.concat(d2), orig };
+    return { vram, pal: palette(r, st), meta, nmeta, metaPtr, bg, guardPresets, itemPresets, descriptors: d1.concat(d2), orig };
   };
 
   /* a sprite frame's pieces: {dx, dy, w, h (cells), attr} */
@@ -285,6 +287,23 @@
     level.guards.push(...clip.guards.map(abs).filter(fits));
     level.items.push(...clip.items.map(abs).filter(fits));
   };
+  /* a clip mirrored left to right: mirrored metatiles (m <-> m + N, N = the stage's metatile
+   * count), collision columns reversed with the stair direction swapped, objects mirrored */
+  const swapDir = v => { const lo = v & 0xFF; return (lo & 0xF0) === 0x80 && (lo & 3) ? ((v & ~3) | (3 - (lo & 3))) >>> 0 : v; };
+  LC.flipClip = function (clip, N) {
+    const w = clip.slices * 16, mir = o => Object.assign({}, o, { x: 64 + w - o.x, dir: o.dir === 1 ? 2 : o.dir === 2 ? 1 : o.dir });
+    return {
+      floors: clip.floors, slices: clip.slices,
+      map: clip.map.map(row => row.slice().reverse().map(m => m < N ? m + N : m - N)),
+      col: clip.col.map(c => c.slice().reverse().map(swapDir)),
+      guards: clip.guards.map(mir), items: clip.items.map(mir),
+    };
+  };
+  LC.flipLevel = function (level, N) {
+    const clip = LC.flipClip(LC.copyRegion(level, 0, level.floors - 1, 0, level.W - 1), N);
+    LC.pasteRegion(level, clip, 0, 0, true);
+  };
+
   /* insert n slices before slice s on every floor, copies of slice s-1 (widens rooms) */
   LC.insertSlices = function (level, s, n) {
     const W = level.W, src = Math.max(0, s - 1);
@@ -616,6 +635,10 @@
     const pre = [];
     for (let k = 0; k < 5 * (level.base || 0); k++) pre.push(...level.map.slice(0, W));
     const mapAddr = emit(words(pre.concat(level.map))) + 2 * pre.length;
+    /* flipped stamps use mirrored metatiles: the table with them after the originals */
+    const sinfo = LC.info(rom, st);
+    let metaAddr = 0;
+    if (level.map.some(m => m >= sinfo.nmeta)) metaAddr = emit(words([].concat(...sinfo.meta)));
     /* collision, numbered door columns; buffers in the original RAM order */
     const col = level.col.map(c => c.slice());
     res.doors.forEach((d, k) => { col[d.f][d.c] = ((col[d.f][d.c] & 0xFFFFFF00) | (0x90 + 2 * k)) >>> 0; });
@@ -692,6 +715,7 @@
     w16(rom2, 0x54E2 + 4 * (st - 1) + 2, H);
     const oldMap = r.u32(0x5516 + 8 * (st - 1)), oldW = r.u16(0x54E2 + 4 * (st - 1));
     w32(rom2, 0x5516 + 8 * (st - 1), mapAddr);
+    if (metaAddr) w32(rom2, 0x5516 + 8 * (st - 1) + 4, metaAddr);
     w32(rom2, 0x100FA + 8 * (st - 1), colAddr);
     w32(rom2, 0x100FA + 8 * (st - 1) + 4, orig.nbuf - 1);
     w32(rom2, 0x3E000 + 4 * (st - 1), placeAddr);
@@ -705,6 +729,7 @@
       const off = (r.u32(d) - oldMap) / 2;
       const row = Math.floor(off / oldW), c = off - row * oldW;
       w32(rom2, d, mapAddr + 2 * (row * W + c));
+      if (metaAddr) w32(rom2, d + 4, metaAddr);
     }
     /* header: ROM end and checksum */
     w32(rom2, 0x1A4, size - 1);

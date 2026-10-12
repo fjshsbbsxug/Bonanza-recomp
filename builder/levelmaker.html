@@ -145,8 +145,10 @@
     <button class="tab" role="tab" data-tab="gadgets" aria-selected="false">Gadgets</button>
     <button class="tab" role="tab" data-tab="paint" aria-selected="false">Paint</button>
     <button class="tab" role="tab" data-tab="mine" aria-selected="false">My stamps</button>
+    <button class="tab" role="tab" data-tab="trace" aria-selected="false">Trace</button>
     <div class="tools">
       <button class="chunky" id="handbtn" aria-pressed="false" title="Pick up and move things; drag over the building to select an area">&#9995; Hand</button>
+      <button class="chunky" id="flipbtn" title="Mirror the stamp you are placing (F)">&#8644; Flip</button>
       <button class="chunky" id="erasebtn" aria-pressed="false" title="Erase guards and loot; on the building it leaves a plain hallway">&#9003; Eraser</button>
     </div>
   </div>
@@ -154,6 +156,7 @@
   <div class="ctx" id="areactx">
     <b>Selected area:</b>
     <button class="chunky" id="stampbtn">Make a stamp</button>
+    <button class="chunky" id="flipareabtn" title="Mirror this part of the building left to right">&#8644; Flip it</button>
     <button class="chunky" id="clearbtn">Clear it</button>
     <button class="chunky" id="widenbtn">&#8596; Add space here</button>
     <button class="chunky" id="narrowbtn">Remove this width</button>
@@ -212,6 +215,8 @@
   let rom = null, st = 0, info = null, level = null;
   let tab = 'build', tool = 'place', part = null, zoom = 2, grid = true, walls = false, sound = true;
   let hover = null, sel = null, selObj = null, drag = null, myStamps = [], stamps = [];
+  /* a picture (e.g. a map of the arcade stage) shown over the building to build along */
+  const trace = { img: null, on: true, alpha: 0.45, x: 0, y: 0, sx: 1, sy: 1 };
   const undo = [], redo = [];
 
   /* ---------- sound ---------- */
@@ -427,6 +432,12 @@
     cx.beginPath(); cx.arc(40, 18, 9, 0, 7); cx.fill();
     cx.fillStyle = '#1d1b22'; cx.fillRect(30, 9, 20, 5);
   }
+  function fitTrace() {
+    if (!trace.img || !level) return;
+    trace.x = 0; trace.y = 0;
+    trace.sx = level.W * 16 / trace.img.width;
+    trace.sy = level.floors * 80 / trace.img.height;
+  }
   function setTab(t) {
     tab = t;
     document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
@@ -480,8 +491,34 @@
         }
         box.appendChild(card);
       }
+    } else if (t === 'trace') {
+      box.innerHTML = `<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:4px">
+        <label class="chunky" style="cursor:pointer">Load a picture<input type="file" id="tr-file" accept="image/*" hidden></label>
+        <label class="row muted">show <input type="checkbox" id="tr-on" ${trace.on ? 'checked' : ''}></label>
+        <label class="muted">see-through <input type="range" id="tr-alpha" min="0.05" max="1" step="0.05" value="${trace.alpha}"></label>
+        <button class="chunky" id="tr-fit">Fit to building</button>
+        <label class="muted">width <input type="range" id="tr-sx" min="0.1" max="3" step="0.005" value="${trace.sx}"></label>
+        <label class="muted">height <input type="range" id="tr-sy" min="0.1" max="3" step="0.005" value="${trace.sy}"></label>
+        <label class="muted">x <input type="number" id="tr-x" value="${trace.x}" style="width:70px"></label>
+        <label class="muted">y <input type="number" id="tr-y" value="${trace.y}" style="width:70px"></label>
+        <span class="muted">${trace.img ? trace.img.width + ' x ' + trace.img.height + ' px' : 'A map of the stage you want to remake, e.g. from vgmaps.'}</span></div>`;
+      const num = id => +$(id).value;
+      $('tr-file').onchange = e => {
+        const f = e.target.files[0];
+        if (!f) return;
+        const img = new Image();
+        img.onload = () => { trace.img = img; fitTrace(); setTab('trace'); tip('Picture loaded. Set it so its floors line up with the building, then build over it.'); };
+        img.src = URL.createObjectURL(f);
+      };
+      $('tr-on').onchange = e => { trace.on = e.target.checked; };
+      $('tr-alpha').oninput = () => { trace.alpha = num('tr-alpha'); };
+      $('tr-sx').oninput = () => { trace.sx = num('tr-sx'); };
+      $('tr-sy').oninput = () => { trace.sy = num('tr-sy'); };
+      $('tr-x').oninput = () => { trace.x = num('tr-x'); };
+      $('tr-y').oninput = () => { trace.y = num('tr-y'); };
+      $('tr-fit').onclick = () => { fitTrace(); setTab('trace'); };
     } else if (t === 'paint') {
-      info.meta.forEach((m, i) => {
+      info.meta.slice(0, info.nmeta).forEach((m, i) => {
         const b = document.createElement('button');
         b.className = 'part';
         b.style.width = '44px';
@@ -540,6 +577,13 @@
     if (cv.width !== W * 16 || cv.height !== H * 16) { cv.width = W * 16; cv.height = H * 16; }
     cv.style.width = W * 16 * zoom + 'px'; cv.style.height = H * 16 * zoom + 'px';
     ctx.drawImage(base, 0, 0);
+    if (trace.img && trace.on) {
+      ctx.globalAlpha = trace.alpha;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(trace.img, trace.x, trace.y, trace.img.width * trace.sx, trace.img.height * trace.sy);
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 1;
+    }
     if (grid) {
       ctx.fillStyle = 'rgba(255,255,255,0.13)';
       for (let x = 16; x < W * 16; x += 16) ctx.fillRect(x, 0, 1, H * 16);
@@ -711,6 +755,17 @@
   $('widenbtn').onclick = () => { const r = selRange(); if (edit(() => LC.insertSlices(level, r.s0, r.s1 - r.s0 + 1))) sfx('place'); };
   $('narrowbtn').onclick = () => { const r = selRange(); if (edit(() => LC.removeSlices(level, r.s0, r.s1 - r.s0 + 1))) { closeArea(); sfx('erase'); } };
   $('unselbtn').onclick = closeArea;
+  $('flipareabtn').onclick = () => {
+    const r = selRange();
+    const clip = LC.flipClip(LC.copyRegion(level, r.f0, r.f1, r.s0, r.s1), info.nmeta);
+    if (edit(() => LC.pasteRegion(level, clip, r.f0, r.s0, true))) sfx('place');
+  };
+  function flipPart() {
+    if (!part || part.type !== 'stamp') { tip('Pick a stamp first, then <b>Flip</b> mirrors it left to right.'); return; }
+    part = Object.assign({}, part, { clip: LC.flipClip(part.clip, info.nmeta), pic: null });
+    sfx('pick');
+  }
+  $('flipbtn').onclick = flipPart;
 
   /* ---------- mouse ---------- */
   function at(e) {
@@ -797,6 +852,7 @@
     if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); restore(undo, redo); }
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); restore(redo, undo); }
     else if (k === 'escape') { closeArea(); selObj = null; }
+    else if (k === 'f' && !e.ctrlKey && !e.metaKey) flipPart();
     else if ((k === 'delete' || k === 'backspace') && selObj) {
       e.preventDefault();
       const o = selObj;
