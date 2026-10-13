@@ -173,7 +173,14 @@ builder/      the HTML builder page
     A block from the Stairs group can lay a working staircase where it is painted
     (`LC.placeStairShape`: the game's ramp, hole and landing columns, stage 1's values,
     mirrored for the other direction; pictures stay as painted). The Door piece is the
-    door stamp's middle block (pillar picture, door column, door item). The Stairs tool places the stage's staircase going either
+    door stamp's middle block (pillar picture, door column, door item). The Paint tab
+    shows each stage's objects (`LC.stageObjects`: on every floor, what is not hallway is
+    cut into connected groups, doors and pillars on their own, identical ones merged and
+    sorted by kind: stairs, doors, furniture, on the wall, floor); placing one writes its
+    blocks and the solid rows of its columns, and stairs/doors work. Ramps left without a
+    landing by edits are removed (`LC.fixStairs`). Tests:
+    `node builder/test/core.test.js baserom.md` (core, every stage) and
+    `node builder/test/ui.test.js baserom.md` (browser sweep, needs Playwright). The Stairs tool places the stage's staircase going either
     way (the missing direction mirrored, `LC.stairStamps`); cut-off staircases are
     reported.
 
