@@ -1,6 +1,7 @@
 /* Mega Drive machine: memory map, I/O, Z80 + sound, frame scheduler. */
 #include <string.h>
 #include <stdio.h>
+#include "extrastages.h"
 #include "md.h"
 #include "vdp.h"
 #include "psg.h"
@@ -342,6 +343,7 @@ int md_load_rom(const uint8_t *data, size_t size)
     memcpy(md.rom, data, size);
     md.rom_size = (uint32_t)size;
     md.region_overseas = 1;
+    xs_scan();
     return 0;
 }
 
@@ -361,6 +363,7 @@ void md_reset(void)
     z80_do_reset();
     master_line_start = ym_time = 0;
     ym_phase = 0;
+    xs_reset();
     cpu_init();
     cpu_reset();
 }

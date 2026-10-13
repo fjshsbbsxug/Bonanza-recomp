@@ -46,7 +46,7 @@ FORBIDDEN = re.compile(r"\b(REG_PC|REG_PPC|m68ki_jump\w*|m68ki_branch_\w+|m68ki_
 # --------------------------------------------------------------------------
 
 # routines that port/src/gamemods.c can take over (subroutine entries reached by jsr)
-HOOKS = {0x58B4, 0x59C6}
+HOOKS = {0x58B4, 0x59C6, 0x11106}    # gamemods.c, extrastages.c
 
 
 class Musashi:

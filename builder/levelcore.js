@@ -435,11 +435,12 @@
         doors.push({ f, c, obj: best || { kind: LC.KIND.DOOR, x: cx + 4, y: 80 * f + 66, z: 0, frame: 0x300, beh: 1, dir: 1, attr: 0 } });
       });
     if (doors.length > 16) problems.push('Too many doors: ' + doors.length + ' (at most 16).');
-    const others = level.items.filter(o => o.kind !== LC.KIND.DOOR);
+    const others = level.items.filter(o => o.kind === LC.KIND.TREASURE).concat(
+      level.items.filter(o => o.kind !== LC.KIND.DOOR && o.kind !== LC.KIND.TREASURE));
     const nlost = level.items.filter(o => o.kind === LC.KIND.DOOR && !used.has(o)).length;
     if (nlost) problems.push(nlost + ' door object(s) without a door in the wall were left out.');
     if (!exit) problems.push('There is no exit: keep (or paste) the stairs with the EXIT sign.');
-    const exitObj = exit ? { kind: LC.KIND.EXIT, x: exit.c * 8 + 32, y: 80 * exit.f + 40, z: 16, frame: 0, beh: 0, dir: 0, attr: 0 } : null;
+    const exitObj = exit ? { kind: LC.KIND.EXIT, x: exit.c * 8 + 32, y: 80 * exit.f + 40, z: 16, frame: 0, beh: 0, dir: 0, attr: 0, floor: exit.f } : null;
     const items = doors.map(d => d.obj).concat(others, exitObj ? [exitObj] : []);
     if (items.length > 32) problems.push('Too many items: ' + items.length + ' (doors + treasures + others + exit, at most 32).');
     if (level.guards.length > 32) problems.push('Too many guards: ' + level.guards.length + ' (at most 32).');
@@ -629,6 +630,7 @@
     const words = ws => { const b = []; for (const w of ws) b.push((w >> 8) & 255, w & 255); return b; };
     const longs = ls => { const b = []; for (const l of ls) b.push((l >>> 24) & 255, (l >>> 16) & 255, (l >>> 8) & 255, l & 255); return b; };
     const yb = 80 * (level.base || 0);
+    if (level.extra) emit(new Array(32).fill(0));          /* extra stage: its descriptor goes here */
     /* map (a stage with a floor above its map gets that floor's rows before it: the
      * game draws them at the start, out of sight) */
     if (level.map.length !== W * H) throw new Error('map size');
@@ -705,6 +707,18 @@
       code.push(0x4E, 0x75);                                                           /* rts */
       loaderAddr = emit(code);
     }
+    /* the "NEXT TARGETS ARE" screen: one icon per treasure (the stage's own icons, in
+     * rows of up to 5 centred like the game's) */
+    const ip = r.u32(0x11A2E + 4 * st), hn = r.u16(ip);
+    let iconAddr = 0;
+    if (hn && (hn !== res.treasures || level.extra)) {
+      const n = Math.min(res.treasures, 10), first = n > 5 ? Math.ceil(n / 2) : n, list = [n];
+      for (let i = 0; i < n; i++) {
+        const row = i < first ? 0 : 1, inRow = row ? n - first : first, k = row ? i - first : i, q = ip + 2 + 10 * (i % hn);
+        list.push(r.u16(q), 248 - 16 * (inRow - 1) + 32 * k, 192 + 24 * row, r.u16(q + 6), r.u16(q + 8));
+      }
+      iconAddr = emit(words(list));
+    }
     /* the new ROM */
     if (out.length > LC.SLOT_SIZE) throw new Error('This level is too big (' + out.length + ' bytes of data).');
     const size = base + out.length;
@@ -722,6 +736,16 @@
     w32(rom2, 0x1ADE2 + 4 * (st - 1), kindAddr);
     w32(rom2, 0x14AB8 + 4 * (st - 1), guardAddr);
     w16(rom2, 0x1AF60 + 2 * (st - 1), res.treasures);
+    if (iconAddr) w32(rom2, 0x11A2E + 4 * st, iconAddr);
+    /* the HUD's treasure blips (item slots after the doors) and where the escape starts */
+    w16(rom2, 0x10DBC + 4 * st, res.doors.length);
+    w16(rom2, 0x10DBC + 4 * st + 2, res.treasures - 1);
+    if (res.exit) {
+      /* some stages start the escape a few pixels past the exit column: keep that */
+      const ox = LC.resolveItems(LC.readStage(rom, st)).exit, dx = ox ? r.u16(0x8FF2 + 4 * (st - 1)) - ox.x : 0;
+      w16(rom2, 0x8FF2 + 4 * (st - 1), res.exit.x + dx);
+      w16(rom2, 0x8FF2 + 4 * (st - 1) + 2, 80 * (res.exit.floor + (level.base || 0)) + 48);
+    }
     if (tblAddr) for (const a of FRAME_SITES) w32(rom2, a + 2, tblAddr);
     if (loaderAddr) w32(rom2, 0x640C + 4 * (st - 1), loaderAddr);
     /* first screen: the start routines' map pointers, same row and column in the new map */
@@ -731,13 +755,85 @@
       w32(rom2, d, mapAddr + 2 * (row * W + c));
       if (metaAddr) w32(rom2, d + 4, metaAddr);
     }
-    /* header: ROM end and checksum */
-    w32(rom2, 0x1A4, size - 1);
-    let sum = 0;
-    for (let a = 0x200; a + 1 < size; a += 2) sum = (sum + ((rom2[a] << 8) | rom2[a + 1])) & 0xFFFF;
-    w16(rom2, 0x18E, sum);
-    return { rom: rom2, problems: res.problems };
+    if (level.extra) return { rom: extraRom(rom, rom2, level, out, emit, base), problems: res.problems };
+    return { rom: fixHeader(rom2), problems: res.problems };
   };
+  function fixHeader(rom2) {
+    w32(rom2, 0x1A4, rom2.length - 1);
+    let sum = 0;
+    for (let a = 0x200; a + 1 < rom2.length; a += 2) sum = (sum + ((rom2[a] << 8) | rom2[a + 1])) & 0xFFFF;
+    w16(rom2, 0x18E, sum);
+    return rom2;
+  }
+
+  /* ---------- extra stages (the arcade's lost levels) ----------
+   * An extra stage is played between two stages on a host entry: the game (port,
+   * extrastages.c) writes the host's table values from the descriptor while it is on and
+   * puts the originals back afterwards, so the cartridge's own stages are untouched.
+   * Descriptor at the start of the stage's slot:
+   *   'BBXSTAGE', word version 1, word after (entry it follows), word host, word 0,
+   *   long name frame mapping, long "STAGE 11" mapping, long "STAGE 12" mapping,
+   *   long patch list: {long addr, word len, bytes (even)}..., long -1 */
+  LC.EXTRA_HOSTS = [2, 3, 5, 7, 9, 10, 11, 13];          /* entries without special code */
+  LC.EXTRA_AFTER = { 5: 'after Mint (arcade stage 5)', 10: 'after Deluxe Liner (arcade stage 10)' };
+  /* the intro's letters (8x16, tile pairs) */
+  const LETTERS = { A: 0x188, B: 0x18A, C: 0x18C, D: 0x18E, E: 0x190, G: 0x192, I: 0x196, J: 0x198, L: 0x19C,
+                    M: 0x19E, N: 0x1A0, O: 0x1A2, P: 0x1A4, R: 0x1A6, S: 0x1A8, T: 0x1AA, U: 0x1AC, W: 0x1AE,
+                    X: 0x1B0, Y: 0x1B2, "'": 0x1B6 };
+  LC.nameProblem = name => {
+    const bad = [...new Set(String(name).toUpperCase().replace(/[^ ]/g, c => LETTERS[c] ? '' : c))];
+    return bad.length ? 'The intro has no letter ' + bad.join(', ') + ' (it has A-E, G, I, J, L-P, R-U, W-Y and \').' : '';
+  };
+  function nameMapping(name) {
+    const t = String(name).toUpperCase().slice(0, 24), x0 = -4 * t.length, b = [];
+    let n = 0;
+    [...t].forEach((c, i) => {
+      if (c === ' ') return;
+      const tile = LETTERS[c];
+      if (!tile) throw new Error(LC.nameProblem(name));
+      b.push(0xF8, (x0 + 8 * i) & 255, 0x01, 0, tile >> 8, tile & 255);
+      n++;
+    });
+    return [(Math.max(n, 1) - 1), 0].concat(n ? b : [0xF8, 0, 1, 0, 0, 0]);
+  }
+  function stageMapping(rom, digit) {
+    const r = R(rom), p = r.u32(0x24B80 + 4 * 0x3B5) & 0xFFFFFF, n = (r.u16(p) >> 8) + 1;
+    const b = Array.from(rom.subarray(p, p + 2 + 6 * n));
+    for (let i = 0; i < n; i++) if (((b[6 + 6 * i] << 8) | b[7 + 6 * i]) === 0x210) b[7 + 6 * i] = 0x10 + digit;
+    return b;
+  }
+  function extraRom(rom, rom2, level, out, emit, base) {
+    const x = level.extra, host = level.stage;
+    if (!LC.EXTRA_HOSTS.includes(host)) throw new Error('An extra stage cannot use ' + LC.stageLabel(host) + ' as its host.');
+    /* everything the export changed below the original ROM's end: the host's values */
+    const patch = [];
+    for (let a = 0x200; a < LC.ROM_SIZE;) {
+      if (rom2[a] === rom[a]) { a++; continue; }
+      let e = a + 1;
+      for (;;) {
+        let k = e;
+        while (k < LC.ROM_SIZE && k < e + 8 && rom2[k] === rom[k]) k++;
+        if (k < LC.ROM_SIZE && k < e + 8) e = k + 1; else break;
+      }
+      if (e - a > 0xFFFF) throw new Error('patch run too long');
+      patch.push(...[(a >>> 24) & 255, (a >>> 16) & 255, (a >>> 8) & 255, a & 255, ((e - a) >> 8) & 255, (e - a) & 255]);
+      for (let i = a; i < e; i++) patch.push(rom2[i]);
+      if (patch.length & 1) patch.push(0);
+      a = e;
+    }
+    patch.push(255, 255, 255, 255);
+    const nameAddr = emit(nameMapping(x.name || ''));
+    const s11 = emit(stageMapping(rom, 1)), s12 = emit(stageMapping(rom, 2));
+    const listAddr = emit(patch);
+    if (out.length > LC.SLOT_SIZE) throw new Error('This level is too big (' + out.length + ' bytes of data).');
+    const hdr = [0x42, 0x42, 0x58, 0x53, 0x54, 0x41, 0x47, 0x45, 0, 1, 0, x.after, 0, host, 0, 0];
+    for (const l of [nameAddr, s11, s12, listAddr]) hdr.push((l >>> 24) & 255, (l >>> 16) & 255, (l >>> 8) & 255, l & 255);
+    hdr.forEach((v, i) => { out[i] = v; });
+    const rom3 = new Uint8Array(base + out.length).fill(0xFF);
+    rom3.set(rom.subarray(0, LC.ROM_SIZE));
+    rom3.set(out, base);
+    return fixHeader(rom3);
+  }
 
   LC.makeIps = function (orig, patched) {
     const out = [0x50, 0x41, 0x54, 0x43, 0x48];

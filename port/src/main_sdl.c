@@ -15,6 +15,7 @@
 #include "settings.h"
 #include "net.h"
 #include "gamemods.h"
+#include "extrastages.h"
 #include "vdp.h"
 #include "menu.h"
 #include "mods.h"
@@ -247,6 +248,7 @@ static void find_rom(int argc, char **argv)
 {
     for (int i = 1; i < argc; i++) {
         if (i > 1 && (!strcmp(argv[i - 1], "--join") || !strcmp(argv[i - 1], "--play-stage") ||
+                      !strcmp(argv[i - 1], "--play-extra") ||
                       (!strcmp(argv[i - 1], "--host") && atoi(argv[i]) > 0)))
             continue;                            /* an address or port, not a ROM */
         if (argv[i][0] != '-' && try_rom(argv[i], 1))
@@ -969,10 +971,12 @@ int main(int argc, char **argv)
             use_recomp = 0;
     }
     const char *host_port = NULL, *join_addr = NULL;
-    int play_stage = 0;
+    int play_stage = 0, play_extra = 0;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--play-stage") && i + 1 < argc)
             play_stage = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--play-extra") && i + 1 < argc)
+            play_extra = atoi(argv[++i]);    /* extra stage K of the mods (1 = first) */
         else if (!strcmp(argv[i], "--host"))
             host_port = i + 1 < argc && argv[i + 1][0] != '-' ? argv[++i] : "";
         else if (!strcmp(argv[i], "--join") && i + 1 < argc)
@@ -1038,7 +1042,10 @@ int main(int argc, char **argv)
     else if (join_addr)
         net_join(join_addr);
     md.use_recomp = use_recomp;
-    if (play_stage > 0 && play_stage <= 13 && have_rom)
+    if (play_extra > 0 && have_rom && play_extra <= xs_count()) {
+        xs_play(play_extra - 1);       /* the stage dispatcher plays it instead */
+        start_stage(2);
+    } else if (play_stage > 0 && play_stage <= 13 && have_rom)
         start_stage(play_stage);
     set_title();
 

@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "extrastages.h"
 #include "md.h"
 #include "vdp.h"
 #include "settings.h"
@@ -104,7 +105,7 @@ int main(int argc, char **argv)
     struct { int frame; char path[256]; } shots[64];
     struct { int frame, pad; uint8_t b; } inputs[256];
     struct { int frame; unsigned addr, val; } pokes[64];
-    int npokes = 0;
+    int npokes = 0, play_extra = 0;
     int nshots = 0, ninputs = 0;
     const char *wav = NULL;
     const char *net_host_port = NULL, *net_join_addr = NULL;
@@ -143,6 +144,8 @@ int main(int argc, char **argv)
             /* --poke FRAME:ADDR:WORD (hex address/value in 68k RAM), for tests */
             if (sscanf(argv[++i], "%d:%x:%x", &pokes[npokes].frame, &pokes[npokes].addr, &pokes[npokes].val) == 3)
                 npokes++;
+        } else if (!strcmp(argv[i], "--extra") && i + 1 < argc) {
+            play_extra = atoi(argv[++i]);    /* the next stage started is extra stage K */
         } else if (!strcmp(argv[i], "--mods-dir") && i + 1 < argc) {
             mods_add_dir(argv[++i]);     /* with --set mods=NAME.bbro */
         } else if (!strcmp(argv[i], "--player") && i + 1 < argc) {
@@ -194,6 +197,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "net: playing as player %d\n", vdp_local_player + 1);
     }
     md_reset();
+    if (play_extra > 0) xs_play(play_extra - 1);
     uint8_t mine = 0;
     for (int fr = 0; fr < frames; fr++) {
         for (int k = 0; k < ninputs; k++)

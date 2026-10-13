@@ -3,6 +3,7 @@
 #include "vdp.h"
 #include "recomp.h"
 #include "gamemods.h"
+#include "extrastages.h"
 #include "../ext/musashi/m68k.h"
 #include "../ext/musashi/m68kcpu.h"
 #include "../ext/musashi/m68kops.h"
@@ -119,7 +120,7 @@ static void interp_step(void)
         }
     }
 #endif
-    if (game_hooks && (REG_PC == GAME_HOOK_VISIBILITY || REG_PC == GAME_HOOK_SPRITES) && game_hook(REG_PC)) {
+    if (game_hooks && (REG_PC == GAME_HOOK_VISIBILITY || REG_PC == GAME_HOOK_SPRITES || REG_PC == GAME_HOOK_STAGE) && game_hook(REG_PC)) {
         REG_PC = m68ki_pull_32();      /* the routine was handled: return from it */
         USE_CYCLES(16);
         return;
