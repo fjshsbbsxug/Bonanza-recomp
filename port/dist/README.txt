@@ -131,7 +131,9 @@ the stage's own are greyed out), single blocks to paint - and click to place the
 the hand moves them or selects an area to make your own stamp, add space or remove it.
 Press Play to try the level right away, and save it as a .bbro. Open the .bbro again to
 keep building. Blocks you paint can be solid (both lanes, front lane or back lane only: a low one is
-jumped over, a stack is a wall) or walk-through; pick that above the blocks. The Stairs
+jumped over, a stack is a wall) or walk-through; pick that above the blocks. "Blocks from" lets you paint with blocks of
+any other stage (their colours are matched to this stage; each stage has room for a
+number of them, shown there). The Stairs
 part puts a staircase from the floor you click to the one above; Flip (F) turns it the
 other way. Drag the robbers with the hand to move where they start; graphics, music
 and the time limit stay as in the original stage. Flip (F) mirrors the stamp you are placing; Trace shows a picture (a map

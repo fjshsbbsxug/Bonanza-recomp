@@ -33,7 +33,7 @@
   .logo b { color: var(--red); -webkit-text-stroke: 1px var(--line); }
   .parts.paint { flex-wrap: wrap; align-items: flex-start; overflow-x: hidden; overflow-y: auto; max-height: 190px; }
   .parts.paint .part { padding: 2px; }
-  .kinds { flex: 0 0 100%; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .kinds { flex: 0 0 100%; position: sticky; top: -10px; z-index: 1; background: #fff; padding: 4px 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; }
   .chunky.small { padding: 3px 9px; font-size: 13px; }
   .newstage { margin-top: 18px; padding-top: 12px; border-top: 3px dashed var(--line); }
   .stagename { font-weight: 600; background: #fff; border: 3px solid var(--line); border-radius: 999px; padding: 4px 14px; }
@@ -233,7 +233,7 @@
   const $ = id => document.getElementById(id);
   let rom = null, st = 0, info = null, level = null;
   let tab = 'build', tool = 'place', part = null, zoom = 2, grid = true, walls = false, sound = true;
-  let paintKind = 'picture', stairSet = null;
+  let paintKind = 'picture', stairSet = null, paintSrc = 0;
   let hover = null, sel = null, selObj = null, drag = null, myStamps = [], stamps = [];
   /* a picture (e.g. a map of the arcade stage) shown over the building to build along */
   const trace = { img: null, on: true, alpha: 0.45, x: 0, y: 0, sx: 1, sy: 1 };
@@ -364,6 +364,27 @@
     c.width = img.width; c.height = img.height;
     c.getContext('2d').putImageData(img, 0, 0);
     return c;
+  }
+  /* a block from another stage as it looks here (LC.blockLook: recoloured cells) */
+  function lookCanvas(cells, mirror) {
+    const vram = new Uint8Array(4 * 32), img = new ImageData(16, 16);
+    cells.forEach((c, k) => vram.set(c.bytes, k * 32));
+    const order = mirror ? [1, 0, 3, 2] : [0, 1, 2, 3];
+    order.forEach((k, pos) => {
+      const w = cells[k].word ^ (mirror ? 0x800 : 0);
+      cellTo(img, { vram, pal: info.pal }, (pos & 1) * 8, (pos >> 1) * 8, k, (w >> 13) & 3, w & 0x800, w & 0x1000, 16);
+    });
+    return toCanvas(img);
+  }
+  /* canvases for the level's borrowed blocks, at 2N + 2k (and mirrored + 1) */
+  function syncBlocks() {
+    const N = info.nmeta;
+    G.meta.length = 2 * N;
+    (level.blocks || []).forEach((b, k) => {
+      const cells = LC.blockLook(rom, st, b.src, b.meta);
+      G.meta[2 * N + 2 * k] = lookCanvas(cells, false);
+      G.meta[2 * N + 2 * k + 1] = lookCanvas(cells, true);
+    });
   }
   function makeGraphics(inf) {
     const meta = inf.meta.map(m => {
@@ -584,18 +605,35 @@
         kinds.appendChild(b);
       }
       box.appendChild(kinds);
-      info.meta.slice(0, info.nmeta).forEach((m, i) => {
+      /* blocks of this stage or another one */
+      const from = document.createElement('label');
+      from.innerHTML = '<b>Blocks from:</b> ';
+      const sel = document.createElement('select');
+      sel.className = 'chunky small';
+      sel.add(new Option('this stage', 0));
+      for (const e of LC.STAGES) if (e !== st) sel.add(new Option(LC.stageLabel(e), e));
+      sel.value = paintSrc;
+      sel.onchange = () => { paintSrc = +sel.value; setTab('paint'); };
+      from.appendChild(sel);
+      const room = LC.blockRoom(rom, level);
+      const note = document.createElement('span');
+      note.className = 'muted';
+      note.textContent = paintSrc ? ' Colours are matched to this stage. Room here: ' + (room.free - room.used) + ' more 8x8 pieces (a block is up to 4).' : '';
+      from.appendChild(note);
+      kinds.appendChild(from);
+      const srcInfo = paintSrc ? LC.info(rom, paintSrc) : info;
+      for (let i = 0; i < srcInfo.nmeta; i++) {
         const b = document.createElement('button');
         b.className = 'part';
         b.style.width = '44px';
-        b.title = 'Block ' + i;
+        b.title = 'Block ' + i + (paintSrc ? ' of ' + LC.stageLabel(paintSrc) : '');
         const c = document.createElement('canvas');
         c.width = 16; c.height = 16; c.style.width = c.style.height = '32px';
-        c.getContext('2d').drawImage(G.meta[i], 0, 0);
+        c.getContext('2d').drawImage(paintSrc ? lookCanvas(LC.blockLook(rom, st, paintSrc, i), false) : G.meta[i], 0, 0);
         b.appendChild(c);
-        b.onclick = () => selectPart({ type: 'paint', meta: i }, b);
+        b.onclick = () => selectPart(paintSrc ? { type: 'paint', borrow: { src: paintSrc, meta: i }, pic: c } : { type: 'paint', meta: i }, b);
         box.appendChild(b);
-      });
+      }
     }
   }
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => { sfx('pick'); setTab(b.dataset.tab); });
@@ -637,6 +675,7 @@
     if (!level) return;
     const W = level.W, H = level.floors * 5;
     if (dirty) {
+      syncBlocks();
       drawLevel(base, level, G);
       if (walls) drawWalls(base.getContext('2d'));
       dirty = false;
@@ -730,7 +769,8 @@
         ctx.strokeStyle = '#ffd12a'; ctx.lineWidth = 2;
         ctx.strokeRect(q.s * 16 + 1, q.f * 80 + 1, part.clip.slices * 16 - 2, part.clip.floors * 80 - 2);
       } else if (part.type === 'paint') {
-        ctx.globalAlpha = 0.7; ctx.drawImage(G.meta[part.meta], hover.c * 16, hover.r * 16); ctx.globalAlpha = 1;
+        const pic = part.borrow ? part.pic : G.meta[part.meta];
+        if (pic) { ctx.globalAlpha = 0.7; ctx.drawImage(pic, hover.c * 16, hover.r * 16); ctx.globalAlpha = 1; }
         ctx.strokeStyle = '#ffd12a'; ctx.lineWidth = 1; ctx.strokeRect(hover.c * 16 + .5, hover.r * 16 + .5, 15, 15);
       } else {
         const o = newObject(hover);
@@ -838,6 +878,18 @@
   }
   $('flipbtn').onclick = flipPart;
 
+  /* paint the picked block at p (a block from another stage is added to the level the
+   * first time); throws when the stage has no room left for its pieces */
+  function paintAt(p) {
+    const m = part.borrow ? LC.borrowBlock(level, info.nmeta, part.borrow.src, part.borrow.meta) : part.meta;
+    const ok = LC.paintBlock(level, p.r, p.c, m, paintKind);
+    if (part.borrow) {
+      const room = LC.blockRoom(rom, level);
+      if (room.problems.length) throw new Error(room.problems[0]);
+    }
+    return ok;
+  }
+
   /* ---------- mouse ---------- */
   function at(e) {
     const r = cv.getBoundingClientRect();
@@ -898,7 +950,7 @@
         return;
       }
       let ok = true;
-      if (edit(() => { ok = LC.paintBlock(level, p.r, p.c, part.meta, paintKind); })) sfx('place');
+      if (edit(() => { ok = paintAt(p); })) sfx('place');
       if (!ok) tip('Stairs, doors and the exit keep their own floor there; only the picture changed.');
       drag = { kind: 'paint', last: p.r + ':' + p.c };
     } else {
@@ -914,7 +966,12 @@
     if (drag.kind === 'sel') { sel.f1 = p.f; sel.s1 = p.s; }
     else if (drag.kind === 'paint') {
       const k = p.r + ':' + p.c;
-      if (k !== drag.last) { drag.last = k; LC.paintBlock(level, p.r, p.c, part.meta, paintKind); dirty = true; }
+      if (k !== drag.last) {
+        drag.last = k;
+        const before = snapshot();
+        try { paintAt(p); } catch (err) { level = JSON.parse(before); tip('<span class="bad">' + err.message + '</span>'); sfx('error'); drag = null; }
+        dirty = true;
+      }
     } else if (drag.kind === 'stamp') {
       const q = stampPos(p, part.clip), k = q.f + ':' + q.s;
       if (k !== drag.last) { drag.last = k; LC.pasteRegion(level, part.clip, q.f, q.s, true); dirty = true; sfx('pick'); }

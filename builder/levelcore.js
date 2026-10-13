@@ -292,9 +292,11 @@
   const swapDir = v => { const lo = v & 0xFF; return (lo & 0xF0) === 0x80 && (lo & 3) ? ((v & ~3) | (3 - (lo & 3))) >>> 0 : v; };
   LC.flipClip = function (clip, N) {
     const w = clip.slices * 16, mir = o => Object.assign({}, o, { x: 64 + w - o.x, dir: o.dir === 1 ? 2 : o.dir === 2 ? 1 : o.dir });
+    /* own blocks m <-> m + N; blocks from other stages are pairs from 2N on: bit 0 */
+    const fm = m => m < N ? m + N : m < 2 * N ? m - N : m ^ 1;
     return {
       floors: clip.floors, slices: clip.slices,
-      map: clip.map.map(row => row.slice().reverse().map(m => m < N ? m + N : m - N)),
+      map: clip.map.map(row => row.slice().reverse().map(fm)),
       col: clip.col.map(c => c.slice().reverse().map(swapDir)),
       guards: clip.guards.map(mir), items: clip.items.map(mir),
     };
@@ -454,6 +456,89 @@
       level.col[f][i] = ((fr << 24) | (bk << 16)) >>> 0;
     }
     return ok;
+  };
+
+  /* ---------- blocks from other stages ----------
+   * VRAM tiles each stage leaves alone during play (measured: never written after the
+   * stage starts, never shown, empty; the queued sprite loads stay below 0x200 and in the
+   * font area). Borrowed treasures use 0x7A0-0x7CF, so these are for blocks. */
+  LC.FREE_TILES = {1: [[0x338, 0x3d5], [0x3e0, 0x3ff], [0x41e, 0x41f], [0x466, 0x47c], [0x48f, 0x4da], [0x4ff, 0x4ff]], 2: [[0x4e0, 0x4ea], [0x4ff, 0x4ff]], 3: [[0x38d, 0x3d5], [0x3e0, 0x3ec], [0x3f0, 0x3ff], [0x41e, 0x42b], [0x4a7, 0x4de], [0x4ff, 0x4ff]], 5: [[0x3c8, 0x3ef], [0x428, 0x42b], [0x466, 0x47c], [0x4e0, 0x4e6], [0x4ff, 0x4ff]], 6: [[0x338, 0x38c], [0x3c8, 0x3df], [0x434, 0x440], [0x44d, 0x465], [0x480, 0x48e], [0x4b6, 0x4e6], [0x4ff, 0x4ff]], 7: [[0x38d, 0x3d5], [0x3e0, 0x3ec], [0x3f0, 0x3ff], [0x41e, 0x41f], [0x4e0, 0x4e6], [0x4ff, 0x4ff]], 9: [[0x38d, 0x3d5], [0x3e0, 0x3ec], [0x3f0, 0x3ff], [0x41e, 0x41f], [0x493, 0x4e2], [0x4ff, 0x4ff]], 10: [[0x338, 0x3b5], [0x4e0, 0x4e6], [0x4ff, 0x4ff]], 11: [[0x38d, 0x3d5], [0x3e0, 0x3ec], [0x3f0, 0x3ff], [0x41e, 0x41f], [0x4e0, 0x4e6], [0x4ff, 0x4ff]], 13: [[0x3c8, 0x3d5], [0x434, 0x440], [0x44d, 0x465], [0x480, 0x48e], [0x4a1, 0x4da], [0x4ff, 0x4ff]]};
+  LC.freeTileCount = st => (LC.FREE_TILES[st] || []).reduce((n, [a, b]) => n + b - a + 1, 0);
+  /* a block of stage src as it looks in stage st: its 4 cells, each a name-table word
+   * (priority and flips kept, the palette line that fits best here) and the tile's
+   * pixels with colours of that line */
+  const lookCache = new Map();
+  LC.blockLook = function (rom, st, src, meta) {
+    const key = st + ':' + src + ':' + meta;
+    if (lookCache.has(key)) return lookCache.get(key);
+    const si = LC.info(rom, src), ti = LC.info(rom, st);
+    const cells = si.meta[meta].map(w => {
+      const tile = w & 0x7FF, pl = (w >> 13) & 3, px = [];
+      for (let i = 0; i < 32; i++) { const b = si.vram[(tile * 32 + i) & 0xFFFF]; px.push(b >> 4, b & 15); }
+      const used = [...new Set(px)].filter(c => c);
+      const near = (L, c) => {
+        const [r0, g0, b0] = si.pal[pl * 16 + c];
+        let best = 1, bd = 1e9;
+        for (let k = 1; k < 16; k++) {
+          const [r1, g1, b1] = ti.pal[L * 16 + k], d = (r1 - r0) ** 2 + (g1 - g0) ** 2 + (b1 - b0) ** 2;
+          if (d < bd) { bd = d; best = k; }
+        }
+        return [best, bd];
+      };
+      let L = pl, err = 1e18;
+      for (let k = 0; k < 4; k++) {
+        const e = used.reduce((n, c) => n + near(k, c)[1], 0) + (k === pl ? -1 : 0);   /* ties: keep the line */
+        if (e < err) { err = e; L = k; }
+      }
+      const map = new Map(used.map(c => [c, near(L, c)[0]]));
+      const bytes = [];
+      for (let i = 0; i < 64; i += 2) bytes.push(((map.get(px[i]) || 0) << 4) | (map.get(px[i + 1]) || 0));
+      return { word: (w & 0x9800) | (L << 13), bytes };
+    });
+    lookCache.set(key, cells);
+    return cells;
+  };
+  /* the index of a borrowed block in this level (added if new): 2N + 2k, mirrored 2N + 2k + 1 */
+  LC.borrowBlock = function (level, N, src, meta) {
+    level.blocks = level.blocks || [];
+    let k = level.blocks.findIndex(b => b.src === src && b.meta === meta);
+    if (k < 0) { k = level.blocks.length; level.blocks.push({ src, meta }); }
+    return 2 * N + 2 * k;
+  };
+  /* tiles and metatile words for the level's borrowed blocks that are used */
+  function blockPlan(rom, level, N) {
+    const st = level.stage, out = { meta: [], loads: [], tiles: 0, problems: [] };
+    const used = new Set(level.map.filter(m => m >= 2 * N));
+    const free = [];
+    for (const [a, b] of LC.FREE_TILES[st] || []) for (let t = a; t <= b; t++) free.push(t);
+    const placed = new Map();
+    (level.blocks || []).forEach((bl, k) => {
+      if (!used.has(2 * N + 2 * k) && !used.has(2 * N + 2 * k + 1)) {
+        out.meta.push([0, 0, 0, 0], [0, 0, 0, 0]);
+        return;
+      }
+      const words = LC.blockLook(rom, st, bl.src, bl.meta).map(c => {
+        const key = c.bytes.join();
+        if (!placed.has(key)) {
+          const t = free[placed.size];
+          placed.set(key, t);
+          if (t !== undefined) out.loads.push({ tile: t, bytes: c.bytes });
+        }
+        const t = placed.get(key);
+        return t === undefined ? 0 : (c.word | t) & 0xFFFF;
+      });
+      const [a, b, c, d] = words;
+      out.meta.push(words, [b ^ 0x800, a ^ 0x800, d ^ 0x800, c ^ 0x800]);
+    });
+    out.tiles = placed.size;
+    if (placed.size > free.length)
+      out.problems.push('Too many blocks from other stages: ' + placed.size + ' different pieces (8x8), this stage has room for ' +
+                        free.length + '.');
+    return out;
+  }
+  LC.blockRoom = (rom, level) => {
+    const N = LC.info(rom, level.stage).nmeta, p = blockPlan(rom, level, N);
+    return { used: p.tiles, free: LC.freeTileCount(level.stage), problems: p.problems };
   };
 
   /* stairs to the floor above in both directions, in the stage's look: the stage's own,
@@ -709,8 +794,10 @@
     const mapAddr = emit(words(pre.concat(level.map))) + 2 * pre.length;
     /* flipped stamps use mirrored metatiles: the table with them after the originals */
     const sinfo = LC.info(rom, st);
+    const blk = blockPlan(rom, level, sinfo.nmeta);
+    if (blk.problems.length) throw new Error(blk.problems.join('\n'));
     let metaAddr = 0;
-    if (level.map.some(m => m >= sinfo.nmeta)) metaAddr = emit(words([].concat(...sinfo.meta)));
+    if (level.map.some(m => m >= sinfo.nmeta)) metaAddr = emit(words([].concat(...sinfo.meta, ...blk.meta)));
     /* collision, numbered door columns; buffers in the original RAM order */
     const col = level.col.map(c => c.slice());
     res.doors.forEach((d, k) => { col[d.f][d.c] = ((col[d.f][d.c] & 0xFFFFFF00) | (0x90 + 2 * k)) >>> 0; });
@@ -736,6 +823,7 @@
     /* items from other stages: their pictures come along */
     const bp = borrowPlan(rom, st, res.items);
     if (bp.problems.length) throw new Error(bp.problems.join('\n'));
+    bp.loads.push(...blk.loads);
     let ntbl = 0, lowest = 0xFFFFFFFF;          /* entries: the table ends where the frames start */
     while (FRAMES_TBL + 4 * ntbl < lowest) { lowest = Math.min(lowest, r.u32(FRAMES_TBL + 4 * ntbl) & 0xFFFFFF); ntbl++; }
     const frameOf = o => { const f = bp.frameOf.get(o); return f === undefined ? o.frame : f >= 0x10000 ? ntbl + f - 0x10000 : f; };

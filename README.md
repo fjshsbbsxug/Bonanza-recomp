@@ -165,7 +165,12 @@ builder/      the HTML builder page
     stages' own routines). Painted blocks can carry physics (`LC.paintBlock`): a 16 px
     block at row k of a floor sets mask rows 2k, 2k+1 of its two collision columns in the
     front lane, back lane, both, or clears them (the slab bit stays; stair/door/exit
-    columns are left alone). The Stairs tool places the stage's staircase going either
+    columns are left alone). Blocks can come from any stage: their 8x8 pieces are
+    recoloured to the palette line of this stage that fits best (`LC.blockLook`) and
+    loaded by the wrapped tile loader into VRAM the stage leaves alone (`LC.FREE_TILES`,
+    measured: never written or shown during play, empty, and outside the queued sprite
+    loads of tbl_05E86); they get metatile pairs after the stage's own and mirrored ones.
+    The Stairs tool places the stage's staircase going either
     way (the missing direction mirrored, `LC.stairStamps`); cut-off staircases are
     reported.
 
