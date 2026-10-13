@@ -513,8 +513,14 @@
         box.appendChild(partCard('Stairs \u21c4', cx => fit(cx, pic, pic.width, pic.height),
           { type: 'stamp', clip: stairSet.right, name: 'stairs', stairs: 'right' }));
       }
+      const dp = LC.doorPiece(stamps);
+      if (dp) {
+        const pic = clipCanvas(dp);
+        box.appendChild(partCard('Door', cx => fit(cx, pic, pic.width, pic.height), { type: 'stamp', clip: dp, name: 'door', door: true }));
+      }
       for (const s of stamps) {
         if (stairSet && /^stairs-up/.test(s.id)) continue;
+        if (dp && s.id === 'door') continue;
         const pic = clipCanvas(s.clip);
         box.appendChild(partCard(s.name, cx => fit(cx, pic, pic.width, pic.height), { type: 'stamp', clip: s.clip, name: s.name }));
       }
@@ -637,7 +643,12 @@
         c.width = 16; c.height = 16; c.style.width = c.style.height = '32px';
         c.getContext('2d').drawImage(paintSrc ? lookCanvas(LC.blockLook(rom, st, paintSrc, i), false) : G.meta[i], 0, 0);
         b.appendChild(c);
-        b.onclick = () => selectPart(paintSrc ? { type: 'paint', borrow: { src: paintSrc, meta: i }, pic: c } : { type: 'paint', meta: i }, b);
+        b.onclick = () => {
+          if (grp.name === 'Stairs' && !/^stairs/.test(paintKind)) { paintKind = 'stairs-r'; setTab('paint'); }
+          else if (grp.name !== 'Stairs' && /^stairs/.test(paintKind)) { paintKind = 'picture'; setTab('paint'); }
+          selectPart(paintSrc ? { type: 'paint', borrow: { src: paintSrc, meta: i }, pic: c } : { type: 'paint', meta: i },
+                     [...$('parts').querySelectorAll('.part')].find(x => x.title === b.title) || b);
+        };
         box.appendChild(b);
         }
       }
@@ -778,6 +789,12 @@
       } else if (part.type === 'paint') {
         const pic = part.borrow ? part.pic : G.meta[part.meta];
         if (pic) { ctx.globalAlpha = 0.7; ctx.drawImage(pic, hover.c * 16, hover.r * 16); ctx.globalAlpha = 1; }
+        if (/^stairs/.test(paintKind) && hover.f > 0) {
+          const x0 = paintKind === 'stairs-l' ? (hover.c - 4) * 16 : hover.c * 16;
+          ctx.strokeStyle = '#2fb24c'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+          ctx.strokeRect(x0 + 1, (hover.f - 1) * 80 + 1, 80 - 2, 160 - 2);
+          ctx.setLineDash([]);
+        }
         ctx.strokeStyle = '#ffd12a'; ctx.lineWidth = 1; ctx.strokeRect(hover.c * 16 + .5, hover.r * 16 + .5, 15, 15);
       } else {
         const o = newObject(hover);
@@ -875,6 +892,13 @@
     if (edit(() => LC.pasteRegion(level, clip, r.f0, r.s0, true))) sfx('place');
   };
   function flipPart() {
+    if (part && part.type === 'paint' && /^stairs/.test(paintKind)) {
+      paintKind = paintKind === 'stairs-r' ? 'stairs-l' : 'stairs-r';
+      if (tab === 'paint') setTab('paint');
+      tip('Stairs going up to the <b>' + (paintKind === 'stairs-r' ? 'right' : 'left') + '</b>.');
+      sfx('pick');
+      return;
+    }
     if (!part || part.type !== 'stamp') { tip('Pick a stamp first, then <b>Flip</b> mirrors it left to right.'); return; }
     if (part.stairs) {
       const d = part.stairs === 'right' ? 'left' : 'right';
@@ -887,8 +911,9 @@
 
   /* paint the picked block at p (a block from another stage is added to the level the
    * first time); throws when the stage has no room left for its pieces */
-  function paintAt(p) {
+  function paintAt(p, click) {
     const m = part.borrow ? LC.borrowBlock(level, info.nmeta, part.borrow.src, part.borrow.meta) : part.meta;
+    if (click && /^stairs/.test(paintKind)) LC.placeStairShape(level, p.f, p.c, paintKind === 'stairs-l' ? 1 : 2);
     const ok = LC.paintBlock(level, p.r, p.c, m, paintKind);
     if (part.borrow) {
       const room = LC.blockRoom(rom, level);
@@ -957,7 +982,10 @@
         return;
       }
       let ok = true;
-      if (edit(() => { ok = paintAt(p); })) sfx('place');
+      if (edit(() => { ok = paintAt(p, true); })) {
+        sfx('place');
+        if (/^stairs/.test(paintKind)) tip('Working stairs laid from here up to the floor above. Paint the other stair pictures over them; turn on <b>&#9638;</b> to see them.');
+      }
       if (!ok) tip('Stairs, doors and the exit keep their own floor there; only the picture changed.');
       drag = { kind: 'paint', last: p.r + ':' + p.c };
     } else {

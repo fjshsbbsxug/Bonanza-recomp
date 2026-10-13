@@ -170,7 +170,10 @@ builder/      the HTML builder page
     loaded by the wrapped tile loader into VRAM the stage leaves alone (`LC.FREE_TILES`,
     measured: never written or shown during play, empty, and outside the queued sprite
     loads of tbl_05E86); they get metatile pairs after the stage's own and mirrored ones.
-    The Stairs tool places the stage's staircase going either
+    A block from the Stairs group can lay a working staircase where it is painted
+    (`LC.placeStairShape`: the game's ramp, hole and landing columns, stage 1's values,
+    mirrored for the other direction; pictures stay as painted). The Door piece is the
+    door stamp's middle block (pillar picture, door column, door item). The Stairs tool places the stage's staircase going either
     way (the missing direction mirrored, `LC.stairStamps`); cut-off staircases are
     reported.
 

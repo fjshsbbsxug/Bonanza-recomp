@@ -429,6 +429,8 @@
     { id: 'front', name: 'Front lane', tip: 'solid in the front lane only: walk behind it' },
     { id: 'back', name: 'Back lane', tip: 'solid in the back lane only: walk in front of it' },
     { id: 'open', name: 'Walk-through', tip: 'nothing solid there' },
+    { id: 'stairs-r', name: 'Stairs \u2197', tip: 'working stairs up to the right from here to the floor above (5 blocks wide)' },
+    { id: 'stairs-l', name: 'Stairs \u2196', tip: 'working stairs up to the left from here to the floor above (5 blocks wide)' },
   ];
   const ROW_BITS = [0xC0, 0x30, 0x0C, 0x03, 0x01];
   /* the kind of the block at map row r, block column c (from its two columns' bits) */
@@ -442,7 +444,7 @@
   /* paint a block; returns false where the physics could not be changed (stairs, doors) */
   LC.paintBlock = function (level, r, c, meta, kind) {
     level.map[r * level.W + c] = meta;
-    if (!kind || kind === 'picture') return true;
+    if (!kind || kind === 'picture' || /^stairs/.test(kind)) return true;
     const f = Math.floor(r / 5), bits = ROW_BITS[r % 5] & 0xFE;   /* the slab bit stays */
     let ok = true;
     for (const i of [2 * c, 2 * c + 1]) {
@@ -573,6 +575,42 @@
     const out = LC.BLOCK_GROUPS.map(g => ({ name: g, blocks: groups[g].sort((a, b) => b.n - a.n).map(x => x.m) })).filter(g => g.blocks.length);
     groupCache.set(key, out);
     return out;
+  };
+
+  /* ---------- a working staircase without its pictures ----------
+   * The game's staircase (stage 1's, the plainest): on the lower floor a ramp of 7 columns,
+   * above it a hole and a 3-column landing; 10 columns = 5 blocks. Rising right (dir 2)
+   * from the block clicked; rising left (dir 1) is the mirror, ending at the block. */
+  const STAIR_LOWER = [0x01030082, 0x01070082, 0x010F0082, 0x011F0082, 0x013F0282, 0x017F0282, 0x01FF0282];
+  const STAIR_UPPER = { 2: 0x01FF0000, 3: 0x01000000, 4: 0x01000000, 5: 0x01000000, 6: 0x01000000,
+                        7: 0x01004082, 8: 0x01008082, 9: 0x01010082 };
+  /* the columns a staircase at block b of floor f takes: [{f, c, v}] */
+  LC.stairShape = function (level, f, b, dir) {
+    const out = [], first = dir === 1 ? 2 * b - 8 : 2 * b;
+    const at = rel => dir === 1 ? first + 9 - rel : first + rel;
+    STAIR_LOWER.forEach((v, rel) => out.push({ f, c: at(rel), v: dir === 1 ? swapDir(v) : v }));
+    for (const rel in STAIR_UPPER) out.push({ f: f - 1, c: at(+rel), v: dir === 1 ? swapDir(STAIR_UPPER[rel]) : STAIR_UPPER[rel] });
+    return out;
+  };
+  LC.placeStairShape = function (level, f, b, dir) {
+    if (f < 1) throw new Error('Stairs go up to the floor above: start them on a lower floor.');
+    const cols = LC.stairShape(level, f, b, dir);
+    for (const { f: ff, c } of cols) {
+      if (c < 2 || c > 2 * level.W - 3) throw new Error('The stairs do not fit there (too close to the end of the building).');
+      const i = level.col[ff][c] & 0xFFFF;
+      if (LC.isDoorInfo(i) || LC.isExitInfo(i)) throw new Error('The stairs would go through a door or the exit.');
+    }
+    for (const { f: ff, c, v } of cols) level.col[ff][c] = v >>> 0;
+    return cols;
+  };
+  /* the Door piece: the middle block of the stage's door stamp (its pillar picture, the
+   * door column, the door) */
+  LC.doorPiece = function (stamps) {
+    const d = stamps.find(s => s.id === 'door');
+    if (!d) return null;
+    const c = d.clip;
+    return { floors: 1, slices: 1, map: c.map.map(row => [row[1]]), col: [c.col[0].slice(2, 4)], guards: [],
+             items: c.items.map(o => Object.assign({}, o, { x: o.x - 16 })) };
   };
 
   /* stairs to the floor above in both directions, in the stage's look: the stage's own,
