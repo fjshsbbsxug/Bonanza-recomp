@@ -180,7 +180,14 @@ builder/      the HTML builder page
     blocks and the solid rows of its columns, and stairs/doors work. Ramps left without a
     landing by edits are removed (`LC.fixStairs`). Tests:
     `node builder/test/core.test.js baserom.md` (core, every stage) and
-    `node builder/test/ui.test.js baserom.md` (browser sweep, needs Playwright). The Stairs tool places the stage's staircase going either
+    `node builder/test/ui.test.js baserom.md` (browser sweep, needs Playwright).
+    Levels can have 3 to 5 floors (`LC.addFloor`/`removeFloor`; the export writes the
+    game's standard floor tables for that count: dat_0FF86, tbl_0FFA2, buffer count,
+    tbl_10322). Arcade map pictures: `LC.detectLayout` (and
+    `tools/lostlevels/detect.py`) finds the floors (the light slabs across the building) and
+    the staircases (the white steps' top edge rising ~1 px per px) with their direction;
+    the Trace tab lines the picture up with the building, matches the floor count and
+    places the staircases. The Stairs tool places the stage's staircase going either
     way (the missing direction mirrored, `LC.stairStamps`); cut-off staircases are
     reported.
 

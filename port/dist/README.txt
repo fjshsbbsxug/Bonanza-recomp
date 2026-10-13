@@ -143,7 +143,10 @@ number of them, shown there). The Stairs
 part puts a staircase from the floor you click to the one above; Flip (F) turns it the
 other way. Drag the robbers with the hand to move where they start; graphics, music
 and the time limit stay as in the original stage. Flip (F) mirrors the stamp you are placing; Trace shows a picture (a map
-of the stage, say) under the building so you can build over it.
+of the stage, say) under the building so you can build over it. With a map of an arcade
+stage loaded, "Detect layout" finds its floors and staircases, "Match floor count" gives
+your building as many floors (up to 5), and "Place the stairs" builds every staircase
+where the map has it, going the same way.
 
 New stages: the arcade had two stages the Mega Drive left out, the Department Store
 (after Mint) and the Antique Shop (after Deluxe Liner). "Or make a new stage" on Bonanza
