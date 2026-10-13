@@ -308,17 +308,37 @@
 
   /* insert n slices before slice s on every floor, copies of slice s-1 (widens rooms) */
   LC.insertSlices = function (level, s, n) {
-    const W = level.W, src = Math.max(0, s - 1);
+    const W = level.W;
     if (W + n > LC.MAX_W) throw new Error('A level can be at most ' + LC.MAX_W + ' blocks wide.');
+    /* never split a staircase: space goes in after it (or before, near the end) */
+    const inStairs = k => level.col.some(c => [2 * k - 1, 2 * k].some(i => {
+      const v = c[i];
+      return v !== undefined && (LC.isStairInfo(v & 0xFFFF) || ((v >>> 16) & 255) === 0);
+    }));
+    let t = s;
+    while (t < W && inStairs(t)) t++;
+    if (t >= W) { t = s; while (t > 1 && inStairs(t)) t--; }
+    s = t;
+    /* per floor, the copied slice is the nearest one at the left (else right) that is not
+     * part of a staircase, so a staircase is never stretched */
+    const stairy = (f, k) => [level.col[f][2 * k], level.col[f][2 * k + 1]].some(v =>
+      v === undefined || LC.isStairInfo(v & 0xFFFF) || ((v >>> 16) & 255) === 0);
+    const srcOf = [];
+    for (let f = 0; f < level.floors; f++) {
+      let k = Math.max(0, s - 1);
+      while (k > 0 && stairy(f, k)) k--;
+      if (stairy(f, k)) { k = s; while (k < W - 1 && stairy(f, k)) k++; }
+      srcOf.push(stairy(f, k) ? Math.max(0, s - 1) : k);
+    }
     const map = [];
     for (let row = 0; row < level.floors * 5; row++) {
       const line = level.map.slice(row * W, row * W + W);
-      line.splice(s, 0, ...new Array(n).fill(line[src]));
+      line.splice(s, 0, ...new Array(n).fill(line[srcOf[Math.floor(row / 5)]]));
       map.push(...line);
     }
     level.map = map;
     for (let f = 0; f < level.floors; f++) {
-      const c = level.col[f], a = c[2 * src], b = c[2 * src + 1];
+      const src = srcOf[f], c = level.col[f], a = c[2 * src], b = c[2 * src + 1];
       /* a copied door/exit column would make a second door/exit: copy it as plain floor */
       const plain = v => LC.isDoorInfo(v & 0xFFFF) ? ((v & 0xFF000000) | 0x00010000) >>> 0
                        : LC.isExitInfo(v & 0xFFFF) ? (v & ~0xF000) >>> 0 : v;
@@ -438,6 +458,8 @@
     const f = Math.floor(r / 5), bits = ROW_BITS[r % 5] & 0xFE || 0x01;
     const cols = [level.col[f][2 * c], level.col[f][2 * c + 1]];
     const has = sh => cols.every(v => ((v >>> sh) & 255 & bits) === bits);
+    const none = sh => cols.every(v => !((v >>> sh) & 255 & bits));
+    if (!(has(24) || none(24)) || !(has(16) || none(16))) return 'picture';   /* the two halves differ */
     const fr = has(24), bk = has(16);
     return fr && bk ? 'solid' : fr ? 'front' : bk ? 'back' : 'open';
   };
@@ -577,6 +599,134 @@
     return out;
   };
 
+  /* ---------- the stage's objects ----------
+   * Blocks the stage uses together: on each floor, everything that is not plain hallway
+   * (the blocks of the stage's hallway and wall stamps, row by row) is cut into connected
+   * groups (at most 8 blocks wide). Identical groups are merged; each keeps its pictures,
+   * the solid rows of its columns, and what it is in the game. */
+  LC.OBJECT_KINDS = ['Stairs', 'Doors', 'Furniture', 'On the wall', 'Floor', 'Other'];
+  const objCache = new Map();
+  LC.stageObjects = function (rom, e) {
+    if (objCache.has(e)) return objCache.get(e);
+    const L = LC.readStage(rom, e), W = L.W, stamps = LC.makeStamps(L), srcN = LC.info(rom, e).nmeta;
+    const hall = [0, 1, 2, 3, 4].map(() => new Set());
+    for (const s of stamps)
+      if (/^hall0$|^hall1$/.test(s.id)) s.clip.map.forEach((row, k) => row.forEach(m => hall[k % 5].add(m)));
+    const seen = new Uint8Array(W * L.floors * 5), found = new Map();
+    for (let f = 0; f < L.floors; f++) {
+      const at = (r, c) => (f * 5 + r) * W + c;
+      /* background on this floor: the hallway blocks and the 2 commonest blocks of each row */
+      const plain = hall.map((h, r) => {
+        const n = new Map();
+        for (let c = 0; c < W; c++) n.set(L.map[at(r, c)], (n.get(L.map[at(r, c)]) || 0) + 1);
+        const top = [...n.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).filter(x => x[1] >= 4).map(x => x[0]);
+        return new Set([...h, ...top]);
+      });
+      /* doors, walls and pillars (a whole block column of non-background) are objects of their own */
+      const alone = c => [2 * c, 2 * c + 1].some(i => LC.isDoorInfo(L.col[f][i] & 0xFFFF) ||
+                                                       ((L.col[f][i] >>> 24) === 0xFF && ((L.col[f][i] >>> 16) & 255) === 0xFF)) ||
+                         [0, 1, 2, 3, 4].every(r => !plain[r].has(L.map[at(r, c)]));
+      for (let r0 = 0; r0 < 5; r0++)
+        for (let c0 = 0; c0 < W; c0++) {
+          if (seen[at(r0, c0)] || plain[r0].has(L.map[at(r0, c0)])) continue;
+          /* flood fill on this floor */
+          const cells = [], stack = [[r0, c0]];
+          seen[at(r0, c0)] = 1;
+          while (stack.length) {
+            const [r, c] = stack.pop();
+            cells.push([r, c]);
+            for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const rr = r + dr, cc = c + dc;
+              if (rr < 0 || rr > 4 || cc < 0 || cc >= W || seen[at(rr, cc)] || plain[rr].has(L.map[at(rr, cc)])) continue;
+              if (dc && (alone(c) || alone(cc))) continue;               /* never joined sideways */
+              seen[at(rr, cc)] = 1;
+              stack.push([rr, cc]);
+            }
+          }
+          /* split wide groups into pieces of at most 8 blocks */
+          const cmin = Math.min(...cells.map(x => x[1])), cmax = Math.max(...cells.map(x => x[1]));
+          for (let x0 = cmin; x0 <= cmax; x0 += 8) {
+            const part = cells.filter(([, c]) => c >= x0 && c < x0 + 8);
+            if (!part.length) continue;
+            const rs = part.map(x => x[0]), cs = part.map(x => x[1]);
+            const top = Math.min(...rs), h = Math.max(...rs) - top + 1, left = Math.min(...cs), w = Math.max(...cs) - left + 1;
+            if (part.length < 2 && !alone(left)) continue;               /* slivers */
+            const grid = Array.from({ length: h }, () => new Array(w).fill(-1));
+            for (const [r, c] of part) grid[r - top][c - left] = L.map[at(r, c)];
+            const key = top + ':' + JSON.stringify(grid);
+            if (found.has(key)) { found.get(key).count++; continue; }
+            /* what the game does there */
+            const cols = L.col[f].slice(2 * left, 2 * (left + w));
+            let rowBits = 0;
+            for (let k = top; k < top + h; k++) rowBits |= [0xC0, 0x30, 0x0C, 0x02, 0][k];
+            const infos = cols.map(v => v & 0xFFFF);
+            let kind;
+            if (infos.some(i => LC.isExitInfo(i))) continue;            /* the exit stairs stamp has those */
+            if (infos.some(i => LC.isStairInfo(i))) kind = 'Stairs';
+            else if (infos.some(i => LC.isDoorInfo(i))) kind = 'Doors';
+            else if (cols.some(v => ((v >>> 24) | (v >>> 16)) & rowBits)) kind = 'Furniture';
+            else if (top + h <= 4) kind = 'On the wall';
+            else if (top === 4) kind = 'Floor';
+            else kind = 'Other';
+            const ramp = infos.map((i, k) => LC.isStairInfo(i) && bits((cols[k] >>> 16) & 255) >= 2 && bits((cols[k] >>> 16) & 255) <= 7 ? k : -1).filter(k => k >= 0);
+            const door = L.items.find(o => o.kind === LC.KIND.DOOR && LC.floorOf(o.y, L.floors) === f && LC.sliceOf(o.x) >= left && LC.sliceOf(o.x) < left + w);
+            found.set(key, {
+              src: e, srcN, kind, top, w, h, grid, cols, rowBits, count: 1,
+              stairs: kind === 'Stairs' && ramp.length ? { dir: infos[ramp[0]] & 3, first: ramp[0], last: ramp[ramp.length - 1] } : null,
+              door: kind === 'Doors' && door ? Object.assign({}, door, { x: door.x - 32 - 16 * left, y: door.y - 80 * f }) : null,
+            });
+          }
+        }
+    }
+    const out = [...found.values()].filter(o => o.kind !== 'Stairs' || o.stairs)
+      .sort((a, b) => LC.OBJECT_KINDS.indexOf(a.kind) - LC.OBJECT_KINDS.indexOf(b.kind) || b.count - a.count);
+    objCache.set(e, out);
+    return out;
+  };
+  /* an object mirrored left to right (blocks, columns, stair direction, door) */
+  LC.mirrorObject = function (o, N) {
+    const fm = m => m < 0 ? m : m < N ? m + N : m < 2 * N ? m - N : m ^ 1;
+    const cols = o.cols.slice().reverse().map(swapDir), n = cols.length;
+    return Object.assign({}, o, {
+      grid: o.grid.map(row => row.slice().reverse().map(fm)), cols, mirrored: !o.mirrored,
+      stairs: o.stairs ? { dir: 3 - o.stairs.dir, first: n - 1 - o.stairs.last, last: n - 1 - o.stairs.first } : null,
+      door: o.door ? Object.assign({}, o.door, { x: 16 * o.w - o.door.x }) : null,
+    });
+  };
+  /* place an object at block column c of floor f (its rows as in its stage). Blocks of another
+   * stage are borrowed; its solid rows go with it; stairs and doors work. */
+  LC.placeObject = function (level, o, f, c, mirror, N) {
+    if (mirror) o = LC.mirrorObject(o, o.srcN);
+    if (c < 1 || c + o.w > level.W - 1) throw new Error('It does not fit there.');
+    const pick = m => m < 0 ? m : o.src === level.stage ? m
+      : (m >= o.srcN ? LC.borrowBlock(level, N, o.src, m - o.srcN) + 1 : LC.borrowBlock(level, N, o.src, m));
+    for (let r = 0; r < o.h; r++)
+      for (let k = 0; k < o.w; k++) {
+        const m = o.grid[r][k];
+        if (m >= 0) level.map[(f * 5 + o.top + r) * level.W + c + k] = pick(m);
+      }
+    if (o.stairs) {
+      const b = o.stairs.dir === 2 ? c + (o.stairs.first >> 1) : c + (o.stairs.last >> 1);
+      LC.placeStairShape(level, f, b, o.stairs.dir);
+      return;
+    }
+    const col = level.col[f];
+    o.cols.forEach((v, i) => {
+      const t = 2 * c + i, cur = col[t];
+      if (cur === undefined || (cur & 0xFFFF)) return;               /* stairs/doors/exit stay */
+      if (LC.isDoorInfo(v & 0xFFFF)) { col[t] = v >>> 0; return; }   /* the door column as it is */
+      const fr = (((cur >>> 24) & ~o.rowBits) | ((v >>> 24) & o.rowBits) | 1) & 255;
+      const bk = ((((cur >>> 16) & 255) & ~o.rowBits) | (((v >>> 16) & 255) & o.rowBits) | 1) & 255;
+      col[t] = ((fr << 24) | (bk << 16)) >>> 0;
+    });
+    if (o.door) {
+      LC.removeObjects(level, f, f, c, c + o.w - 1);
+      level.items = level.items.filter(x => !(x.kind === LC.KIND.DOOR && LC.floorOf(x.y, level.floors) === f &&
+                                              LC.sliceOf(x.x) >= c && LC.sliceOf(x.x) < c + o.w));
+      level.items.push(Object.assign({}, o.door, { x: o.door.x + 32 + 16 * c, y: o.door.y + 80 * f }));
+    }
+  };
+
   /* ---------- a working staircase without its pictures ----------
    * The game's staircase (stage 1's, the plainest): on the lower floor a ramp of 7 columns,
    * above it a hole and a 3-column landing; 10 columns = 5 blocks. Rising right (dir 2)
@@ -632,13 +782,35 @@
         let j = i;
         while (j + 1 < c.length && LC.isStairInfo(c[j + 1] & 0xFFFF)) j++;
         let ok = false;
-        for (let k = Math.max(0, i - 6); k <= Math.min(up.length - 1, j + 6); k++) if (LC.isStairInfo(up[k] & 0xFFFF)) ok = true;
+        for (let k = Math.max(0, i - 8); k <= Math.min(up.length - 1, j + 8); k++) if (LC.isStairInfo(up[k] & 0xFFFF)) ok = true;
         if (!ok) out.push('The stairs on floor ' + (f + 1) + ' at block ' + (i >> 1) + ' are broken (no landing above): place them again.');
         i = j;
       }
     }
     return out;
   }
+
+  /* remove what is left of a cut staircase: a ramp with no landing above becomes plain
+   * floor (its pictures are kept) */
+  const PLAIN = 0x01010000;
+  LC.fixStairs = function (level) {
+    let n = 0;
+    const isRamp = v => LC.isStairInfo(v & 0xFFFF) && bits((v >>> 16) & 255) >= 2 && bits((v >>> 16) & 255) <= 7;
+    for (let f = 1; f < level.floors; f++) {
+      const c = level.col[f], up = level.col[f - 1];
+      const near = (arr, i, d, test) => { for (let k = Math.max(0, i - d); k <= Math.min(arr.length - 1, i + d); k++) if (test(arr[k])) return true; return false; };
+      for (let i = 0; i < c.length; i++)
+        if (LC.isStairInfo(c[i] & 0xFFFF) && !LC.isExitInfo(c[i] & 0xFFFF) && isRamp(c[i]) &&
+            !near(up, i, 8, v => LC.isStairInfo(v & 0xFFFF))) {
+          let j = i;
+          while (j < c.length && LC.isStairInfo(c[j] & 0xFFFF)) j++;
+          /* the exit stairs are left alone (the exit check reports a cut exit) */
+          if (!c.slice(i, j).some(v => LC.isExitInfo(v & 0xFFFF))) for (let k = i; k < j; k++) { c[k] = PLAIN; n++; }
+          i = j;
+        }
+    }
+    return n;
+  };
 
   /* ---------- checking and writing ---------- */
   /* doors (paired with their door columns, numbered) first, then the other items, then the exit */
@@ -846,6 +1018,8 @@
   };
 
   LC.exportLevel = function (rom, level) {
+    level = JSON.parse(JSON.stringify(level));
+    LC.fixStairs(level);
     const r = R(rom), st = level.stage, W = level.W, nf = level.floors, H = nf * 5;
     const res = LC.resolveItems(level);
     if (res.problems.some(p => /Too many|no exit|no treasures/.test(p))) throw new Error(res.problems.join('\n'));
