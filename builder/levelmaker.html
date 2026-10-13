@@ -31,6 +31,10 @@
             padding: 10px 14px; background: var(--sun); border-bottom: 4px solid var(--line); }
   .logo { font-weight: 700; font-size: 24px; letter-spacing: .5px; margin-right: 6px; white-space: nowrap; }
   .logo b { color: var(--red); -webkit-text-stroke: 1px var(--line); }
+  .parts.paint { flex-wrap: wrap; align-items: flex-start; overflow-x: hidden; overflow-y: auto; max-height: 190px; }
+  .parts.paint .part { padding: 2px; }
+  .kinds { flex: 0 0 100%; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .chunky.small { padding: 3px 9px; font-size: 13px; }
   .newstage { margin-top: 18px; padding-top: 12px; border-top: 3px dashed var(--line); }
   .stagename { font-weight: 600; background: #fff; border: 3px solid var(--line); border-radius: 999px; padding: 4px 14px; }
   .spacer { flex: 1; }
@@ -229,6 +233,7 @@
   const $ = id => document.getElementById(id);
   let rom = null, st = 0, info = null, level = null;
   let tab = 'build', tool = 'place', part = null, zoom = 2, grid = true, walls = false, sound = true;
+  let paintKind = 'picture', stairSet = null;
   let hover = null, sel = null, selObj = null, drag = null, myStamps = [], stamps = [];
   /* a picture (e.g. a map of the arcade stage) shown over the building to build along */
   const trace = { img: null, on: true, alpha: 0.45, x: 0, y: 0, sx: 1, sy: 1 };
@@ -426,6 +431,7 @@
     level = lv || LC.readStage(rom, st);
     G = makeGraphics(info);
     stamps = LC.makeStamps(LC.readStage(rom, st));
+    stairSet = LC.stairStamps(stamps, info.nmeta);
     myStamps = [];
     undo.length = redo.length = 0;
     sel = null; selObj = null; part = null;
@@ -478,8 +484,15 @@
     document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
     const box = $('parts');
     box.innerHTML = '';
+    box.classList.toggle('paint', t === 'paint');
     if (t === 'build') {
+      if (stairSet) {
+        const pic = clipCanvas(stairSet.right);
+        box.appendChild(partCard('Stairs \u21c4', cx => fit(cx, pic, pic.width, pic.height),
+          { type: 'stamp', clip: stairSet.right, name: 'stairs', stairs: 'right' }));
+      }
       for (const s of stamps) {
+        if (stairSet && /^stairs-up/.test(s.id)) continue;
         const pic = clipCanvas(s.clip);
         box.appendChild(partCard(s.name, cx => fit(cx, pic, pic.width, pic.height), { type: 'stamp', clip: s.clip, name: s.name }));
       }
@@ -553,6 +566,24 @@
       $('tr-y').oninput = () => { trace.y = num('tr-y'); };
       $('tr-fit').onclick = () => { fitTrace(); setTab('trace'); };
     } else if (t === 'paint') {
+      const kinds = document.createElement('div');
+      kinds.className = 'kinds';
+      kinds.innerHTML = '<b>What it does:</b>';
+      for (const k of LC.BLOCK_KINDS) {
+        const b = document.createElement('button');
+        b.className = 'chunky small';
+        b.textContent = k.name;
+        b.title = k.tip;
+        b.setAttribute('aria-pressed', paintKind === k.id);
+        b.onclick = () => {
+          paintKind = k.id;
+          kinds.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+          sfx('pick');
+          tip('Blocks you paint now: <b>' + k.name + '</b>, ' + k.tip + '. Turn on <b>&#9638;</b> to see what is solid.');
+        };
+        kinds.appendChild(b);
+      }
+      box.appendChild(kinds);
       info.meta.slice(0, info.nmeta).forEach((m, i) => {
         const b = document.createElement('button');
         b.className = 'part';
@@ -573,8 +604,9 @@
     setTool('place');
     document.querySelectorAll('.part').forEach(x => x.setAttribute('aria-pressed', x === btn));
     sfx('pick');
-    tip(p.type === 'stamp' ? `Click to place <b>${p.name}</b>. It brings its own walls and floor${p.clip.floors > 1 ? ' on both floors' : ''}.`
-      : p.type === 'paint' ? 'Click or drag to paint this block. Only the picture changes, not the walls. <kbd>Alt</kbd>+click picks a block from the building.'
+    tip(p.stairs ? 'Click a floor: <b>stairs</b> from there up to the floor above. <b>Flip</b> (F) turns them the other way.'
+      : p.type === 'stamp' ? `Click to place <b>${p.name}</b>. It brings its own walls and floor${p.clip.floors > 1 ? ' on both floors' : ''}.`
+      : p.type === 'paint' ? 'Click or drag to paint this block (<b>' + LC.BLOCK_KINDS.find(k => k.id === paintKind).name + '</b>: pick what it does above). <kbd>Alt</kbd>+click picks a block from the building.'
       : 'Click on a floor to place it. Use the <b>Hand</b> to move things, the <b>Eraser</b> to remove them.');
   }
   function setTool(t) {
@@ -797,7 +829,11 @@
   };
   function flipPart() {
     if (!part || part.type !== 'stamp') { tip('Pick a stamp first, then <b>Flip</b> mirrors it left to right.'); return; }
-    part = Object.assign({}, part, { clip: LC.flipClip(part.clip, info.nmeta), pic: null });
+    if (part.stairs) {
+      const d = part.stairs === 'right' ? 'left' : 'right';
+      part = Object.assign({}, part, { stairs: d, clip: stairSet[d], pic: null });
+      tip('Stairs going up to the <b>' + d + '</b>.');
+    } else part = Object.assign({}, part, { clip: LC.flipClip(part.clip, info.nmeta), pic: null });
     sfx('pick');
   }
   $('flipbtn').onclick = flipPart;
@@ -848,13 +884,23 @@
     }
     if (!part) { tip('Pick a part from the tray first.'); return; }
     if (part.type === 'stamp') {
+      if (part.stairs && p.f === 0) { tip('Stairs go from the floor you click up to the floor above: click a lower floor.'); sfx('error'); return; }
       const q = stampPos(p, part.clip);
       if (edit(() => LC.pasteRegion(level, part.clip, q.f, q.s, true))) sfx('place');
       drag = part.clip.slices === 1 && part.clip.floors === 1 ? { kind: 'stamp', last: q.f + ':' + q.s } : null;
     } else if (part.type === 'paint') {
-      if (e.altKey || e.button === 2) { part = { type: 'paint', meta: level.map[p.r * level.W + p.c] }; sfx('pick'); return; }
-      if (edit(() => { level.map[p.r * level.W + p.c] = part.meta; })) sfx('place');
-      drag = { kind: 'paint' };
+      if (e.altKey || e.button === 2) {
+        part = { type: 'paint', meta: level.map[p.r * level.W + p.c] };
+        paintKind = LC.blockKindAt(level, p.r, p.c);
+        if (tab === 'paint') setTab('paint');
+        sfx('pick');
+        tip('Picked this block (<b>' + LC.BLOCK_KINDS.find(k => k.id === paintKind).name + '</b>).');
+        return;
+      }
+      let ok = true;
+      if (edit(() => { ok = LC.paintBlock(level, p.r, p.c, part.meta, paintKind); })) sfx('place');
+      if (!ok) tip('Stairs, doors and the exit keep their own floor there; only the picture changed.');
+      drag = { kind: 'paint', last: p.r + ':' + p.c };
     } else {
       const o = newObject(p);
       if (edit(() => { (part.type === 'guard' ? level.guards : level.items).push(o); })) sfx('place');
@@ -867,7 +913,8 @@
     if (!drag) return;
     if (drag.kind === 'sel') { sel.f1 = p.f; sel.s1 = p.s; }
     else if (drag.kind === 'paint') {
-      if (level.map[p.r * level.W + p.c] !== part.meta) { level.map[p.r * level.W + p.c] = part.meta; dirty = true; }
+      const k = p.r + ':' + p.c;
+      if (k !== drag.last) { drag.last = k; LC.paintBlock(level, p.r, p.c, part.meta, paintKind); dirty = true; }
     } else if (drag.kind === 'stamp') {
       const q = stampPos(p, part.clip), k = q.f + ':' + q.s;
       if (k !== drag.last) { drag.last = k; LC.pasteRegion(level, part.clip, q.f, q.s, true); dirty = true; sfx('pick'); }

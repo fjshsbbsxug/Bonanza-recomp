@@ -418,6 +418,71 @@
     return out;
   };
 
+  /* ---------- blocks with physics ----------
+   * A 16 px block at row k (0..4) of a floor covers two collision columns and mask rows
+   * 2k, 2k+1 of that floor (bit7 = top row ... bit1 = row 6, bit0 = rows 7-9, the slab). */
+  LC.BLOCK_KINDS = [
+    { id: 'picture', name: 'Picture only', tip: 'only the picture changes' },
+    { id: 'solid', name: 'Solid', tip: 'solid in both lanes: low ones are jumped over, a stack is a wall' },
+    { id: 'front', name: 'Front lane', tip: 'solid in the front lane only: walk behind it' },
+    { id: 'back', name: 'Back lane', tip: 'solid in the back lane only: walk in front of it' },
+    { id: 'open', name: 'Walk-through', tip: 'nothing solid there' },
+  ];
+  const ROW_BITS = [0xC0, 0x30, 0x0C, 0x03, 0x01];
+  /* the kind of the block at map row r, block column c (from its two columns' bits) */
+  LC.blockKindAt = function (level, r, c) {
+    const f = Math.floor(r / 5), bits = ROW_BITS[r % 5] & 0xFE || 0x01;
+    const cols = [level.col[f][2 * c], level.col[f][2 * c + 1]];
+    const has = sh => cols.every(v => ((v >>> sh) & 255 & bits) === bits);
+    const fr = has(24), bk = has(16);
+    return fr && bk ? 'solid' : fr ? 'front' : bk ? 'back' : 'open';
+  };
+  /* paint a block; returns false where the physics could not be changed (stairs, doors) */
+  LC.paintBlock = function (level, r, c, meta, kind) {
+    level.map[r * level.W + c] = meta;
+    if (!kind || kind === 'picture') return true;
+    const f = Math.floor(r / 5), bits = ROW_BITS[r % 5] & 0xFE;   /* the slab bit stays */
+    let ok = true;
+    for (const i of [2 * c, 2 * c + 1]) {
+      const v = level.col[f][i];
+      if (v === undefined) continue;
+      if (v & 0xFFFF) { ok = false; continue; }
+      let fr = (v >>> 24) & 255, bk = (v >>> 16) & 255;
+      const set = (m, on) => on ? m | bits : m & ~bits;
+      fr = set(fr, kind === 'solid' || kind === 'front') | 1;
+      bk = set(bk, kind === 'solid' || kind === 'back') | 1;
+      level.col[f][i] = ((fr << 24) | (bk << 16)) >>> 0;
+    }
+    return ok;
+  };
+
+  /* stairs to the floor above in both directions, in the stage's look: the stage's own,
+   * the missing direction mirrored */
+  LC.stairStamps = function (stamps, N) {
+    let up = stamps.find(s => s.id === 'stairs-up-right'), ul = stamps.find(s => s.id === 'stairs-up-left');
+    if (!up && !ul) return null;
+    const right = up ? up.clip : LC.flipClip(ul.clip, N), left = ul ? ul.clip : LC.flipClip(up.clip, N);
+    return { right, left };
+  };
+  /* ramps with no landing on the floor above (cut off by later edits) */
+  function brokenStairs(level) {
+    const out = [];
+    for (let f = 1; f < level.floors; f++) {
+      const c = level.col[f], up = level.col[f - 1];
+      for (let i = 0; i < c.length; i++) {
+        const back = (c[i] >>> 16) & 255;
+        if (!LC.isStairInfo(c[i] & 0xFFFF) || bits(back) < 2 || bits(back) > 7) continue;
+        let j = i;
+        while (j + 1 < c.length && LC.isStairInfo(c[j + 1] & 0xFFFF)) j++;
+        let ok = false;
+        for (let k = Math.max(0, i - 6); k <= Math.min(up.length - 1, j + 6); k++) if (LC.isStairInfo(up[k] & 0xFFFF)) ok = true;
+        if (!ok) out.push('The stairs on floor ' + (f + 1) + ' at block ' + (i >> 1) + ' are broken (no landing above): place them again.');
+        i = j;
+      }
+    }
+    return out;
+  }
+
   /* ---------- checking and writing ---------- */
   /* doors (paired with their door columns, numbered) first, then the other items, then the exit */
   LC.resolveItems = function (level) {
@@ -450,6 +515,7 @@
     const treasures = others.filter(o => o.kind === LC.KIND.TREASURE).length;
     if (!treasures) problems.push('There are no treasures.');
     if (LC.startProblem(level)) problems.push(LC.startProblem(level));
+    problems.push(...brokenStairs(level));
     for (const p of level.players) {
       const f = LC.floorOf(p.y, level.floors), c = Math.floor((p.x - 32) / 8);
       const v = level.col[f][c];

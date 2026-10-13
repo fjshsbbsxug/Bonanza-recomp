@@ -162,7 +162,12 @@ builder/      the HTML builder page
     streamed column C = (camX - 32) / 16 - 2, plane address of block column c =
     base + (2c mod 64) * 2, camera y = 32 + 80 floor, first map row 5 (floor - 1), and
     first-screen descriptors split where the plane wraps (values checked against all ten
-    stages' own routines).
+    stages' own routines). Painted blocks can carry physics (`LC.paintBlock`): a 16 px
+    block at row k of a floor sets mask rows 2k, 2k+1 of its two collision columns in the
+    front lane, back lane, both, or clears them (the slab bit stays; stair/door/exit
+    columns are left alone). The Stairs tool places the stage's staircase going either
+    way (the missing direction mirrored, `LC.stairStamps`); cut-off staircases are
+    reported.
 
   * *Extra stages* (`port/src/extrastages.c`, "New stage" in Bonanza Maker): new stages
     between the cartridge's own, e.g. the two arcade stages the Mega Drive left out
