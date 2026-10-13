@@ -153,7 +153,23 @@ builder/      the HTML builder page
     this stage leaves them free; colours of palette lines 1-3 are matched to the stage.
     The stage's tile loader is wrapped by a new routine that adds those loads. Guards are
     drawn with the frame each guard type shows first in that stage (LC.GUARD_FRAMES,
-    recorded from the game).
+    recorded from the game). Stamps and selected areas can be flipped: mirrored
+    metatiles (tiles swapped, hflip toggled) are added after the stage's own, collision
+    columns reversed and the stair direction (info 0x81/0x82) swapped. The Trace tab shows
+    a picture (e.g. an arcade map) under the building to build over.
+
+  * *Extra stages* (`port/src/extrastages.c`, "New stage" in Bonanza Maker): new stages
+    between the cartridge's own, e.g. the two arcade stages the Mega Drive left out
+    (`tools/lostlevels/make.js ROM` builds `LostLevels.bbro` from your ROM: the arcade's
+    Department Store after Mint, on the Jewelry Store's graphics). Every way into a stage
+    passes the entry dispatcher `sub_11106` once, and everything the game knows about an
+    entry comes from tables (intro name and "STAGE n" sprites, targets screen, setup,
+    HUD number, minimap, spawn/escape; only entry 6 has special code). An extra stage's
+    ROM slot starts with a `BBXSTAGE` descriptor (follows entry, host entry, name sprite,
+    patch list = the host's table values); at the hooked dispatcher the port writes them
+    into the ROM buffer when the game moves on from the entry it follows, plays the host,
+    and puts them back when it is cleared. Later stages are numbered one higher. Nothing
+    is hooked without one. `--play-extra K` (`--extra K` headless) starts one directly.
 
   Settings live in `bonanza.ini` (see `port/dist/README.txt`). Apart from Floor Alert
   they only change the picture, so recompiled-vs-interpreted runs stay bit-identical.

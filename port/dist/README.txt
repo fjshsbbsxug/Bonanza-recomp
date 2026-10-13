@@ -131,7 +131,14 @@ the stage's own are greyed out), single blocks to paint - and click to place the
 the hand moves them or selects an area to make your own stamp, add space or remove it.
 Press Play to try the level right away, and save it as a .bbro. Open the .bbro again to
 keep building. The start position, graphics, music and time limit stay as in the
-original stage.
+original stage. Flip (F) mirrors the stamp you are placing; Trace shows a picture (a map
+of the stage, say) under the building so you can build over it.
+
+New stages: the arcade had two stages the Mega Drive left out, the Department Store
+(after Mint) and the Antique Shop (after Deluxe Liner). "Or make a new stage" on Bonanza
+Maker's first page builds one with the look of a stage you pick; the game plays it
+between the two stages, and the stages after it move up one number. LostLevels.bbro
+(made from your ROM with tools/lostlevels/make.js) has the arcade's Department Store.
 
 Patches that change the game's code work too: that code then runs on the built-in
 68000 interpreter instead of the recompiled code. With no mods on, the game is the

@@ -781,7 +781,7 @@
                     M: 0x19E, N: 0x1A0, O: 0x1A2, P: 0x1A4, R: 0x1A6, S: 0x1A8, T: 0x1AA, U: 0x1AC, W: 0x1AE,
                     X: 0x1B0, Y: 0x1B2, "'": 0x1B6 };
   LC.nameProblem = name => {
-    const bad = [...new Set(String(name).toUpperCase().replace(/[^ ]/g, c => LETTERS[c] ? '' : c))];
+    const bad = [...new Set([...String(name).toUpperCase()].filter(c => c !== ' ' && !LETTERS[c]))];
     return bad.length ? 'The intro has no letter ' + bad.join(', ') + ' (it has A-E, G, I, J, L-P, R-U, W-Y and \').' : '';
   };
   function nameMapping(name) {

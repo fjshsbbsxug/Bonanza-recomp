@@ -31,6 +31,7 @@
             padding: 10px 14px; background: var(--sun); border-bottom: 4px solid var(--line); }
   .logo { font-weight: 700; font-size: 24px; letter-spacing: .5px; margin-right: 6px; white-space: nowrap; }
   .logo b { color: var(--red); -webkit-text-stroke: 1px var(--line); }
+  .newstage { margin-top: 18px; padding-top: 12px; border-top: 3px dashed var(--line); }
   .stagename { font-weight: 600; background: #fff; border: 3px solid var(--line); border-radius: 999px; padding: 4px 14px; }
   .spacer { flex: 1; }
   /* parts tray */
@@ -83,7 +84,7 @@
   .dialog.show { display: grid; }
   .dialog .panel { max-width: 460px; width: 100%; }
   .field { display: grid; gap: 3px; margin-top: 8px; font-weight: 600; font-size: 13px; }
-  .field input { font: inherit; border: 3px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+  .field input, .field select { font: inherit; border: 3px solid var(--line); border-radius: 10px; padding: 6px 8px; }
   #playscreen { position: fixed; inset: 0; z-index: 40; display: none; background: #000; }
   #playscreen.show { display: grid; grid-template-rows: auto 1fr; }
   #playscreen .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: var(--sun); border-bottom: 4px solid var(--line); }
@@ -115,6 +116,20 @@
         <button class="chunky" id="openbtn2">Open a saved level</button>
       </div>
       <div class="courses" id="courses"></div>
+      <div class="newstage">
+        <b style="font-size:20px">Or make a new stage</b>
+        <p class="muted" style="margin:4px 0 8px">The arcade had two stages the Mega Drive left out. A new stage is played
+          between two of the game's own, and the stages after it move up one number.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+          <label class="field">Where<select id="ns-after">
+            <option value="5">After Mint (arcade stage 5: Department Store)</option>
+            <option value="10">After Deluxe Liner (arcade stage 10: Antique Shop)</option></select></label>
+          <label class="field">Name in the intro<input type="text" id="ns-name" value="Department Store" maxlength="20"></label>
+          <label class="field">Look (graphics, guards, stamps) from<select id="ns-host"></select></label>
+          <button class="chunky save" id="ns-go">Start building</button>
+        </div>
+        <div id="ns-msg" class="muted"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -280,6 +295,25 @@
       b.onclick = () => { $('titlescreen').classList.remove('show'); openStage(e); };
       box.appendChild(b);
     }
+    const hs = $('ns-host');
+    for (const e of LC.EXTRA_HOSTS) hs.add(new Option(LC.stageLabel(e), e, e === 7, e === 7));
+    $('ns-after').onchange = () => {
+      const a = $('ns-after').value;
+      $('ns-name').value = a === '5' ? 'Department Store' : 'Antique Shop';
+      hs.value = a === '5' ? 7 : 11;
+      $('ns-name').oninput();
+    };
+    $('ns-name').oninput = () => { $('ns-msg').innerHTML = LC.nameProblem($('ns-name').value) ? '<span class="bad">' + LC.nameProblem($('ns-name').value) + '</span>' : ''; };
+    $('ns-go').onclick = () => {
+      const name = $('ns-name').value.trim(), host = +hs.value, after = +$('ns-after').value;
+      if (!name || LC.nameProblem(name)) { $('ns-name').oninput(); sfx('error'); return; }
+      const lv = LC.readStage(rom, host);
+      lv.extra = { slot: after === 5 ? 0 : 1, after, name };
+      $('titlescreen').classList.remove('show');
+      openStage(host, lv);
+      tip('A new stage, built from <b>' + LC.stageLabel(host) + '</b>. Change it into your own: rebuild with the stamps, ' +
+          'trace a map in the <b>Trace</b> tab, then <b>Play</b>.');
+    };
     /* previews, one stage at a time so the page stays responsive */
     let k = 0;
     const next = () => {
@@ -395,8 +429,9 @@
     myStamps = [];
     undo.length = redo.length = 0;
     sel = null; selObj = null; part = null;
-    $('stagename').textContent = LC.stageLabel(st);
-    $('m-name').value = 'Stage ' + LC.stageNumber(st) + ' remix';
+    $('stagename').textContent = level.extra ? 'New stage: ' + level.extra.name + ' (' + LC.EXTRA_AFTER[level.extra.after] + ')'
+                                             : LC.stageLabel(st);
+    $('m-name').value = level.extra ? level.extra.name : 'Stage ' + LC.stageNumber(st) + ' remix';
     dirty = true;
     setTool('place');
     setTab('build');
@@ -876,9 +911,11 @@
     const ips = LC.makeIps(rom, ex.rom);
     const z = new JSZip();
     z.file('mod.ini', LC.modIni({ name, author: $('m-author').value, version: $('m-version').value,
-      description: $('m-desc').value || 'My version of ' + LC.stageLabel(st) + ', made with Bonanza Maker' }));
-    z.file('patches/stage' + String(st).padStart(2, '0') + '.ips', ips);
-    z.file('levels/stage' + String(st).padStart(2, '0') + '.json', JSON.stringify(level));
+      description: $('m-desc').value || (level.extra ? 'A new stage, ' + level.extra.name + ', ' + LC.EXTRA_AFTER[level.extra.after]
+                                                     : 'My version of ' + LC.stageLabel(st)) + ', made with Bonanza Maker' }));
+    const fname = level.extra ? 'extra' + (level.extra.slot + 1) : 'stage' + String(st).padStart(2, '0');
+    z.file('patches/' + fname + '.ips', ips);
+    z.file('levels/' + fname + '.json', JSON.stringify(level));
     return z.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
   }
   $('savebtn').onclick = () => { if (level) $('savedlg').classList.add('show'); };
@@ -935,7 +972,7 @@
     try { mod = await buildMod('Test play'); }
     catch (e) { tip('<span class="bad">Not ready to play: ' + e.message.replace(/\n/g, ' ') + '</span>'); sfx('error'); return; }
     sfx('play');
-    playData = { type: 'bbro-play', rom, mod, entry: st, ini: 'screen = 16:9\nmods = test.bbro\n' };
+    playData = { type: 'bbro-play', rom, mod, entry: st, extra: level.extra ? 1 : 0, ini: 'screen = 16:9\nmods = test.bbro\n' };
     $('playscreen').classList.add('show');
     $('playframe').src = 'play.html?' + Date.now();
   };

@@ -45,7 +45,7 @@
           try { FS.mkdir('/mods'); } catch (err) { /* there */ }
           FS.writeFile('/mods/test.bbro', d.mod);
           msg.style.display = 'none';
-          Module.callMain(['--play-stage', String(d.entry)]);
+          Module.callMain(d.extra ? ['--play-extra', String(d.extra)] : ['--play-stage', String(d.entry)]);
           canvas.focus();
           parent.postMessage({ type: 'bbro-play-started' }, '*');
         },
