@@ -131,7 +131,8 @@ the stage's own are greyed out), single blocks to paint - and click to place the
 the hand moves them or selects an area to make your own stamp, add space or remove it.
 Press Play to try the level right away, and save it as a .bbro. Open the .bbro again to
 keep building. Blocks you paint can be solid (both lanes, front lane or back lane only: a low one is
-jumped over, a stack is a wall) or walk-through; pick that above the blocks. "Blocks from" lets you paint with blocks of
+jumped over, a stack is a wall) or walk-through; pick that above the blocks. Blocks are grouped by how the stage uses
+them (stairs, doors, walls, floors, furniture, background). "Blocks from" lets you paint with blocks of
 any other stage (their colours are matched to this stage; each stage has room for a
 number of them, shown there). The Stairs
 part puts a staircase from the floor you click to the one above; Flip (F) turns it the

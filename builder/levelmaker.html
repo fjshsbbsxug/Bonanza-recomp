@@ -33,6 +33,7 @@
   .logo b { color: var(--red); -webkit-text-stroke: 1px var(--line); }
   .parts.paint { flex-wrap: wrap; align-items: flex-start; overflow-x: hidden; overflow-y: auto; max-height: 190px; }
   .parts.paint .part { padding: 2px; }
+  .blockgroup { flex: 0 0 100%; font-weight: 700; font-size: 13px; margin: 6px 0 -2px; }
   .kinds { flex: 0 0 100%; position: sticky; top: -10px; z-index: 1; background: #fff; padding: 4px 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; }
   .chunky.small { padding: 3px 9px; font-size: 13px; }
   .newstage { margin-top: 18px; padding-top: 12px; border-top: 3px dashed var(--line); }
@@ -621,8 +622,13 @@
       note.textContent = paintSrc ? ' Colours are matched to this stage. Room here: ' + (room.free - room.used) + ' more 8x8 pieces (a block is up to 4).' : '';
       from.appendChild(note);
       kinds.appendChild(from);
-      const srcInfo = paintSrc ? LC.info(rom, paintSrc) : info;
-      for (let i = 0; i < srcInfo.nmeta; i++) {
+      /* in groups, like the game uses them */
+      for (const grp of LC.blockGroups(rom, paintSrc || st)) {
+        const h = document.createElement('div');
+        h.className = 'blockgroup';
+        h.textContent = grp.name;
+        box.appendChild(h);
+        for (const i of grp.blocks) {
         const b = document.createElement('button');
         b.className = 'part';
         b.style.width = '44px';
@@ -633,6 +639,7 @@
         b.appendChild(c);
         b.onclick = () => selectPart(paintSrc ? { type: 'paint', borrow: { src: paintSrc, meta: i }, pic: c } : { type: 'paint', meta: i }, b);
         box.appendChild(b);
+        }
       }
     }
   }

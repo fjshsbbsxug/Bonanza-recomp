@@ -541,6 +541,40 @@
     return { used: p.tiles, free: LC.freeTileCount(level.stage), problems: p.problems };
   };
 
+  /* blocks of a stage sorted into groups by where the stage uses them (most used first) */
+  LC.BLOCK_GROUPS = ['Stairs', 'Doors', 'Walls', 'Floors', 'Furniture', 'Background', 'Other'];
+  const groupCache = new Map();
+  LC.blockGroups = function (rom, e) {
+    const key = e;
+    if (groupCache.has(key)) return groupCache.get(key);
+    const L = LC.readStage(rom, e), N = LC.info(rom, e).nmeta;
+    const votes = Array.from({ length: N }, () => ({}));
+    for (let r = 0; r < L.floors * 5; r++)
+      for (let c = 0; c < L.W; c++) {
+        const m = L.map[r * L.W + c], f = Math.floor(r / 5), k = r % 5;
+        if (m >= N) continue;
+        const cols = [L.col[f][2 * c], L.col[f][2 * c + 1]];
+        const info = cols.map(v => v & 0xFFFF), bitsAt = [0xC0, 0x30, 0x0C, 0x02, 0][k];
+        let g;
+        if (info.some(i => LC.isStairInfo(i))) g = 'Stairs';
+        else if (info.some(i => LC.isDoorInfo(i))) g = 'Doors';
+        else if (cols.every(v => (v >>> 24) === 0xFF && ((v >>> 16) & 255) === 0xFF)) g = 'Walls';
+        else if (k === 4) g = 'Floors';
+        else if (cols.some(v => ((v >>> 24) & bitsAt) || (((v >>> 16) & 255) & bitsAt))) g = 'Furniture';
+        else g = 'Background';
+        votes[m][g] = (votes[m][g] || 0) + 1;
+      }
+    const groups = {};
+    LC.BLOCK_GROUPS.forEach(g => { groups[g] = []; });
+    votes.forEach((v, m) => {
+      const best = Object.keys(v).sort((a, b) => v[b] - v[a])[0];
+      groups[best || 'Other'].push({ m, n: best ? v[best] : 0 });
+    });
+    const out = LC.BLOCK_GROUPS.map(g => ({ name: g, blocks: groups[g].sort((a, b) => b.n - a.n).map(x => x.m) })).filter(g => g.blocks.length);
+    groupCache.set(key, out);
+    return out;
+  };
+
   /* stairs to the floor above in both directions, in the stage's look: the stage's own,
    * the missing direction mirrored */
   LC.stairStamps = function (stamps, N) {
