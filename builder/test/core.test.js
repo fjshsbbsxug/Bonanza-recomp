@@ -126,6 +126,13 @@ for (const e of LC.STAGES) {
     objs.forEach(o => { kinds[o.kind] = (kinds[o.kind] || 0) + 1; });
     console.log(name, 'objects:', JSON.stringify(kinds));
   }
+  /* more / fewer floors (3 to 5) */
+  if (!base.base) {
+    const L = clone(base);
+    if (L.floors < 5) { LC.addFloor(L, 0, 0); exportOk(L, name + ' one more floor'); }
+    const L2 = clone(base);
+    if (L2.floors > 3) { LC.removeFloor(L2, 0); if (!LC.startProblem(L2)) tryit(name + ' one floor less', () => LC.exportLevel(rom, clone(L2))); }
+  }
   /* extra stage on a host */
   if (LC.EXTRA_HOSTS.includes(e)) {
     const L = clone(base);

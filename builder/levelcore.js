@@ -306,6 +306,28 @@
     LC.pasteRegion(level, clip, 0, 0, true);
   };
 
+  /* add a floor above floor `at` (0 = a new top floor): its pictures and walls are a copy
+   * of floor `like`; everything below moves down 80 px */
+  LC.addFloor = function (level, at, like) {
+    if (level.floors >= 5) throw new Error('A level can have at most 5 floors.');
+    if (level.base) throw new Error('This stage cannot get more floors.');
+    const W = level.W, src = like === undefined ? at : like;
+    const rows = level.map.slice(src * 5 * W, (src + 1) * 5 * W);
+    level.map.splice(at * 5 * W, 0, ...rows);
+    level.col.splice(at, 0, level.col[src].map(v => LC.isDoorInfo(v & 0xFFFF) || LC.isStairInfo(v & 0xFFFF) || LC.isExitInfo(v & 0xFFFF) ? 0x01010000 : v));
+    for (const o of level.guards.concat(level.items, level.players)) if (LC.floorOf(o.y, level.floors) >= at) o.y += 80;
+    level.floors++;
+  };
+  LC.removeFloor = function (level, at) {
+    if (level.floors <= 3) throw new Error('A level needs at least 3 floors.');
+    const W = level.W;
+    LC.removeObjects(level, at, at, 0, W - 1);
+    for (const o of level.guards.concat(level.items, level.players)) if (LC.floorOf(o.y, level.floors) > at) o.y -= 80;
+    level.map.splice(at * 5 * W, 5 * W);
+    level.col.splice(at, 1);
+    level.floors--;
+  };
+
   /* insert n slices before slice s on every floor, copies of slice s-1 (widens rooms) */
   LC.insertSlices = function (level, s, n) {
     const W = level.W;
@@ -763,6 +785,74 @@
              items: c.items.map(o => Object.assign({}, o, { x: o.x - 16 })) };
   };
 
+  /* a staircase in the stage's look (pictures of the Stairs piece) with the game's
+   * staircase floor under it, centred on block `mid` of floor f (the lower floor) */
+  LC.placeStairs = function (level, set, f, mid, dir) {
+    if (f < 1) throw new Error('Stairs go up to the floor above: start them on a lower floor.');
+    const clip = dir === 2 ? set.right : set.left, W = level.W, WALLV = 0xFFFF0000;
+    const s0 = Math.max(3, Math.min(W - 3 - clip.slices, mid - (clip.slices >> 1)));
+    LC.pasteRegion(level, clip, f - 1, s0, false);
+    for (const ff of [f - 1, f]) for (let c = 2 * s0; c < 2 * (s0 + clip.slices); c++)
+      if ((level.col[ff][c] >>> 0) !== WALLV) level.col[ff][c] = 0x01010000;
+    LC.placeStairShape(level, f, dir === 2 ? s0 + 1 : s0 + 5, dir);
+    return s0;
+  };
+
+  /* ---------- the layout of an arcade map picture ----------
+   * img = {width, height, data (RGBA)}. Floors: bands between the light floor slabs that
+   * cross the building; stairs: in a floor's band, the top edge of the white steps goes
+   * up or down ~1 px per px over a long stretch. Same as tools/lostlevels/detect.py. */
+  LC.detectLayout = function (img) {
+    const W = img.width, H = img.height, d = img.data;
+    const P = (x, y) => (y * W + x) * 4;
+    const light = (x, y) => { const k = P(x, y), r = d[k], g = d[k + 1], b = d[k + 2];
+      return r > 225 && g > 225 && b > 225 && Math.max(r, g, b) - Math.min(r, g, b) < 24; };
+    const pale = (x, y) => { const k = P(x, y); return d[k] + d[k + 1] + d[k + 2] > 640; };
+    const sum = (x, y) => { const k = P(x, y); return d[k] + d[k + 1] + d[k + 2]; };
+    const slab = [];
+    for (let y = 0; y < H; y++) { let n = 0; for (let x = 0; x < W; x += 2) if (pale(x, y)) n++; slab.push(n * 2 / W > 0.6); }
+    const slabs = [];
+    for (let y = 0; y < H; y++) if (slab[y]) { const y0 = y; while (y < H && slab[y]) y++; if (y - y0 >= 4) slabs.push([y0, y - 1]); }
+    let ground = H - 1;
+    for (let y = H - 1; y > 0; y--) { let n = 0; for (let x = 0; x < W; x += 4) if (sum(x, y) > 150) n++; if (n > W / 16) { ground = y; break; } }
+    const tops = [0].concat(slabs.map(s => s[1] + 1)), bottoms = slabs.map(s => s[0] - 1).concat([ground]);
+    const floors = [];
+    tops.forEach((t, i) => {
+      const b = bottoms[i];
+      if (b - t <= 60) return;
+      const h = b - t;
+      let x0 = W, x1 = 0;
+      for (let x = 0; x < W; x++) {
+        let n = 0;
+        for (let y = t + (h >> 1); y < b; y += 3) if (sum(x, y) > 120) n++;
+        if (n > h / 8) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+      }
+      const top = [];
+      for (let x = 0; x < W; x++) {
+        let v = null;
+        for (let y = t + 2; y < b - 8; y++) if (light(x, y) && light(x, y + 3) && light(x, y + 6)) { v = y; break; }
+        top.push(v);
+      }
+      const stairs = [];
+      for (let x = x0; x < x1;) {
+        let best = null;
+        for (const sgn of [-1, 1]) {
+          if (top[x] === null) break;
+          let k = x, last = top[x], first = x;
+          while (k < x1 && top[k] !== null && Math.abs(top[k] - last) <= 18 && (top[k] - last) * sgn >= -2) { last = top[k]; k++; }
+          if (k - first > 60) {
+            const rise = (top[k - 1] - top[first]) * sgn, slope = rise / (k - 1 - first);
+            if (rise > h * 0.45 && slope > 0.45 && slope < 1.8 && (!best || k - first > best.x1 - best.x0))
+              best = { x0: first, x1: k - 1, dir: sgn > 0 ? 1 : 2 };
+          }
+        }
+        if (best) { stairs.push(best); x = best.x1 + 1; } else x += 2;
+      }
+      floors.push({ top: t, bottom: b, x0, x1, stairs });
+    });
+    return { width: W, height: H, floors };
+  };
+
   /* stairs to the floor above in both directions, in the stage's look: the stage's own,
    * the missing direction mirrored */
   LC.stairStamps = function (stamps, N) {
@@ -1048,7 +1138,14 @@
     const col = level.col.map(c => c.slice());
     res.doors.forEach((d, k) => { col[d.f][d.c] = ((col[d.f][d.c] & 0xFFFFFF00) | (0x90 + 2 * k)) >>> 0; });
     const base_ = level.base || 0;
-    const orig = readCollision(r, st, nf + base_, W);
+    /* a level with another number of floors than its stage gets the game's standard floor
+     * tables for that count (buffers top floor first, as in the 3-, 4- and 5-floor stages) */
+    const hostFloors = r.u16(0xFF86 + 2 * (st - 1)) + 1, nfc = nf + base_;
+    if (nfc !== hostFloors && (base_ || nfc < 3 || nfc > 5)) throw new Error('A level can have 3 to 5 floors.');
+    const orig = nfc === hostFloors ? readCollision(r, st, nfc, W)
+      : { nbuf: nfc, floorBuf: Array.from({ length: nfc }, (_, f) => nfc - 1 - f) };
+    const floorTables = nfc === hostFloors ? null
+      : { list: { 3: 0xFFDA, 4: 0x1002E, 5: 0x10006 }[nfc], rows: { 3: 0x1035A, 4: 0x103FA, 5: 0x10396 }[nfc] };
     const bufFloor = [];
     orig.floorBuf.forEach((b, f) => { if (f >= base_) bufFloor[b] = f - base_; });
     const cb = [];
@@ -1141,6 +1238,11 @@
     if (metaAddr) w32(rom2, 0x5516 + 8 * (st - 1) + 4, metaAddr);
     w32(rom2, 0x100FA + 8 * (st - 1), colAddr);
     w32(rom2, 0x100FA + 8 * (st - 1) + 4, orig.nbuf - 1);
+    if (floorTables) {
+      w16(rom2, 0xFF86 + 2 * (st - 1), nfc - 1);
+      w32(rom2, 0xFFA2 + 4 * (st - 1), floorTables.list);
+      w32(rom2, 0x10322 + 4 * (st - 1), floorTables.rows);
+    }
     w32(rom2, 0x3E000 + 4 * (st - 1), placeAddr);
     w32(rom2, 0x1ADE2 + 4 * (st - 1), kindAddr);
     w32(rom2, 0x14AB8 + 4 * (st - 1), guardAddr);

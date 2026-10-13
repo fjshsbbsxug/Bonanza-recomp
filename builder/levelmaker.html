@@ -495,6 +495,30 @@
     cx.beginPath(); cx.arc(40, 18, 9, 0, 7); cx.fill();
     cx.fillStyle = '#1d1b22'; cx.fillRect(30, 9, 20, 5);
   }
+  /* the detected floors of the picture over the building's floors (bottom floors together),
+   * its building's ends over the building's walls */
+  function lineUpTrace() {
+    const lay = trace.layout;
+    if (!lay || !lay.floors.length) return;
+    const fl = lay.floors, last = fl[fl.length - 1];
+    const pitch = fl.length > 1 ? (last.top - fl[0].top) / (fl.length - 1) : last.bottom - last.top + 16;
+    trace.sy = 80 / pitch;
+    trace.y = (level.floors - 1) * 80 - last.top * trace.sy;
+    const x0 = Math.min(...fl.map(f => f.x0)), x1 = Math.max(...fl.map(f => f.x1));
+    trace.sx = (level.W - 6) * 16 / Math.max(1, x1 - x0);
+    trace.x = 48 - x0 * trace.sx;
+    trace.on = true;
+  }
+  /* the detected staircases in the building: floor (the lower one), centre block, way up */
+  function traceStairs() {
+    const out = [], lay = trace.layout;
+    lay.floors.forEach(fl => {
+      const f = Math.floor((trace.y + (fl.top + fl.bottom) / 2 * trace.sy) / 80);
+      for (const s of fl.stairs)
+        out.push({ f, s: Math.floor((trace.x + (s.x0 + s.x1) / 2 * trace.sx) / 16), dir: s.dir });
+    });
+    return out;
+  }
   function fitTrace() {
     if (!trace.img || !level) return;
     trace.x = 0; trace.y = 0;
@@ -577,7 +601,14 @@
         <label class="muted">height <input type="range" id="tr-sy" min="0.1" max="3" step="0.005" value="${trace.sy}"></label>
         <label class="muted">x <input type="number" id="tr-x" value="${trace.x}" style="width:70px"></label>
         <label class="muted">y <input type="number" id="tr-y" value="${trace.y}" style="width:70px"></label>
-        <span class="muted">${trace.img ? trace.img.width + ' x ' + trace.img.height + ' px' : 'A map of the stage you want to remake, e.g. from vgmaps.'}</span></div>`;
+        <span class="muted">${trace.img ? trace.img.width + ' x ' + trace.img.height + ' px' : 'A map of the stage you want to remake, e.g. from vgmaps.'}</span></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:4px">
+        <button class="chunky" id="tr-detect" ${trace.img ? '' : 'disabled'}>Detect layout</button>
+        <button class="chunky" id="tr-line" ${trace.layout ? '' : 'disabled'}>Line up floors</button>
+        <button class="chunky" id="tr-floors" ${trace.layout ? '' : 'disabled'}>Match floor count</button>
+        <button class="chunky save" id="tr-stairs" ${trace.layout ? '' : 'disabled'}>Place the stairs</button>
+        <span class="muted" id="tr-found">${trace.layout ? trace.layout.floors.length + ' floors, ' +
+          trace.layout.floors.reduce((n, f) => n + f.stairs.length, 0) + ' staircases found (shown in green)' : ''}</span></div>`;
       const num = id => +$(id).value;
       $('tr-file').onchange = e => {
         const f = e.target.files[0];
@@ -593,6 +624,37 @@
       $('tr-x').oninput = () => { trace.x = num('tr-x'); };
       $('tr-y').oninput = () => { trace.y = num('tr-y'); };
       $('tr-fit').onclick = () => { fitTrace(); setTab('trace'); };
+      $('tr-detect').onclick = () => {
+        const c = document.createElement('canvas');
+        c.width = trace.img.width; c.height = trace.img.height;
+        const cx = c.getContext('2d');
+        cx.drawImage(trace.img, 0, 0);
+        trace.layout = LC.detectLayout(cx.getImageData(0, 0, c.width, c.height));
+        lineUpTrace();
+        setTab('trace');
+        sfx('save');
+        tip('Found ' + trace.layout.floors.length + ' floors and ' + trace.layout.floors.reduce((n, f) => n + f.stairs.length, 0) +
+            ' staircases (green: the way they go up). <b>Match floor count</b> gives the building as many floors, <b>Place the stairs</b> builds them.');
+      };
+      $('tr-line').onclick = () => { lineUpTrace(); sfx('pick'); };
+      $('tr-floors').onclick = () => {
+        const want = Math.min(5, trace.layout.floors.length + 1);      /* + the level above the top floor (the exit) */
+        if (edit(() => {
+          while (level.floors < want) LC.addFloor(level, 0, 0);
+          while (level.floors > Math.max(3, want)) LC.removeFloor(level, 0);
+        })) { G = makeGraphics(info); lineUpTrace(); sfx('place'); }
+      };
+      $('tr-stairs').onclick = () => {
+        let n = 0, skipped = 0;
+        if (edit(() => {
+          for (const st2 of traceStairs()) {
+            try { LC.placeStairs(level, stairSet, st2.f, st2.s, st2.dir); n++; } catch (err) { skipped++; }
+          }
+        })) {
+          sfx('place');
+          tip('Placed ' + n + ' staircases' + (skipped ? ' (' + skipped + ' did not fit: top floor or the building\'s end)' : '') + '. Now add rooms, doors and loot.');
+        }
+      };
     } else if (t === 'paint') {
       const kinds = document.createElement('div');
       kinds.className = 'kinds';
@@ -751,6 +813,20 @@
       ctx.globalAlpha = trace.alpha;
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(trace.img, trace.x, trace.y, trace.img.width * trace.sx, trace.img.height * trace.sy);
+      if (trace.layout) {
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#2fb24c'; ctx.lineWidth = 3;
+        for (const fl of trace.layout.floors)
+          for (const s of fl.stairs) {
+            const xa = trace.x + s.x0 * trace.sx, xb = trace.x + s.x1 * trace.sx;
+            const ya = trace.y + fl.bottom * trace.sy, yb = trace.y + fl.top * trace.sy;
+            ctx.beginPath();
+            if (s.dir === 2) { ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); } else { ctx.moveTo(xa, yb); ctx.lineTo(xb, ya); }
+            ctx.stroke();
+          }
+        ctx.restore();
+      }
       ctx.imageSmoothingEnabled = false;
       ctx.globalAlpha = 1;
     }

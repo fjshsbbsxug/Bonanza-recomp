@@ -1,0 +1,62 @@
+{
+ "source": "vgmaps.de map of the arcade Department Store (compiled by DarkWolf), measured with tools/lostlevels/detect.py",
+ "building": [
+  40,
+  1815
+ ],
+ "floors": [
+  {
+   "top": 0,
+   "bottom": 127,
+   "stairs": []
+  },
+  {
+   "top": 144,
+   "bottom": 271,
+   "stairs": [
+    {
+     "x0": 1648,
+     "x1": 1791,
+     "dir": 2
+    }
+   ]
+  },
+  {
+   "top": 288,
+   "bottom": 415,
+   "stairs": [
+    {
+     "x0": 96,
+     "x1": 207,
+     "dir": 1
+    },
+    {
+     "x0": 1288,
+     "x1": 1383,
+     "dir": 1
+    }
+   ]
+  },
+  {
+   "top": 432,
+   "bottom": 559,
+   "stairs": [
+    {
+     "x0": 408,
+     "x1": 519,
+     "dir": 1
+    },
+    {
+     "x0": 912,
+     "x1": 1023,
+     "dir": 2
+    },
+    {
+     "x0": 1648,
+     "x1": 1759,
+     "dir": 2
+    }
+   ]
+  }
+ ]
+}
