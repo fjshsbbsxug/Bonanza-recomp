@@ -585,7 +585,7 @@
     if (t !== 'hand') { sel = null; $('areactx').classList.remove('show'); }
     $('map').style.cursor = t === 'hand' ? 'grab' : t === 'erase' ? 'not-allowed' : 'crosshair';
   }
-  $('handbtn').onclick = () => { sfx('pick'); setTool('hand'); tip('Drag guards and loot to move them. Drag over the building to select an area.'); };
+  $('handbtn').onclick = () => { sfx('pick'); setTool('hand'); tip('Drag the robbers (their start), guards and loot to move them. Drag over the building to select an area.'); };
   $('erasebtn').onclick = () => { sfx('pick'); setTool('erase'); tip('Click guards or loot to remove them. On the building, the eraser leaves a plain hallway.'); };
 
   /* ---------- drawing ---------- */
@@ -811,6 +811,11 @@
              r: Math.max(0, Math.min(level.floors * 5 - 1, Math.floor(y / 16))) };
   }
   function hitObject(p) {
+    for (const o of level.players) {                 /* the robbers (moved together) */
+      const sp = sprite(o.frame, 0), ox = o.x - 32, oy = o.y - o.z - 32;
+      const b = sp ? { x: ox + sp.ox, y: oy + sp.oy, w: sp.canvas.width, h: sp.canvas.height } : { x: ox - 10, y: oy - 24, w: 20, h: 30 };
+      if (p.x >= b.x && p.x < b.x + b.w && p.y >= b.y - 16 && p.y < b.y + b.h) return level.players[0];
+    }
     for (const o of [...level.items].reverse()) {
       if (o.kind === LC.KIND.DOOR) continue;
       const b = objBox(o, false);
@@ -827,7 +832,14 @@
     if (tool === 'erase') { eraseAt(p); drag = { kind: 'erase', last: p.f + ':' + p.s }; return; }
     if (tool === 'hand') {
       const o = hitObject(p);
-      if (o) { selObj = o; drag = { kind: 'move', before: snapshot(), dx: o.x - (p.x + 32), moved: false }; cv.style.cursor = 'grabbing'; sfx('pick'); return; }
+      if (o) {
+        selObj = o;
+        drag = { kind: 'move', before: snapshot(), dx: o.x - (p.x + 32), moved: false };
+        cv.style.cursor = 'grabbing';
+        sfx('pick');
+        if (o === level.players[0]) tip('Drag the robbers to where they start. The camera and the first screen follow them.');
+        return;
+      }
       selObj = null;
       sel = { f0: p.f, f1: p.f, s0: p.s, s1: p.s };
       $('areactx').classList.remove('show');
@@ -864,8 +876,12 @@
       if (hitObject(p) || k !== drag.last) { drag.last = k; eraseAt(p); }
     } else if (drag.kind === 'move' && selObj) {
       const f0 = LC.floorOf(selObj.y, level.floors);
-      selObj.x = Math.round(p.x + 32 + drag.dx);
-      selObj.y += (p.f - f0) * 80;
+      const dx = Math.round(p.x + 32 + drag.dx) - selObj.x, dy = (p.f - f0) * 80;
+      /* the robbers go together, kept inside the building */
+      const group = selObj === level.players[0] ? level.players : [selObj];
+      const lo = Math.min(...group.map(o => o.x)), hi = Math.max(...group.map(o => o.x));
+      const ddx = Math.max(48 - lo, Math.min(16 * level.W - hi, dx));
+      for (const o of group) { o.x += ddx; o.y += dy; }
       drag.moved = true;
     }
   });

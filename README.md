@@ -156,7 +156,13 @@ builder/      the HTML builder page
     recorded from the game). Stamps and selected areas can be flipped: mirrored
     metatiles (tiles swapped, hflip toggled) are added after the stage's own, collision
     columns reversed and the stair direction (info 0x81/0x82) swapped. The Trace tab shows
-    a picture (e.g. an arcade map) under the building to build over.
+    a picture (e.g. an arcade map) under the building to build over. The robbers' start
+    can be moved: the export then writes new start routines for both views (tbl_04566 /
+    tbl_0459A / tbl_045CE): camera x = the view's left edge (32 to 16 W - 224), first
+    streamed column C = (camX - 32) / 16 - 2, plane address of block column c =
+    base + (2c mod 64) * 2, camera y = 32 + 80 floor, first map row 5 (floor - 1), and
+    first-screen descriptors split where the plane wraps (values checked against all ten
+    stages' own routines).
 
   * *Extra stages* (`port/src/extrastages.c`, "New stage" in Bonanza Maker): new stages
     between the cartridge's own, e.g. the two arcade stages the Mega Drive left out

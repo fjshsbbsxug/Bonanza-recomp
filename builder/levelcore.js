@@ -327,6 +327,7 @@
     const shift = o => { if (LC.sliceOf(o.x) >= s) o.x += 16 * n; };
     level.guards.forEach(shift);
     level.items.forEach(shift);
+    level.players.forEach(shift);
     level.W = W + n;
   };
   LC.removeSlices = function (level, s, n) {
@@ -345,6 +346,8 @@
     const shift = o => { if (LC.sliceOf(o.x) >= s + n) o.x -= 16 * n; };
     level.guards.forEach(shift);
     level.items.forEach(shift);
+    /* robbers in the removed part start where it was */
+    level.players.forEach(o => { const k = LC.sliceOf(o.x); if (k >= s + n) o.x -= 16 * n; else if (k >= s) o.x -= 16 * (k - s); });
     level.W = W - n;
   };
 
@@ -446,6 +449,7 @@
     if (level.guards.length > 32) problems.push('Too many guards: ' + level.guards.length + ' (at most 32).');
     const treasures = others.filter(o => o.kind === LC.KIND.TREASURE).length;
     if (!treasures) problems.push('There are no treasures.');
+    if (LC.startProblem(level)) problems.push(LC.startProblem(level));
     for (const p of level.players) {
       const f = LC.floorOf(p.y, level.floors), c = Math.floor((p.x - 32) / 8);
       const v = level.col[f][c];
@@ -719,6 +723,11 @@
       }
       iconAddr = emit(words(list));
     }
+    /* a moved start: new start routines for the two views (camera, first screen) */
+    const orig0 = LC.readStage(rom, st).players;
+    let startAddr = null;
+    if (level.players.some((o, i) => !orig0[i] || o.x !== orig0[i].x || o.y !== orig0[i].y))
+      startAddr = startRoutines(r, level, mapAddr, metaAddr || r.u32(0x5516 + 8 * (st - 1) + 4), emit, words, longs);
     /* the new ROM */
     if (out.length > LC.SLOT_SIZE) throw new Error('This level is too big (' + out.length + ' bytes of data).');
     const size = base + out.length;
@@ -748,6 +757,11 @@
     }
     if (tblAddr) for (const a of FRAME_SITES) w32(rom2, a + 2, tblAddr);
     if (loaderAddr) w32(rom2, 0x640C + 4 * (st - 1), loaderAddr);
+    if (startAddr) {
+      w32(rom2, 0x4566 + 4 * (st - 1), startAddr.p1);
+      w32(rom2, 0x459A + 4 * (st - 1), startAddr.p2);
+      w32(rom2, 0x45CE + 4 * (st - 1), startAddr.both);
+    }
     /* first screen: the start routines' map pointers, same row and column in the new map */
     for (const d of LC.stageInfo(rom, st).descriptors) {
       const off = (r.u32(d) - oldMap) / 2;
@@ -758,6 +772,54 @@
     if (level.extra) return { rom: extraRom(rom, rom2, level, out, emit, base), problems: res.problems };
     return { rom: fixHeader(rom2), problems: res.problems };
   };
+  /* The start routines (tbl_04566 P1 / tbl_0459A P2, both called by tbl_045CE) set each
+   * view's camera with move-immediates and draw its first screen from the map (sub_017AC
+   * with 14-byte descriptors). From the game's own: camera x = a view's left edge (32 at
+   * the left end, at most 16 W - 224), first streamed block column C = (camX - 32) / 16 - 2,
+   * plane address of block column c = base + (2c mod 64) * 2, camera y = 32 + 80 floor
+   * (counting the floor above the map, if any), first map row drawn 5 (floor - 1). */
+  const VIEW = [
+    { base: 0xC000, vs: 0xFFC9, a: { c19: 0x187C, c19v: 0x187E, c: 0x1880, row: 0x187A, cv: 0x1882, camX: 0x1852, camY: 0x1850,
+      camX2: 0x1856, camY2: 0x1854, vs: 0x1844, hs: 0x1846, vs2: 0x1848, hs2: 0x184A }, clr: 0x2284 },
+    { base: 0xD100, vs: 0x159, a: { c19: 0x22C0, c19v: 0x22C2, c: 0x22C4, row: 0x22BE, cv: 0x22C6, camX: 0x2296, camY: 0x2294,
+      camX2: 0x229A, camY2: 0x2298, vs: 0x2288, hs: 0x228A, vs2: 0x228C, hs2: 0x228E }, clr: 0x2CC8 },
+  ];
+  LC.startProblem = level => {
+    const p = level.players[0];
+    if (p && LC.floorOf(p.y, level.floors) === 0 && !level.base) return 'The robbers cannot start on the top floor.';
+    return '';
+  };
+  function startRoutines(r, level, mapAddr, metaPtr, emit, words, longs) {
+    const W = level.W, base = level.base || 0;
+    if (LC.startProblem(level)) throw new Error(LC.startProblem(level));
+    const views = VIEW.map((v, i) => {
+      const pl = level.players[i] || level.players[0];
+      const fm = LC.floorOf(pl.y, level.floors), fc = fm + base;
+      const camX = Math.max(32, Math.min(16 * W - 224, pl.x - 96)), camY = 32 + 80 * fc;
+      const C = Math.floor((camX - 32) / 16) - 2, row = 5 * (fm - 1);
+      const col = c => v.base + ((((2 * c) % 64) + 64) % 64) * 2;
+      /* the first screen: 32 block columns from c0, split where the plane wraps */
+      const c0 = W >= 32 ? Math.max(0, Math.min(C, W - 32)) : 0, n1 = 32 - (c0 % 32);
+      const desc = (c, n) => emit([...longs([mapAddr + 2 * (row * W + c), metaPtr]), ...words([col(c), n - 1, 15])]);
+      const descs = n1 === 32 ? [desc(c0, 32)] : [desc(c0, n1), desc(c0 + n1, 32 - n1)];
+      const hs = (-(camX - 32)) & 0xFFFF;
+      const vals = { c19: C + 19, c19v: col(C + 19), c: C, row, cv: col(C), camX, camY, camX2: camX + 128, camY2: camY + 8,
+                     vs: v.vs, hs, vs2: v.vs, hs2: hs };
+      const code = [];
+      for (const d of descs) {
+        code.push(0x3E, 0x39, ...longs([0xFF2CCC]));                 /* move.w (FF2CCC).l,d7 */
+        code.push(0x4D, 0xF9, ...longs([d]));                        /* lea (desc).l,a6 */
+        code.push(0x4E, 0xB9, ...longs([0x17AC]));                   /* jsr (sub_017AC).l */
+      }
+      for (const k of Object.keys(v.a))
+        code.push(0x33, 0xFC, ...words([vals[k] & 0xFFFF]), ...longs([0xFF0000 | v.a[k]]));   /* move.w #v,(a).l */
+      code.push(0x42, 0x79, ...longs([0xFF0000 | v.clr]));            /* clr.w (a).l */
+      code.push(0x4E, 0x75);                                          /* rts */
+      return emit(code);
+    });
+    const both = emit([0x4E, 0xB9, ...longs([views[0]]), 0x4E, 0xB9, ...longs([views[1]]), 0x4E, 0x75]);
+    return { p1: views[0], p2: views[1], both };
+  }
   function fixHeader(rom2) {
     w32(rom2, 0x1A4, rom2.length - 1);
     let sum = 0;

@@ -130,8 +130,8 @@ gadgets from any stage (their pictures come along; gadgets whose pictures would 
 the stage's own are greyed out), single blocks to paint - and click to place them; the eraser removes things,
 the hand moves them or selects an area to make your own stamp, add space or remove it.
 Press Play to try the level right away, and save it as a .bbro. Open the .bbro again to
-keep building. The start position, graphics, music and time limit stay as in the
-original stage. Flip (F) mirrors the stamp you are placing; Trace shows a picture (a map
+keep building. Drag the robbers with the hand to move where they start; graphics, music
+and the time limit stay as in the original stage. Flip (F) mirrors the stamp you are placing; Trace shows a picture (a map
 of the stage, say) under the building so you can build over it.
 
 New stages: the arcade had two stages the Mega Drive left out, the Department Store
