@@ -3212,7 +3212,7 @@ static void rc_hblank_jmp(void)
     CHK(0xFFC0B0u)
     REG_PPC = 0xFFC0B0u; REG_IR = 0x4EF9;
     REG_PC = RD32(0xFFC0B2u);
-    USE_CYCLES(CYC_INSTRUCTION[0x4EF9]);
+    USE_CYCLES(12);
 }
 
 recomp_fn recomp_find(uint32_t pc)

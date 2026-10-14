@@ -27,7 +27,7 @@ int  mods_enabled_count(void);
 
 /* Apply the enabled mods, in list order, to a copy of the ROM. out must have room for
  * cap bytes; returns the new size (0 on failure: then out holds the unmodified ROM).
- * Recompiled code whose bytes a mod changes is handed to the interpreter. */
+ * Recompiled code whose instructions a mod changes is switched off (not supported). */
 size_t mods_apply(const uint8_t *rom, size_t size, uint8_t *out, size_t cap);
 const char *mods_status(void);              /* one line about the last mods_apply */
 

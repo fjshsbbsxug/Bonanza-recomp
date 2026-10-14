@@ -30,7 +30,7 @@ static int32_t  ym_acc[2];
 static int      z80_line_cyc;        /* Z80 cycles executed in this line */
 static int      zram_dirty = 1;      /* the programs' part of Z80 RAM may have changed */
 static int      z80_prog = -1;       /* the Z80 program in RAM (z80recomp.h), -1: none known */
-unsigned long   z80_stat_interp;     /* Z80 instructions run by the interpreter */
+unsigned long   z80_stat_no_code;    /* Z80 cycles spent where no native program was */
 
 /* audio output */
 static int      out_rate = 48000;
@@ -166,7 +166,7 @@ static int z80_program(void)
 
 static void z80_do_reset(void)
 {
-    z80_init(&zcpu);
+    z80r_init(&zcpu);
     zcpu.read_byte = zr;
     zcpu.write_byte = zw;
     zcpu.port_in = zin;
@@ -395,26 +395,22 @@ void md_run_frame(void)
             vdp_render_line(line);
         vdp_line_start(line);
         if (line == 224)
-            z80_gen_int(&zcpu, 0xFF);
+            z80r_gen_int(&zcpu, 0xFF);
         z80_line_cyc = 0;
         cpu_run(MD_CYC68K_LINE);
         if (z80_running()) {
             while (z80_line_cyc < MD_CYCZ80_LINE) {
-                if (md.use_recomp && z80_program() >= 0) {
+                if (z80_program() >= 0) {
                     int r = z80r_run(z80_prog, &zcpu, &z80_line_cyc, MD_CYCZ80_LINE);
                     if (r == 1) break;
                     if (r == 2) continue;         /* its code was written: look again */
                 }
                 if (z80_line_cyc >= MD_CYCZ80_LINE)
                     break;
-#ifdef Z80_INTERP_TRACE
-                { static unsigned char seen[0x10000]; if (!seen[zcpu.pc]) { seen[zcpu.pc] = 1;
-                  fprintf(stderr, "z80 interp %04x program=%d halted=%d frame=%u\n", zcpu.pc, z80_program(), zcpu.halted, md.frame); } }
-#endif
-                unsigned long c0 = zcpu.cyc;      /* not the driver's code: the interpreter */
-                z80_step(&zcpu);
-                z80_line_cyc += (int)(zcpu.cyc - c0);
-                z80_stat_interp++;
+                /* no native program at its PC (never, for the game): it waits out the line */
+                if (z80_stat_no_code++ < 8)
+                    fprintf(stderr, "z80: no native code at %04X\n", zcpu.pc);
+                z80_line_cyc = MD_CYCZ80_LINE;
             }
             z80_line_cyc -= MD_CYCZ80_LINE;
         }

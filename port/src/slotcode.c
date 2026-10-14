@@ -11,7 +11,7 @@
  * results as the recompiled cartridge code.
  *
  * Code in other shapes (not made by the level maker) is not taken: slot_find() returns 0
- * and the reference interpreter runs it, as before. */
+ * and the CPU takes it as an instruction it cannot run (cpu68k.c). */
 #include <string.h>
 #include "slotcode.h"
 #include "recomp_rt.h"
@@ -118,16 +118,16 @@ static void slot_run(void)
             break;
         case K_JSR:
             m68ki_push_32(s->addr + 6);
-            USE_CYCLES(CYC_INSTRUCTION[0x4EB9]);
+            USE_CYCLES(slot_cyc_jsr);
             REG_PC = s->target;
             return;
         case K_JMP:
-            USE_CYCLES(CYC_INSTRUCTION[0x4EF9]);
+            USE_CYCLES(slot_cyc_jmp);
             REG_PC = s->target;
             return;
         default:                                  /* rts */
             REG_PC = m68ki_pull_32();
-            USE_CYCLES(CYC_INSTRUCTION[0x4E75]);
+            USE_CYCLES(slot_cyc_rts);
             return;
         }
     }

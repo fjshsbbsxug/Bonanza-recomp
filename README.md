@@ -66,7 +66,15 @@ builder/      the HTML builder page
   routines past the cartridge's end (Bonanza Maker's tile loaders and start routines)
   are filled into instruction forms recomp.py generates with open operands
   (`port/gen/recomp_slot.c`, `port/src/slotcode.c`). Only code in other shapes (a
-  hand-made mod) would still go to the interpreter.
+  hand-made mod) has no native code: the CPU takes it as an instruction it cannot run.
+* **There is no CPU interpreter in the port.** `port/src/m68k_rt.c` holds the 68000's
+  state, reset, interrupt line and the data the native code uses (from Musashi's
+  `m68kcpu.c`; the header `m68kcpu.h` gives the register layout and the inline helpers
+  for memory, stack, status register and exception entry). Musashi's opcode handlers,
+  execution loop and disassembler, and the Z80 core's interpreter, are not built:
+  `tools/z80recomp.py` copies only the Z80 core's operations. A PC with no native code
+  takes the 68000's line-1111 exception (what the hardware does for the 0xFFFF bytes
+  past the code: the game's error handler); for the Z80 the line is waited out.
 * `tools/z80recomp.py` does the same for the Z80: the sound driver the 68000 copies at
   boot (0x118B bytes from ROM 0x33000, traced from the reset and interrupt entries,
   its RST vectors and three jump tables: 1,803 instructions) and the boot stub before
@@ -270,9 +278,8 @@ cmake -S port -B build-win -DBONANZA_FETCH_SDL=ON \
 emcmake cmake -S port -B build-web -DBONANZA_FETCH_SDL=ON           # Web
 (cd port/android && ./gradlew assembleRelease)                      # Android APK
 
-# regression check: recompiled vs. interpreted must print identical hashes
+# regression check: state hashes (and --wav audio) must stay as recorded before a change
 build/bonanza-headless baserom.md --frames 1500 --hash > a.txt
-build/bonanza-headless baserom.md --frames 1500 --hash --interp > b.txt
 ```
 
 After changing the tracer or `tools/config.py`, regenerate the C code with `make recomp`.

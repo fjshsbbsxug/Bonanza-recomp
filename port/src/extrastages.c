@@ -151,7 +151,8 @@ void xs_scan(void)
         md.rom[0x10D84 + 4 * e] = (uint8_t)(d0 >> 8); md.rom[0x10D84 + 4 * e + 1] = (uint8_t)d0;
         md.rom[0x10D84 + 4 * e + 2] = (uint8_t)(d1 >> 8); md.rom[0x10D84 + 4 * e + 3] = (uint8_t)d1;
     }
-    /* code an extra stage changes is run by the interpreter */
+    /* an extra stage changes data only; changed instruction bytes would switch their
+     * native code off */
     for (int k = 0; k < nxs; k++)
         for (uint32_t p = xs[k].list; p + 6 <= md.rom_size && r32(p) != 0xFFFFFFFFu;) {
             uint32_t a = r32(p), n = r16(p + 4);

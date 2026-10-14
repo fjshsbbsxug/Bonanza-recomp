@@ -508,3 +508,4 @@ const slot_form slot_forms[44] = {
 	{0x4FF9, 2, 12, so_4FF9},
 };
 const int slot_nforms = 44;
+const int slot_cyc_jsr = 20, slot_cyc_jmp = 12, slot_cyc_rts = 16;

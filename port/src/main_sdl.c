@@ -967,11 +967,6 @@ EMSCRIPTEN_KEEPALIVE void bonanza_open_menu(void)
 
 int main(int argc, char **argv)
 {
-    int use_recomp = 1;
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--interp"))
-            use_recomp = 0;
-    }
     const char *host_port = NULL, *join_addr = NULL;
     int play_stage = 0, play_extra = 0;
     for (int i = 1; i < argc; i++) {
@@ -1043,7 +1038,6 @@ int main(int argc, char **argv)
         net_host(atoi(host_port));
     else if (join_addr)
         net_join(join_addr);
-    md.use_recomp = use_recomp;
     if (play_extra > 0 && have_rom && play_extra <= xs_count()) {
         xs_play(play_extra - 1);       /* the stage dispatcher plays it instead */
         start_stage(2);

@@ -14,6 +14,7 @@ typedef struct {
 
 extern const slot_form slot_forms[];
 extern const int slot_nforms;
+extern const int slot_cyc_jsr, slot_cyc_jmp, slot_cyc_rts;
 
 recomp_fn slot_find(uint32_t pc);       /* native code for a mod's routine at pc, or 0 */
 void slot_reset(void);                  /* the ROM changed (mods applied): forget what was read */

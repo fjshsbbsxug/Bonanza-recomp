@@ -12,8 +12,10 @@
  *                        its level sources there)
  *
  * Enabled mods are applied in list order when the ROM is loaded, each mod's patches in
- * file-name order; a later mod wins where two change the same bytes. Patched code is run
- * by the interpreter (the recompiled code was made from the original ROM). */
+ * file-name order; a later mod wins where two change the same bytes. Changing the
+ * game's own instructions is not supported (all code is recompiled from the original
+ * ROM; there is no interpreter): data, tables and new routines in Bonanza Maker's
+ * shapes are (slotcode.c). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -710,13 +712,13 @@ size_t mods_apply(const uint8_t *rom, size_t size, uint8_t *out, size_t cap)
         for (size_t a = 0x200; a + 1 < n; a += 2) sum = (uint16_t)(sum + (out[a] << 8 | out[a + 1]));
         out[0x18E] = (uint8_t)(sum >> 8); out[0x18F] = (uint8_t)sum;
     }
-    /* code the mods changed is interpreted */
+    /* changes to the game's own instructions cannot run (no native code for them) */
     int code = 0;
     for (size_t a = 0; a < size && a < n; a++)
         if (out[a] != rom[a] && recomp_invalidate((uint32_t)a)) code++;
     if (applied || failed)
         snprintf(status_text, sizeof(status_text), "%d mod%s active%s%s", applied, applied == 1 ? "" : "s",
-                 failed ? ", some failed (see Mods...)" : "", code ? " (patched code interpreted)" : "");
+                 failed ? ", some failed (see Mods...)" : "", code ? " (changes game code: not supported)" : "");
     return n;
 }
 

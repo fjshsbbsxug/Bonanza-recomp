@@ -2559,7 +2559,7 @@ dispatch:
 L_028200: CHK(0x28200u)  /* move.w sr, -(a7) */
 	REG_PPC = 0x28200u; REG_PC = 0x28202u; REG_IR = 0x40E7;
 	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
-	USE_CYCLES(CYC_INSTRUCTION[0x40E7]);
+	USE_CYCLES(14);
 L_028202: CHK(0x28202u)  /* move.w #$100, $a11100.l */
 	{
 		uint res = 0x100u;
@@ -3068,7 +3068,7 @@ L_028298: CHK(0x28298u)  /* move.w #$0, $a11100.l */
 L_0282A0: CHK(0x282A0u)  /* move.w (a7)+, sr */
 	REG_PPC = 0x282A0u; REG_PC = 0x282A2u; REG_IR = 0x46DF;
 	if (FLAG_S) { uint ea = (REG_A[7] += 2) - 2; m68ki_set_sr(m68ki_read_16(ea)); } else m68ki_exception_privilege_violation();
-	USE_CYCLES(CYC_INSTRUCTION[0x46DF]);
+	USE_CYCLES(16);
 	if (REG_PC != 0x282A2u) goto dispatch;
 L_0282A2: CHK(0x282A2u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;

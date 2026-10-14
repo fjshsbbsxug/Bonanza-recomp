@@ -7,7 +7,6 @@
 #include "gamemods.h"
 #include "m68k.h"
 #include "m68kcpu.h"
-#include "m68kops.h"
 
 extern int cpu_irq_dirty;
 extern uint64_t cpu_stat_recomp_insns;
@@ -17,16 +16,6 @@ extern uint64_t cpu_stat_recomp_insns;
 #define CHK(a) \
     if (GET_CYCLES() <= 0 || cpu_irq_dirty || CPU_STOPPED) { REG_PC = (a); return; } \
     cpu_stat_recomp_insns++;
-
-/* Run one instruction through the reference interpreter handler. */
-#define CALLOP(a, op) do { \
-    REG_PPC = (a); REG_PC = (a) + 2; REG_IR = (op); \
-    m68ki_instruction_jump_table[op](); \
-    USE_CYCLES(CYC_INSTRUCTION[op]); \
-} while (0)
-
-/* Native instructions: base cycle count from the interpreter's table. */
-#define CYC(op) USE_CYCLES(CYC_INSTRUCTION[op])
 
 /* operands the port may change while running (tools/recomp.py LIVE): read from the ROM buffer */
 #define ROM16(a) ((uint)(md.rom[a] << 8 | md.rom[(a) + 1]))

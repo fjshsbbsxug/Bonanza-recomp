@@ -95,9 +95,7 @@ otherwise in your user data folder). It is a plain text file, e.g.
     mobo.skin = 8D5524      # player 2 skin tone ("original" = unchanged)
     color.700 = 2040FF      # Mega Drive colour R7 G0 B0 becomes #2040FF everywhere
 
-Command line: bonanza [ROM file] [--interp] [--host [port]] [--join address]
-  --interp  run the original code on the built-in 68000 interpreter instead of the
-            recompiled code (for comparison / debugging)
+Command line: bonanza [ROM file] [--host [port]] [--join address]
   --host    host an online game right away (port 7777 unless given)
   --join    join an online game, e.g. --join 192.168.1.20 or --join myhost.net:7777
 

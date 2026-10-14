@@ -41,7 +41,6 @@ typedef struct {
 
     uint32_t frame;
     int      line;
-    int      use_recomp;       /* run recompiled code where available */
 } md_t;
 
 extern md_t md;

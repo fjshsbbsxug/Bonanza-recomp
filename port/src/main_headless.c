@@ -1,7 +1,7 @@
 /* Headless runner for testing: runs N frames, dumps screenshots and state hashes.
  *
  *   bonanza-headless ROM [--frames N] [--shot FRAME:file.ppm]... [--input FRAME:PAD:buttons]...
- *                        [--interp] [--hash] [--wav file.wav]
+ *                        [--hash] [--wav file.wav]
  *
  * buttons: any of U D L R A B C S (S = Start). An input entry stays active until the next one
  * for the same pad.
@@ -19,7 +19,7 @@
 #include "md.h"
 #include "cheats.h"
 #include "z80recomp.h"
-extern unsigned long z80_stat_interp;
+extern unsigned long z80_stat_no_code;
 #include "vdp.h"
 #include "settings.h"
 #include "net.h"
@@ -32,7 +32,7 @@ static void nap(void) { Sleep(1); }
 static void nap(void) { usleep(1000); }
 #endif
 
-extern uint64_t cpu_stat_recomp_insns, cpu_stat_interp_insns;
+extern uint64_t cpu_stat_recomp_insns, cpu_stat_no_code;
 
 static uint8_t parse_buttons(const char *s)
 {
@@ -91,7 +91,7 @@ static void wav_header(FILE *f, int rate, uint32_t frames)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: %s ROM [--frames N] [--shot F:file.ppm] [--input F:P:btn] [--interp] [--hash] [--wav f]\n", argv[0]);
+        fprintf(stderr, "usage: %s ROM [--frames N] [--shot F:file.ppm] [--input F:P:btn] [--hash] [--wav f]\n", argv[0]);
         return 1;
     }
     FILE *f = fopen(argv[1], "rb");
@@ -112,10 +112,8 @@ int main(int argc, char **argv)
     int nshots = 0, ninputs = 0;
     const char *wav = NULL;
     const char *net_host_port = NULL, *net_join_addr = NULL;
-    md.use_recomp = 1;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
-        else if (!strcmp(argv[i], "--interp")) md.use_recomp = 0;
         else if (!strcmp(argv[i], "--hash")) hash = 1;
         else if (!strcmp(argv[i], "--dumpvdp") && i + 1 < argc) dumpvdp = argv[++i];
         else if (!strcmp(argv[i], "--ini") && i + 1 < argc) {
@@ -266,8 +264,8 @@ int main(int argc, char **argv)
         }
     }
     if (wf) { wav_header(wf, 48000, wav_frames); fclose(wf); }
-    fprintf(stderr, "instructions: recompiled %llu, interpreted %llu\n",
-            (unsigned long long)cpu_stat_recomp_insns, (unsigned long long)cpu_stat_interp_insns);
-    fprintf(stderr, "z80 instructions: recompiled %lu, interpreted %lu\n", z80r_insns, z80_stat_interp);
+    fprintf(stderr, "68000 instructions: %llu native, %llu without native code\n",
+            (unsigned long long)cpu_stat_recomp_insns, (unsigned long long)cpu_stat_no_code);
+    fprintf(stderr, "z80 instructions: %lu native, %lu lines without native code\n", z80r_insns, z80_stat_no_code);
     return 0;
 }

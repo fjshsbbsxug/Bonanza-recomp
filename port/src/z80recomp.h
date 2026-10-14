@@ -9,6 +9,8 @@
 extern unsigned long z80r_insns;             /* instructions run */
 extern int z80r_code_changed;                /* set when those bytes are written */
 
+void z80r_init(z80* const z);               /* power on / reset */
+void z80r_gen_int(z80* const z, uint8_t data); /* the INT line */
 int z80r_program(const uint8_t *zram);      /* which program is in Z80 RAM, -1: none */
 /* run program from z->pc while *lc < limit (adding each instruction's cycles to *lc,
  * as the step loop does); 1: the line is done, 0: PC is outside its code, 2: its code

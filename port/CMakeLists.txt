@@ -6,7 +6,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-option(BONANZA_RECOMP   "Link the statically recompiled 68000 code (gen/)" ON)
 option(BONANZA_HEADLESS "Build the headless test runner" ON)
 option(BONANZA_FETCH_SDL "Download SDL2 and link it statically (self-contained binary)" OFF)
 set(BONANZA_SDL_URL "https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz"
@@ -14,20 +13,17 @@ set(BONANZA_SDL_URL "https://github.com/libsdl-org/SDL/releases/download/release
 
 set(CORE_SOURCES
   src/md.c src/vdp.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c src/extrastages.c src/cheats.c src/net.c src/mods.c
-  ext/musashi/m68kcpu.c ext/musashi/m68kops.c ext/musashi/m68kdasm.c
-  ext/musashi/softfloat/softfloat.c
-  ext/z80/z80.c
+  src/m68k_rt.c
   ext/nuked-opn2/ym3438.c
 )
 
+# the game's code, recompiled to C (tools/recomp.py, tools/z80recomp.py): there is no
+# CPU interpreter in the port
 file(GLOB RECOMP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gen/*.c)
-if(BONANZA_RECOMP AND RECOMP_SOURCES)
-  list(APPEND CORE_SOURCES ${RECOMP_SOURCES} src/slotcode.c)
-  message(STATUS "Using recompiled code (${CMAKE_CURRENT_SOURCE_DIR}/gen)")
-else()
-  list(APPEND CORE_SOURCES src/recomp_stub.c)
-  message(STATUS "Recompiled code disabled: interpreter only")
+if(NOT RECOMP_SOURCES)
+  message(FATAL_ERROR "port/gen is missing: run make recomp")
 endif()
+list(APPEND CORE_SOURCES ${RECOMP_SOURCES} src/slotcode.c)
 
 add_library(bonanza_core STATIC ${CORE_SOURCES})
 target_include_directories(bonanza_core PUBLIC src ext/musashi)
