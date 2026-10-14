@@ -14,6 +14,7 @@
  * routine runs as translated, to be stopped where the console stops it. */
 #include "recomp_rt.h"
 #include "draw.h"
+#include "sndmix.h"
 
 uint64_t draw_stat_c, draw_stat_translated;
 
@@ -21,6 +22,20 @@ static int cyc;     /* time of the routine so far */
 static int dry;     /* only working out the time */
 
 #define COST(n) (cyc += (n))
+
+/* each instruction's time where it does not depend on the data (port/gen/m68k_costs.c) */
+extern const unsigned char m68k_cost[0x40000];
+
+/* the time of the instructions from a up to b, run one after the other */
+static int span(uint32_t a, uint32_t b)
+{
+    int n = 0;
+    for (uint32_t i = a >> 1; i < b >> 1; i++)
+        n += m68k_cost[i];
+    return n;
+}
+
+static int stops_z80;   /* the routine holds the Z80 (its bus): it must not run past a line */
 
 /* may the routine, taking this long (its rts too), run in one go? */
 static int may_run(int cost)
@@ -31,13 +46,17 @@ static int may_run(int cost)
     int left = GET_CYCLES();
     if (cost <= left)
         return 1;
+    /* while the Z80 runs (no recorded sounds) it would run in the lines the game's
+     * routine keeps it stopped */
+    if (stops_z80 && !snd_ready())
+        return 0;
     return !vdp_irq_within((cost - left) / MD_CYC68K_LINE + 2, (FLAG_INT_MASK >> 8) & 7);
 }
 
 /* runs body dry, then (if it may) for real */
 static int run(void (*body)(void))
 {
-    dry = 1; cyc = 0;
+    dry = 1; cyc = 0; stops_z80 = 0;
     body();
     if (!may_run(cyc)) {
         draw_stat_translated++;
@@ -642,3 +661,199 @@ static void video_init(void)
     flags_move(0x8F02, 16);
 }
 int draw_video_init(void) { return run(video_init); }
+
+/* ---------------------------------------------------------------- the planes' new columns
+ *
+ * As a view scrolls, the game builds the map entries that come into it in RAM, and in
+ * the vertical blank has the chip copy them into plane A (DMA): two columns side by side
+ * (0x1E entries each, one under the other: register 15 0x80, a plane row apart), or a
+ * block of rows. Player 1: from 0xFF1884 / 0xFF1D84 to the address at 0xFFC114, done
+ * flag 0xFFC10C; player 2: 0xFF22C8 / 0xFF27C8, 0xFFC118, 0xFFC110. The Z80 is held
+ * off the bus while the chip copies. */
+
+static void z80_bus(uint16_t v) { if (!dry) WR16(0xA11100u, v); }
+
+/* a copy from RAM (src) to plane memory at v, n words: the chip told the length, the
+ * source and the destination, register 1 with DMA allowed, then put back */
+static void dma_to_plane(uint32_t src, uint16_t v, uint8_t len_hi, uint8_t len_lo)
+{
+    if (dry) return;
+    vdp_write_ctrl((uint16_t)(RD16(0xFFC07Cu) | 0x10));
+    vdp_set_reg(20, len_hi);
+    vdp_set_reg(19, len_lo);
+    vdp_set_reg(21, (uint8_t)(src >> 1));
+    vdp_set_reg(22, (uint8_t)(src >> 9));
+    vdp_set_reg(23, (uint8_t)((src >> 17) & 0x7F));
+    vdp_write_ctrl((uint16_t)((v & 0x3FFF) | 0x4000));
+    uint16_t second = (uint16_t)((v >> 14) | 0x80);      /* the copy starts with it */
+    WR16(0xFF17CAu, second);
+    vdp_write_ctrl((uint16_t)RD16(0xFF17CAu));
+    vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+}
+
+static uint16_t entry_sr;
+
+static void save_sr(void)                                /* move.w sr,-(a7) */
+{
+    stops_z80 = 1;
+    if (!dry) { entry_sr = (uint16_t)m68ki_get_sr(); WR16(REG_A[7] - 2, entry_sr); }
+}
+
+static void restore_sr(void)                             /* move.w (a7)+,sr */
+{
+    if (!dry) m68ki_set_sr(entry_sr);
+}
+
+static void column_regs(uint16_t v)                      /* as the routines leave d6, d7 */
+{
+    REG_A[6] = 0xC00004u;
+    REG_D[6] = (uint32_t)((v & 0x3FFF) | 0x4000);
+    REG_D[7] = (uint32_t)((v >> 14) | 0x80);
+}
+
+static uint32_t col_src1, col_src2, col_at, col_done;
+static uint32_t rows_test, rows_flag;
+static uint16_t rows_v0, rows_v1;
+
+/* sub_089C0 / sub_08C1A: two columns */
+static void columns(void)
+{
+    COST(span(col_at == 0xFFC114u ? 0x89C0 : 0x8C1A, col_at == 0xFFC114u ? 0x8B06 : 0x8D60));
+    save_sr();
+    uint16_t v = (uint16_t)RD16(col_at);
+    z80_bus(0x100);
+    if (!dry) vdp_set_reg(15, 0x80);
+    dma_to_plane(col_src1, v, 0x00, 0x1E);
+    z80_bus(0x000);
+    z80_bus(0x100);
+    v += 2;
+    dma_to_plane(col_src2, v, 0x00, 0x1E);
+    if (!dry) vdp_set_reg(15, 0x02);
+    z80_bus(0x000);
+    if (dry) return;
+    WR32(col_done, 0);
+    restore_sr();
+    column_regs(v);
+}
+
+int draw_columns_p1(void)
+{
+    col_src1 = 0xFF1884u; col_src2 = 0xFF1D84u; col_at = 0xFFC114u; col_done = 0xFFC10Cu;
+    return run(columns);
+}
+
+int draw_columns_p2(void)
+{
+    col_src1 = 0xFF22C8u; col_src2 = 0xFF27C8u; col_at = 0xFFC118u; col_done = 0xFFC110u;
+    return run(columns);
+}
+
+/* sub_08B50 / sub_08DAA: 0x280 entries (a block of rows) at one of two places */
+static void rows(void)
+{
+    int p1 = col_at == 0xFFC114u;
+    uint32_t start = p1 ? 0x8B50 : 0x8DAA, test = p1 ? 0x8BC4 : 0x8E1E, after = p1 ? 0x8BCC : 0x8E26;
+    uint32_t end = p1 ? 0x8C18 : 0x8E72;
+    COST(span(start, test));
+    int second = RD16(rows_test) != 0;
+    COST(second ? 10 + CYC_BCC_NOTAKE_W + 8 : 10);       /* beq; move.w #$ca00 / #$db00,d7 */
+    COST(span(after, end));
+    save_sr();
+    uint16_t v = second ? rows_v1 : rows_v0;
+    z80_bus(0x100);
+    if (!dry) vdp_set_reg(15, 0x02);
+    dma_to_plane(col_src1, v, 0x02, 0x80);
+    z80_bus(0x000);
+    if (dry) return;
+    WR16(rows_flag, 0);
+    WR32(col_done, 0);
+    restore_sr();
+    column_regs(v);
+}
+
+int draw_rows_p1(void)
+{
+    col_src1 = 0xFF1884u; col_at = 0xFFC114u; col_done = 0xFFC10Cu;
+    rows_test = 0xFF186Au; rows_flag = 0xFF1878u; rows_v0 = 0xC000; rows_v1 = 0xCA00;
+    return run(rows);
+}
+
+int draw_rows_p2(void)
+{
+    col_src1 = 0xFF22C8u; col_at = 0xFFC118u; col_done = 0xFFC110u;
+    rows_test = 0xFF22AEu; rows_flag = 0xFF22BCu; rows_v0 = 0xD100; rows_v1 = 0xDB00;
+    return run(rows);
+}
+
+/* ---------------------------------------------------------------- numbers, copies */
+
+/* sub_11EA8: 4 bytes (a6) as 8 hexadecimal digits, each the tile in the table at a5
+ * + 0x500, to where the video data goes */
+static void hex_digits(void)
+{
+    uint32_t src = REG_A[6];
+    uint16_t hi = 0, lo = 0;
+    uint32_t sum = 0;
+    COST(span(0x11EA8, 0x11EB2));
+    for (int i = 0; i < 4; i++) {
+        uint8_t b = (uint8_t)RD8(src++);
+        hi = (uint16_t)(RD16(REG_A[5] + ((b & 0xF0) >> 3)) + 0x500);
+        sum = (uint32_t)(uint16_t)RD16(REG_A[5] + ((b & 0x0F) << 1)) + 0x500;
+        lo = (uint16_t)sum;
+        put(hi);
+        put(lo);
+        COST(span(0x11EB2, 0x11ED6) + dbra_cost(i == 3));
+    }
+    if (dry) return;
+    REG_A[4] = 0xC00000u;
+    REG_A[6] = src;
+    REG_D[5] = (REG_D[5] & 0xFFFF0000u) | 0xFFFF;
+    REG_D[7] = hi;
+    REG_D[6] = (REG_D[6] & 0xFFFF0000u) | lo;
+    flags_move(lo, 16);
+    FLAG_X = sum > 0xFFFF ? XFLAG_SET : XFLAG_CLEAR;
+}
+int draw_hex_digits(void) { return run(hex_digits); }
+
+/* sub_28200: d5 bytes of video memory copied by the chip from d7 to d6 */
+static void vram_copy(void)
+{
+    stops_z80 = 1;
+    uint16_t len = (uint16_t)REG_D[5], from = (uint16_t)REG_D[7], to = (uint16_t)REG_D[6];
+    uint16_t status = 0;
+    COST(span(0x28200, 0x2827C));
+    if (!dry) {
+        uint32_t sp = REG_A[7];
+        WR16(sp - 2, (uint16_t)m68ki_get_sr());              /* move.w sr,-(a7) */
+        WR32(sp - 10, REG_D[4]);                              /* movem.l d4/a6,-(a7) */
+        WR32(sp - 6, REG_A[6]);
+        WR16(0xA11100u, 0x100);
+        vdp_set_reg(15, 0x01);
+        vdp_write_ctrl((uint16_t)(RD16(0xFFC07Cu) | 0x10));
+        vdp_set_reg(19, (uint8_t)len);
+        vdp_set_reg(20, (uint8_t)(len >> 8));
+        vdp_set_reg(21, (uint8_t)from);
+        vdp_set_reg(22, (uint8_t)(from >> 8));
+        vdp_set_reg(23, 0xC0);                                /* a copy within video memory */
+        vdp_write_ctrl(to & 0x3FFF);
+        uint32_t d6 = (REG_D[6] >> 14) | 0xC0;
+        WR16(0xFF17CAu, (uint16_t)d6);
+        vdp_write_ctrl((uint16_t)RD16(0xFF17CAu));
+        REG_D[6] = d6;
+    }
+    for (;;) {                                               /* lea; move.w (a6),d7; andi; bne.s */
+        if (!dry) status = vdp_read_ctrl() & 2;
+        COST(12 + 8 + 8);
+        if (!status) { COST(10 + CYC_BCC_NOTAKE_B); break; }
+        COST(10);
+    }
+    COST(span(0x2828A, 0x282A2));
+    if (dry) return;
+    vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+    vdp_set_reg(15, 0x02);
+    WR16(0xA11100u, 0);
+    REG_D[5] = 0x9400u | (len >> 8);
+    REG_D[7] = status;
+    m68ki_set_sr(m68ki_get_sr());                            /* move.w (a7)+,sr: as it was */
+}
+int draw_vram_copy(void) { return run(vram_copy); }

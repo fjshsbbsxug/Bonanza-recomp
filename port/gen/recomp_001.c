@@ -3504,6 +3504,7 @@ L_0089B8: CHK(0x89B8u)  /* clr.w $ff22ba.l */
 L_0089BE: CHK(0x89BEu)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0089C0: CHK(0x89C0u)  /* move.w sr, -(a7) */
+	if (draw_columns_p1()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	REG_PPC = 0x89C0u; REG_PC = 0x89C2u; REG_IR = 0x40E7;
 	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
 	USE_CYCLES(14);
@@ -5261,6 +5262,7 @@ L_008B44: CHK(0x8B44u)  /* move.l #$0, $ffc10c.l */
 L_008B4E: CHK(0x8B4Eu)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_008B50: CHK(0x8B50u)  /* move.w sr, -(a7) */
+	if (draw_rows_p1()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	REG_PPC = 0x8B50u; REG_PC = 0x8B52u; REG_IR = 0x40E7;
 	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
 	USE_CYCLES(14);
@@ -5901,6 +5903,7 @@ L_008C16: CHK(0x8C16u)  /* move.w (a7)+, sr */
 L_008C18: CHK(0x8C18u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_008C1A: CHK(0x8C1Au)  /* move.w sr, -(a7) */
+	if (draw_columns_p2()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	REG_PPC = 0x8C1Au; REG_PC = 0x8C1Cu; REG_IR = 0x40E7;
 	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
 	USE_CYCLES(14);
@@ -7182,6 +7185,7 @@ L_008D9E: CHK(0x8D9Eu)  /* move.l #$0, $ffc110.l */
 L_008DA8: CHK(0x8DA8u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_008DAA: CHK(0x8DAAu)  /* move.w sr, -(a7) */
+	if (draw_rows_p2()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	REG_PPC = 0x8DAAu; REG_PC = 0x8DACu; REG_IR = 0x40E7;
 	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
 	USE_CYCLES(14);

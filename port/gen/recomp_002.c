@@ -20344,6 +20344,7 @@ L_011EA0: CHK(0x11EA0u)  /* clr.w $ff6c44.l */
 L_011EA6: CHK(0x11EA6u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_011EA8: CHK(0x11EA8u)  /* lea.l $c00000.l, a4 */
+	if (draw_hex_digits()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[4] = 0xC00000u;
 	}

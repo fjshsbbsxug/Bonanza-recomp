@@ -2557,6 +2557,7 @@ dispatch:
 	default: return;
 	}
 L_028200: CHK(0x28200u)  /* move.w sr, -(a7) */
+	if (draw_vram_copy()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	REG_PPC = 0x28200u; REG_PC = 0x28202u; REG_IR = 0x40E7;
 	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
 	USE_CYCLES(14);

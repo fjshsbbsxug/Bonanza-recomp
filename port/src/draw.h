@@ -18,6 +18,12 @@ int  draw_no_window(void);      /* sub_006FA */
 int  draw_clear_00628(void);    /* sub_00628 */
 int  draw_clear_planes(void);   /* sub_0052E */
 int  draw_video_init(void);     /* sub_00484 */
+int  draw_columns_p1(void);     /* sub_089C0 */
+int  draw_rows_p1(void);        /* sub_08B50 */
+int  draw_columns_p2(void);     /* sub_08C1A */
+int  draw_rows_p2(void);        /* sub_08DAA */
+int  draw_hex_digits(void);     /* sub_11EA8 */
+int  draw_vram_copy(void);      /* sub_28200 */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);
