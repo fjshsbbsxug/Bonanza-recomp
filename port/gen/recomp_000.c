@@ -9404,6 +9404,7 @@ dispatch:
 	default: return;
 	}
 L_00135A: CHK(0x135Au)  /* lea.l $ff5550.l, a0 */
+	if (draw_tile_loads()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[0] = 0xFF5550u;
 	}

@@ -10,7 +10,8 @@
  * game's routine part way: an interrupt the game lets in (the split screen's line
  * effects change where the video data goes, so a tile copy they cut into is sent partly
  * elsewhere, as on the console). Each routine first works out its time without doing
- * anything (dry); when an interrupt would come within it, it returns 0 and the game's
+ * anything (dry: registers may change, they are put back; memory and video are not
+ * written); when an interrupt would come within it, it returns 0 and the game's
  * routine runs as translated, to be stopped where the console stops it. */
 #include "recomp_rt.h"
 #include "draw.h"
@@ -56,8 +57,10 @@ static int may_run(int cost)
 /* runs body dry, then (if it may) for real */
 static int run(void (*body)(void))
 {
+    m68ki_cpu_core saved = m68ki_cpu;  /* the dry run may change registers: put back */
     dry = 1; cyc = 0; stops_z80 = 0;
     body();
+    m68ki_cpu = saved;
     if (!may_run(cyc)) {
         draw_stat_translated++;
         return 0;
@@ -1060,3 +1063,135 @@ static const number_layout number_p2 = {
 
 int draw_hud_number_p1(void) { num = &number_p1; return run(hud_number); }
 int draw_hud_number_p2(void) { num = &number_p2; return run(hud_number); }
+
+/* ---------------------------------------------------------------- calls between them */
+
+/* jsr / bsr (taking jsr_cost) to one of the routines here, and its rts */
+static void call(void (*body)(void), uint32_t ret, int jsr_cost)
+{
+    COST(jsr_cost);
+    REG_A[7] -= 4;
+    if (!dry) WR32(REG_A[7], ret);
+    body();
+    REG_A[7] += 4;
+    COST(16);
+}
+
+/* sub_11DF8 / sub_11E88: a score (0xFFC0F4 / 0xFFC100) as 8 digits in the HUD */
+static uint32_t score_at, score_table, score_done, score_ret;
+static uint16_t score_vram;
+
+static void hud_score(void)
+{
+    COST(12 + 8 + 28);                                   /* lea, lea, the command */
+    REG_A[6] = score_at;
+    REG_A[5] = score_table;
+    if (!dry) vdp_command(0x01, score_vram);
+    call(hex_digits, score_ret, 18);
+    COST(20);                                            /* clr.w */
+    if (dry) return;
+    WR16(score_done, 0);
+    FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+}
+
+int draw_hud_score_p1(void)
+{
+    score_at = 0xFFC0F4u; score_table = 0x120BC; score_done = 0xFF6C2Eu; score_ret = 0x11E10; score_vram = 0xFD82;
+    return run(hud_score);
+}
+
+int draw_hud_score_p2(void)
+{
+    score_at = 0xFFC100u; score_table = 0x120D0; score_done = 0xFF6C44u; score_ret = 0x11EA0; score_vram = 0xFF2E;
+    return run(hud_score);
+}
+
+/* sub_0135A: the tile loads waiting at 0xFF5550 (8 of 16 bytes: busy, source, video
+ * address (as a long), tiles left, tiles a frame, packed): a frame's share of each,
+ * raw (sub_0119C) or packed (sub_01146); a load that is done frees its place and is
+ * taken off the count at 0xFF554E */
+static void tile_loads(void)
+{
+    COST(span(0x135A, 0x1364));
+    REG_A[0] = 0xFF5550u;
+    W(REG_D[0], 7);
+    for (int i = 0; i < 8; i++) {
+        uint32_t a0 = REG_A[0];
+        uint32_t d0 = REG_D[0];
+        COST(span(0x1364, 0x136A));                      /* movem.l d0,-(a7); tst.w (a0) */
+        REG_A[7] -= 4;
+        if (!dry) WR32(REG_A[7], d0);
+        uint16_t busy = (uint16_t)RD16(a0);
+        flags_move(busy, 16);
+        if (!busy) {
+            COST(10);
+        } else {
+            COST(10 + CYC_BCC_NOTAKE_W + span(0x136E, 0x13A0));
+            uint32_t v = RD32(a0 + 6);                   /* the command for the address */
+            uint32_t d6 = ((uint32_t)(((uint16_t)v & 0x3FFF) | 0x4000) | (v & 0xFFFF0000u)) << 16;
+            uint32_t d7 = (v & 0xFFFF0000u) | (((uint16_t)v & 0xC000) >> 14);
+            uint64_t sum = (uint64_t)d7 + d6;
+            d7 = (uint32_t)sum;
+            if (!dry) { vdp_write_ctrl((uint16_t)(d7 >> 16)); vdp_write_ctrl((uint16_t)d7); }
+            REG_A[6] = RD32(a0 + 2);
+            W(d6, RD16(a0 + 0xA));                       /* tiles left */
+            W(d7, RD16(a0 + 0xC));                       /* a frame's share */
+            uint32_t diff = (uint32_t)(uint16_t)d6 - (uint16_t)d7;
+            W(d6, diff);
+            int x = (diff >> 16) & 1;                    /* sub.w: borrow */
+            if (!x) {
+                COST(10);
+            } else {                                     /* fewer left: all of them */
+                COST(10 + CYC_BCC_NOTAKE_W + span(0x13A4, 0x13A8));
+                uint32_t s2 = (uint32_t)(uint16_t)d7 + (uint16_t)d6;
+                W(d7, s2);
+                x = (s2 >> 16) & 1;
+                d6 = 0;
+            }
+            COST(span(0x13A8, 0x13B2));                  /* movem.l d6-d7/a5; subq; tst.w */
+            REG_D[6] = d6; REG_D[7] = d7;
+            uint32_t a5 = REG_A[5];
+            REG_A[7] -= 12;
+            if (!dry) { WR32(REG_A[7], d6); WR32(REG_A[7] + 4, d7); WR32(REG_A[7] + 8, a5); }
+            x = (uint16_t)REG_D[7] == 0;                 /* subq.w #1,d7 */
+            W(REG_D[7], (uint16_t)REG_D[7] - 1);
+            FLAG_X = x ? XFLAG_SET : XFLAG_CLEAR;
+            if (!RD16(a0 + 0xE)) {
+                COST(10 + CYC_BCC_NOTAKE_W);
+                call(tiles_raw, 0x13BC, 20);
+                COST(10);                                /* bra.b */
+            } else {
+                COST(10);
+                call(tiles_packed, 0x13C4, 20);
+            }
+            REG_D[6] = d6; REG_D[7] = d7; REG_A[5] = a5;  /* movem.l (a7)+ */
+            REG_A[7] += 12;
+            COST(span(0x13C4, 0x13CA));                  /* movem; tst.w d6 */
+            if (!(uint16_t)d6) {                         /* done */
+                COST(10 + CYC_BCC_NOTAKE_W + span(0x13CE, 0x13D8) + 10);
+                REG_D[6] = 0;
+                uint32_t c = (uint16_t)RD16(0xFF554Eu);
+                uint32_t r = c - 1;
+                if (!dry) { WR16(a0, 0); WR16(0xFF554Eu, (uint16_t)r); }
+                FLAG_N = NFLAG_16(r);
+                FLAG_Z = MASK_OUT_ABOVE_16(r);
+                FLAG_V = VFLAG_SUB_16(1, c, r);
+                FLAG_X = FLAG_C = CFLAG_16(r);
+            } else {                                     /* the next frame goes on from here */
+                COST(10 + span(0x13DC, 0x13F0));
+                uint16_t w = (uint16_t)d7;
+                FLAG_X = (w >> 11) & 1 ? XFLAG_SET : XFLAG_CLEAR;   /* lsl.w #5 */
+                W(REG_D[7], (uint16_t)(w << 5));
+                REG_A[5] = RD32(a0 + 6) + (uint32_t)(int16_t)(uint16_t)REG_D[7];
+                if (!dry) { WR32(a0 + 2, REG_A[6]); WR32(a0 + 6, REG_A[5]); WR16(a0 + 0xA, (uint16_t)d6); }
+                flags_move((uint16_t)d6, 16);
+            }
+        }
+        REG_D[0] = d0;                                   /* movem.l (a7)+,d0 */
+        REG_A[7] += 4;
+        REG_A[0] = a0 + 16;
+        COST(span(0x13F0, 0x13F8) + dbra_cost(i == 7));
+        W(REG_D[0], (uint16_t)d0 - 1);
+    }
+}
+int draw_tile_loads(void) { return run(tile_loads); }

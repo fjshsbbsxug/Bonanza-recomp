@@ -19944,6 +19944,7 @@ L_011DEE: CHK(0x11DEEu)  /* move.w #$1, $ff6c30.l */
 L_011DF6: CHK(0x11DF6u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_011DF8: CHK(0x11DF8u)  /* lea.l $ffc0f4.l, a6 */
+	if (draw_hud_score_p1()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[6] = 0xFFC0F4u;
 	}
@@ -20309,6 +20310,7 @@ L_011E7E: CHK(0x11E7Eu)  /* move.w #$1, $ff6c46.l */
 L_011E86: CHK(0x11E86u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_011E88: CHK(0x11E88u)  /* lea.l $ffc100.l, a6 */
+	if (draw_hud_score_p2()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[6] = 0xFFC100u;
 	}

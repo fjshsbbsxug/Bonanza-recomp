@@ -28,6 +28,9 @@ int  draw_hud_frame(void);      /* sub_1044A */
 int  draw_hud_stage_name(void); /* sub_1050C */
 int  draw_hud_number_p1(void);  /* sub_11EDC */
 int  draw_hud_number_p2(void);  /* sub_11FB8 */
+int  draw_hud_score_p1(void);   /* sub_11DF8 */
+int  draw_hud_score_p2(void);   /* sub_11E88 */
+int  draw_tile_loads(void);     /* sub_0135A */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);
