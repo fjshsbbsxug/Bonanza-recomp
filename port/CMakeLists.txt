@@ -67,6 +67,16 @@ if(EMSCRIPTEN)
     target_compile_options(bonanza-single PRIVATE ${BONANZA_COPTS})
   endif()
   set_target_properties(bonanza-single PROPERTIES LINK_FLAGS "${EMFLAGS} -sSINGLE_FILE=1" SUFFIX ".js")
+  # the game's sounds made by a native build (see the end of this file): the page
+  # fetches sounds.bbs from next to the game
+  set(BONANZA_SOUNDS "" CACHE FILEPATH "sounds.bbs made already (used as it is)")
+  if(BONANZA_SOUNDS)
+    add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/sounds.bbs
+      COMMAND ${CMAKE_COMMAND} -E copy ${BONANZA_SOUNDS} ${CMAKE_CURRENT_BINARY_DIR}/sounds.bbs
+      DEPENDS ${BONANZA_SOUNDS}
+      COMMENT "Copying the game's sounds")
+    add_custom_target(sounds ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/sounds.bbs)
+  endif()
   return()
 endif()
 
