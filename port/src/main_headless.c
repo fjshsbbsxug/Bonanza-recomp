@@ -19,6 +19,7 @@
 #include <string.h>
 #include "extrastages.h"
 #include "md.h"
+#include "draw.h"
 #include "cheats.h"
 #include "z80recomp.h"
 #include "sndmix.h"
@@ -282,6 +283,8 @@ int main(int argc, char **argv)
     if (wf) { wav_header(wf, 48000, wav_frames); fclose(wf); }
     fprintf(stderr, "68000 instructions: %llu native, %llu without native code\n",
             (unsigned long long)cpu_stat_recomp_insns, (unsigned long long)cpu_stat_no_code);
+    fprintf(stderr, "drawing routines: %llu calls in C, %llu as translated (an interrupt came within)\n",
+            (unsigned long long)draw_stat_c, (unsigned long long)draw_stat_translated);
     fprintf(stderr, "z80 instructions: %lu native, %lu lines without native code\n", z80r_insns, z80_stat_no_code);
     return 0;
 }

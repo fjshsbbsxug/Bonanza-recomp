@@ -30462,6 +30462,7 @@ L_013312: CHK(0x13312u)  /* movem.l (a7)+, d0/a0 */
 L_013316: CHK(0x13316u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_013318: CHK(0x13318u)  /* lea.l $ff6c82.l, a0 */
+	if (draw_text_queue()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[0] = 0xFF6C82u;
 	}

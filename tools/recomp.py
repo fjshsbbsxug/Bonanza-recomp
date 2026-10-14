@@ -217,9 +217,13 @@ def specialise(body, op, addr, raw):
 
 
 # The game's drawing routines written in C (port/src/draw.c): called where they start;
-# the rts is done here
+# the rts is done here. When one cannot run in one go, the routine runs as translated.
 DRAW = {
     0x01146: "draw_tiles_packed",
+    0x0119C: "draw_tiles_raw",
+    0x011B8: "draw_text",
+    0x011F2: "draw_text_d7",
+    0x13318: "draw_text_queue",
 }
 
 # --------------------------------------------------------------------------
@@ -439,8 +443,9 @@ class Gen:
             L.append("\tif (game_hooks) { int h = game_hook(0x%Xu); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
                      "if (h == 2) goto dispatch; }" % a)
         if a in DRAW:
+            # 0: an interrupt would come within it: the routine below, as translated
             self.stats["draw"] += 1
-            return L + ["\t%s(); REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;" % DRAW[a]]
+            L.append("\tif (%s()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }" % DRAW[a])
         flow = self.emit_flow(i, op, cyc, inchunk)
         if flow is not None:
             self.stats["flow"] += 1

@@ -7718,7 +7718,26 @@ L_001144: CHK(0x1144u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_001146: CHK(0x1146u)  /* movem.l d1-d4/a1-a2, -(a7) */
-	draw_tiles_packed(); REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
+	if (draw_tiles_packed()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
+	{
+		uint i = 0;
+		uint register_list = 0x7860u;
+		uint ea = REG_A[7];
+		uint count = 0;
+	
+		for(; i < 16; i++)
+			if(register_list & (1 << i))
+			{
+				ea -= 4;
+				m68ki_write_16(ea+2, REG_DA[15-i] & 0xFFFF );
+				m68ki_write_16(ea, (REG_DA[15-i] >> 16) & 0xFFFF );
+				count++;
+			}
+		REG_A[7] = ea;
+	
+		USE_CYCLES(count<<CYC_MOVEM_L);
+	}
+	USE_CYCLES(8);
 L_00114A: CHK(0x114Au)  /* moveq #$0, d1 */
 	{
 		uint res = REG_D[1] = MAKE_INT_8(MASK_OUT_ABOVE_8(0x7200u));
@@ -7922,6 +7941,7 @@ L_001196: CHK(0x1196u)  /* movem.l (a7)+, d1-d4/a1-a2 */
 L_00119A: CHK(0x119Au)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_00119C: CHK(0x119Cu)  /* lea.l $c00000.l, a1 */
+	if (draw_tiles_raw()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[1] = 0xC00000u;
 	}
@@ -8035,6 +8055,7 @@ L_0011B2: CHK(0x11B2u)  /* dbra d7, $11a2 */
 L_0011B6: CHK(0x11B6u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0011B8: CHK(0x11B8u)  /* movem.l d5-d7/a5, -(a7) */
+	if (draw_text()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		uint i = 0;
 		uint register_list = 0x704u;
@@ -8186,6 +8207,7 @@ L_0011DC: CHK(0x11DCu)  /* movem.l (a7)+, d5-d7/a5 */
 L_0011E0: CHK(0x11E0u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0011F2: CHK(0x11F2u)  /* movem.l d5-d7/a5, -(a7) */
+	if (draw_text_d7()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		uint i = 0;
 		uint register_list = 0x704u;

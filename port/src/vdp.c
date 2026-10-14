@@ -69,6 +69,30 @@ void vdp_line_start(int line)
     cpu_set_irq(vdp_irq_level());
 }
 
+/* would an interrupt above the mask be raised at one of the next n line starts (or is
+ * one waiting)? Nothing changes. */
+int vdp_irq_within(int n, int mask)
+{
+    if (vdp_irq_level() > mask)
+        return 1;
+    int c = vdp.hint_counter;
+    for (int i = 1; i <= n; i++) {
+        int line = (md.line + i) % MD_LINES;
+        if (line <= 224) {
+            if (--c < 0) {
+                c = vdp.reg[10];
+                if ((vdp.reg[0] & 0x10) && mask < 4)
+                    return 1;
+            }
+        } else {
+            c = vdp.reg[10];
+        }
+        if (line == 224 && (vdp.reg[1] & 0x20) && mask < 6)
+            return 1;
+    }
+    return 0;
+}
+
 /* ---------------------------------------------------------------- ports */
 
 static void vram_log(uint16_t a, uint8_t old, uint8_t now);
