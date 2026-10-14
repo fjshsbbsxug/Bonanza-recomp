@@ -831,7 +831,10 @@ void vdp_render_line(int y)
         /* player 2's screen in an online game: while he plays, his view (lines 7-86)
          * moves to the bottom and the floor above him takes the top */
         uint16_t on = (uint16_t)((md.ram[0x2EF8] << 8) | md.ram[0x2EF9]);
-        focus = vdp_local_player == 1 && on && on != 0x8000;
+        /* only in a stage (mode 0x0C): the intro, targets screen, coffee breaks and the
+         * ending are one picture and stay as they are */
+        uint16_t mode = (uint16_t)((md.ram[0xC070] << 8) | md.ram[0xC071]);
+        focus = vdp_local_player == 1 && on && on != 0x8000 && mode == 0x0C;
     }
     int online = vdp_local_player >= 0;
     int real_y0 = focus ? VIEW_TOP_Y0 : VIEW_BOT_Y0, other_y0 = focus ? VIEW_BOT_Y0 : VIEW_TOP_Y0;
@@ -857,6 +860,7 @@ void vdp_render_line(int y)
     int playing = views[0].ok && (views[0].frame == md.frame || views[0].frame == md.frame + 1);
     if (y == 0 && !level_load())
         views[0].ok = views[1].ok = 0;
+    if (any_char_colors()) wobj_sample_players();
     if (y == 0)   /* objects beside the picture (also keeps its snapshots up to date) */
         wobj_count = wobj_build(m && playing ? m : 0, width, settings.patrol_return && !settings.floor_alert,
                                 wobj_list, (int)(sizeof(wobj_list) / sizeof(wobj_list[0])));

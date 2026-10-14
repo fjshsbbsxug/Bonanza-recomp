@@ -456,29 +456,64 @@ int wobj_build_stacked(int v, int vtop, int real_wy0, wobj_sprite *list, int max
     return out_n;
 }
 
+/* the players' frame numbers seen while this picture is drawn (and the one before);
+ * called on every line. Returns 1 if a new one was seen. */
+static uint16_t seen[2][2][4];              /* [player][this picture / the one before][...] */
+static int nseen[2][2];
+static uint32_t seen_version;
+int wobj_sample_players(void)
+{
+    static uint32_t built = 0xFFFFFFFF;
+    int changed = 0;
+    if (built != md.frame) {
+        built = md.frame;
+        for (int c = 0; c < 2; c++) {
+            memcpy(seen[c][1], seen[c][0], sizeof(seen[c][0]));
+            nseen[c][1] = nseen[c][0];
+            nseen[c][0] = 0;
+        }
+        changed = 1;
+    }
+    for (int c = 0; c < 2; c++) {
+        uint16_t f = u16(0x3252 + 2 * c);
+        if (!f) continue;
+        int known = 0;
+        for (int k = 0; k < nseen[c][0]; k++) known |= seen[c][0][k] == f;
+        if (!known && nseen[c][0] < 4) { seen[c][0][nseen[c][0]++] = f; changed = 1; }
+    }
+    if (changed) seen_version++;
+    return changed;
+}
+
 /* Which player a sprite piece belongs to (CHAR_ROBO / CHAR_MOBO), or -1: the pieces of
  * the players' (objects 0 and 1) current animation frames, so that only they get the
  * player colours - not guards whose graphics happen to use the same tiles. */
 int wobj_player_of(uint16_t attr)
 {
-    static uint32_t built = 0xFFFFFFFF;
-    static uint16_t tiles[2][24];
+    /* The game writes a player's frame number while it works on the object and clears it
+     * again, so one reading can miss it (0), or already be the next frame while the sprite
+     * table still shows the last one. The frame is read again on every line drawn, and the
+     * pieces of every frame seen in this picture or the one before count (else the
+     * colours flicker back to the original). */
+    static uint16_t tiles[2][64];
     static int n[2];
-    if (built != md.frame) {
-        built = md.frame;
-        const snap_t *s = &snaps[cur];
+    static uint32_t built_version = 0xFFFFFFFF;
+    wobj_sample_players();
+    if (built_version != seen_version) {
+        built_version = seen_version;
         for (int c = 0; c < 2; c++) {
             n[c] = 0;
-            uint16_t frame = s->valid ? s->o[c].frame : 0;
-            if (!frame) continue;
-            uint32_t p = FRAMES_TBL + frame * 4u;
-            if (p + 4 > md.rom_size) continue;
-            p = ((uint32_t)md.rom[p] << 24 | md.rom[p + 1] << 16 | md.rom[p + 2] << 8 | md.rom[p + 3]) & 0xFFFFFF;
-            if (p + 2 > md.rom_size) continue;
-            int cnt = md.rom[p] + 1;
-            p += 2;
-            for (int k = 0; k < cnt && n[c] < 24 && p + 6 <= md.rom_size; k++, p += 6)
-                tiles[c][n[c]++] = (uint16_t)(((md.rom[p + 4] << 8) | md.rom[p + 5]) & 0x07FF);
+            for (int w = 0; w < 2; w++)
+                for (int k = 0; k < nseen[c][w]; k++) {
+                    uint32_t p = FRAMES_TBL + seen[c][w][k] * 4u;
+                    if (p + 4 > md.rom_size) continue;
+                    p = ((uint32_t)md.rom[p] << 24 | md.rom[p + 1] << 16 | md.rom[p + 2] << 8 | md.rom[p + 3]) & 0xFFFFFF;
+                    if (p + 2 > md.rom_size) continue;
+                    int cnt = md.rom[p] + 1;
+                    p += 2;
+                    for (int q = 0; q < cnt && n[c] < 64 && p + 6 <= md.rom_size; q++, p += 6)
+                        tiles[c][n[c]++] = (uint16_t)(((md.rom[p + 4] << 8) | md.rom[p + 5]) & 0x07FF);
+                }
         }
     }
     for (int c = 0; c < 2; c++)
