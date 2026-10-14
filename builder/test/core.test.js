@@ -166,6 +166,44 @@ for (const e of LC.STAGES) {
     exportOk(L, name + ' as extra stage');
   }
 }
+/* layout detection on a drawn picture: two floors, a pillar, a thing in each lane, a guard */
+tryit('detect contents', () => {
+  const W = 480, H = 290, data = new Uint8Array(W * H * 4);
+  const put = (x0, y0, x1, y1, r, g, b) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const k = (y * W + x) * 4; data[k] = r; data[k + 1] = g; data[k + 2] = b; data[k + 3] = 255; } };
+  put(0, 0, W - 1, H - 1, 0, 0, 0);
+  for (const [t, b] of [[0, 127], [144, 271]]) {
+    put(10, t, W - 11, b, 70, 60, 120);                                     /* the back wall */
+    for (let r = 0; r < 32; r++) put(10, b - 31 + r, W - 11, b - 31 + r, 90 + 3 * r, 90 + 3 * r, 90 + 3 * r);   /* floor */
+  }
+  put(0, 128, W - 1, 143, 247, 247, 247);                                   /* the slab */
+  put(0, 272, W - 1, 287, 247, 247, 247);
+  put(60, 146, 69, 271, 247, 247, 247);                                     /* a pillar */
+  put(120, 200, 169, 249, 200, 40, 40);                                     /* back lane: covers the strip's top 10 rows */
+  put(260, 215, 289, 266, 40, 200, 40);                                     /* front lane */
+  put(360, 220, 375, 250, 0, 0, 49); put(362, 251, 374, 268, 30, 30, 30); put(364, 269, 372, 269, 0, 0, 0);   /* a guard */
+  const lay = LC.detectContents({ width: W, height: H, data }, LC.detectLayout({ width: W, height: H, data }));
+  const f = lay.floors.find(x => x.top >= 140);
+  ok(lay.floors.length === 2 && f, 'detect: two floors');
+  ok(f.pillars.some(p => p.x0 >= 58 && p.x1 <= 71), 'detect: pillar ' + JSON.stringify(f.pillars));
+  const back = f.obstacles.find(o => o.lane === 'back' && o.x0 >= 115 && o.x1 <= 175);
+  const front = f.obstacles.find(o => o.lane === 'front' && o.x0 >= 255 && o.x1 <= 295);
+  ok(back && back.h >= 30 && back.h <= 45, 'detect: back lane thing ' + JSON.stringify(f.obstacles));
+  ok(front && front.h >= 20, 'detect: front lane thing ' + JSON.stringify(f.obstacles));
+  ok(f.obstacles.length === 2, 'detect: nothing else on the floor ' + JSON.stringify(f.obstacles));
+  ok(f.people.length === 1 && f.people[0].kind === 'guard' && f.people[0].lane === 'front', 'detect: guard ' + JSON.stringify(f.people));
+  /* placed in a level: the floor of the picture's lower floor is the level's bottom floor */
+  const L = LC.readStage(rom, 7), tr = { x: 48, y: (L.floors - 2) * 80, sx: 1, sy: 80 / 144 };
+  const n = LC.placeDetectedCollision(L, lay, tr), fb = L.floors - 1;
+  ok(n > 0, 'detect: collision placed');
+  const c8 = x => Math.floor((48 + x) / 8);
+  ok(LC.collisionAt(L, fb, c8(140), 6) === 'back', 'detect: back thing solid in the back lane');
+  ok(LC.collisionAt(L, fb, c8(275), 6) === 'front', 'detect: front thing solid in the front lane');
+  ok(LC.collisionAt(L, fb, c8(64), 2) === 'back', 'detect: pillar solid in the back lane');
+  ok(LC.collisionAt(L, fb, c8(220), 5) === 'open', 'detect: open floor');
+  const r = LC.placeDetectedPeople(L, lay, tr, LC.info(rom, 7).guardPresets);
+  ok(r.guards === 1 && L.guards.length === 1 && L.guards[0].z === 0 && LC.floorOf(L.guards[0].y, L.floors) === fb, 'detect: guard placed');
+  exportOk(L, 'detect: level exports');
+});
 /* the Department Store */
 tryit('department store', () => {
   const L = require('../../tools/lostlevels/department_store.js')(LC, rom);

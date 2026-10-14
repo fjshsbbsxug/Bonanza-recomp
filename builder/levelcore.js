@@ -888,6 +888,214 @@
     return { width: W, height: H, floors };
   };
 
+  /* ---------- what stands on the floors of an arcade map picture ----------
+   * For each floor of LC.detectLayout (adds to it):
+   *   pillars   [{x0, x1}]: white columns from the ceiling to the floor;
+   *   obstacles [{x0, x1, lane: 'front'|'back', h}]: things standing on the floor, by the
+   *             floor strip they cover (the band's bottom 32 rows: the back lane's floor
+   *             above, the front lane's below), h = how high they reach above the floor;
+   *   people    [{x, foot, lane, kind: 'guard'|'robber'}]: by colours only they use.
+   * The floor strip of a column counts as bare floor where it matches the column patterns
+   * the floor shows most (the same floor runs on for many columns; things change from
+   * column to column). Everything in picture pixels. */
+  /* colours only people use in the arcade's maps: guards (navy helmets, the purple and the
+   * orange ones, policemen, workers), the robbers (Mobo's blue; Robo's red, which a guard
+   * shares, counts as a robber next to Mobo) */
+  const PEOPLE = [
+    { kind: 'guard', colors: [0x000031, 0x000021, 0x000010, 0x7B31E7, 0x2152B5, 0x082184, 0xF7B500, 0x00B5F7, 0x009CDE, 0x31C65A, 0xC60000] },
+    { kind: 'robber', colors: [0x0000CE] },
+  ];
+  LC.detectContents = function (img, layout) {
+    const W = img.width, d = img.data;
+    const px = (x, y) => { const k = (y * W + x) * 4; return (d[k] << 16) | (d[k + 1] << 8) | d[k + 2]; };
+    const light = c => (c >> 16) > 225 && ((c >> 8) & 255) > 225 && (c & 255) > 225;
+    const near = (a, b, t) => Math.abs((a >> 16) - (b >> 16)) <= t && Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)) <= t && Math.abs((a & 255) - (b & 255)) <= t;
+    for (const f of layout.floors) {
+      const t = f.top, b = f.bottom, x0 = Math.max(0, f.x0), x1 = Math.min(W - 1, f.x1), s0 = b - 31;
+      /* people first: their pixels are not things on the floor */
+      const person = new Uint8Array(W);
+      f.people = [];
+      for (const P of PEOPLE) {
+        const xs = [];
+        for (let x = x0; x <= x1; x++) {
+          let n = 0;
+          for (let y = t; y <= b; y++) if (P.colors.includes(px(x, y))) n++;
+          if (n >= 2) xs.push(x);
+        }
+        for (let i = 0; i < xs.length;) {
+          let j = i;
+          while (j + 1 < xs.length && xs[j + 1] - xs[j] <= 8) j++;
+          const a = xs[i], c = xs[j];
+          let n = 0, ytop = b;
+          for (let x = a; x <= c; x++) for (let y = t; y <= b; y++) if (P.colors.includes(px(x, y))) { n++; ytop = Math.min(ytop, y); }
+          if (n >= 30 && c - a >= 6 && c - a <= 64) {
+            /* the feet: the lowest dark pixels under them */
+            let foot = ytop;
+            for (let x = Math.max(x0, a - 6); x <= Math.min(x1, c + 6); x++)
+              for (let y = ytop; y <= b; y++) { const v = px(x, y); if ((v >> 16) < 40 && ((v >> 8) & 255) < 40 && (v & 255) < 60) foot = Math.max(foot, y); }
+            f.people.push({ x: (a + c) >> 1, x0: a, x1: c, top: ytop, foot, lane: foot > b - 16 ? 'front' : 'back', kind: P.kind });
+            for (let x = Math.max(0, a - 10); x <= Math.min(W - 1, c + 10); x++) person[x] = 1;
+          }
+          i = j + 1;
+        }
+      }
+      /* one person found by two colour sets, and Robo (red) next to Mobo */
+      f.people.sort((p, q) => p.x - q.x);
+      for (let i = 0; i + 1 < f.people.length; i++) {
+        const p = f.people[i], q = f.people[i + 1];
+        if (Math.abs(q.x - p.x) <= 24 && p.kind === q.kind) { p.x0 = Math.min(p.x0, q.x0); p.x1 = Math.max(p.x1, q.x1); p.x = (p.x0 + p.x1) >> 1;
+          p.top = Math.min(p.top, q.top); p.foot = Math.max(p.foot, q.foot); p.lane = p.foot > b - 16 ? 'front' : 'back'; f.people.splice(i + 1, 1); i--; }
+      }
+      for (const r of f.people.filter(p => p.kind === 'robber'))
+        for (const g of f.people) if (g.kind === 'guard' && Math.abs(g.x - r.x) < 48) g.kind = 'robber';
+      /* pillars: light from near the ceiling to the floor, narrow */
+      const tall = [];
+      for (let x = x0; x <= x1; x++) {
+        let n = 0, m = 0;
+        for (let y = t + 2; y < s0; y += 2) { m++; if (light(px(x, y))) n++; }
+        tall.push(n > m * 0.85);
+      }
+      f.pillars = [];
+      for (let x = x0; x <= x1; x++) if (tall[x - x0]) {
+        let e = x;
+        while (e + 1 <= x1 && tall[e + 1 - x0]) e++;
+        if (e - x >= 3 && e - x <= 48) f.pillars.push({ x0: x, x1: e });
+        x = e;
+      }
+      /* the floor strip: column patterns, the common ones are bare floor */
+      const sig = x => { const a = []; for (let y = s0; y <= b; y++) a.push(px(x, y)); return a; };
+      const where = new Map(), cols = [];
+      for (let x = x0; x <= x1; x++) { const k = sig(x).join(); cols.push(k); if (!where.has(k)) where.set(k, []); where.get(k).push(x); }
+      /* bare floor repeats in several places across the floor (a bus's stripes only along
+       * the bus): at least 8 columns in at least 3 stretches over a quarter of the width */
+      const count = new Map();
+      for (const [k, xs] of where) {
+        let runs = 1;
+        for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > 4) runs++;
+        count.set(k, runs >= 3 && xs[xs.length - 1] - xs[0] >= (x1 - x0) / 4 ? xs.length : 0);
+      }
+      const floorAt = [];               /* per column: the nearest common pattern */
+      const common = [];
+      for (let x = x0; x <= x1; x++) if (count.get(cols[x - x0]) >= 8) common.push(x);
+      let ci = 0;
+      for (let x = x0; x <= x1; x++) {
+        while (ci + 1 < common.length && Math.abs(common[ci + 1] - x) <= Math.abs(common[ci] - x)) ci++;
+        floorAt.push(common.length ? sig(common[ci]) : null);
+      }
+      /* covered rows: not like the nearby bare floor (the pattern itself or its neighbours'
+       * colours in that row, for the checkered floors) */
+      const rowSet = [];
+      for (let y = s0; y <= b; y++) rowSet.push(new Set());
+      /* per column: which rows of the strip are covered; a thing in the back lane covers
+       * the strip from its top down to its base (base in the back half), one in the front
+       * lane most of the front half */
+      const lanes = [];
+      for (let x = x0; x <= x1; x++) {
+        if (person[x] || tall[x - x0] || !floorAt[x - x0] || (f.stairs || []).some(st => x >= st.x0 - 8 && x <= st.x1 + 8)) { lanes.push(''); continue; }
+        const ref = floorAt[x - x0], cov = [];
+        for (let r = 0; r < 32; r++) {
+          const v = px(x, s0 + r);
+          let floorish = near(v, ref[r], 12);
+          for (let dx = -40; !floorish && dx <= 40; dx += 8) {
+            const xx = x + dx;
+            if (xx >= x0 && xx <= x1 && count.get(cols[xx - x0]) >= 8 && near(v, px(xx, s0 + r), 12)) floorish = true;
+          }
+          cov.push(!floorish);
+        }
+        let front = 0, base = -1;
+        for (let r = 16; r < 32; r++) if (cov[r]) front++;
+        for (let r = 0, n = 0; r < 18; r++) { if (cov[r]) n++; if (cov[r] && n >= 0.6 * (r + 1)) base = r; }
+        /* a thing in the front lane hides the back lane's floor behind it too */
+        lanes.push(front >= 9 ? 'front' : base >= 3 ? 'back' : '');
+      }
+      f.obstacles = [];
+      for (const lane of ['back', 'front']) {
+        const on = lanes.map(l => l === lane);
+        for (let x = x0; x <= x1; x++) if (on[x - x0]) {
+          let e = x, gap = 0;
+          while (e + 1 <= x1 && (on[e + 1 - x0] || (gap < 4 && e + 2 <= x1 && on[e + 2 - x0]))) e++;
+          if (e - x >= 5) {
+            /* how high: rows up from the strip where the thing differs from the floor's
+             * surroundings left and right of it */
+            const L = Math.max(x0, x - 3), R = Math.min(x1, e + 3);
+            let h = 0;
+            for (let y = s0 - 1; y > t; y--) {
+              let n = 0, m = 0;
+              for (let xx = x; xx <= e; xx += 2) { m++; const v = px(xx, y); if (!near(v, px(L, y), 20) && !near(v, px(R, y), 20)) n++; }
+              if (n < m * 0.4) break;
+              h++;
+            }
+            f.obstacles.push({ x0: x, x1: e, lane, h });
+          }
+          x = e;
+        }
+      }
+    }
+    return layout;
+  };
+
+  /* where a picture's floor is in the level: tr = {x, y, sx, sy} (picture px to building
+   * px, as the Trace tab shows it) */
+  const traceFloor = (level, fl, tr) => Math.floor((tr.y + (fl.top + fl.bottom) / 2 * tr.sy) / 80);
+  /* the collision of the building as the picture shows it: on every floor of the picture
+   * that is in the building, rows 0-6 (above the floor) of the columns the picture covers
+   * become what stands there (things in the front / back lane as high as they are,
+   * pillars a wall in the back lane). Columns of stairs, doors, the exit and the
+   * building's outer walls are left as they are. Returns the number of columns changed. */
+  LC.placeDetectedCollision = function (level, layout, tr) {
+    const rowsOf = h => { let m = 0; const n = Math.max(1, Math.min(7, Math.ceil(h / 8))); for (let r = 7 - n; r <= 6; r++) m |= 0x80 >> r; return m; };
+    const col8 = x => Math.floor((tr.x + x * tr.sx) / 8);
+    let changed = 0;
+    for (const fl of layout.floors) {
+      const f = traceFloor(level, fl, tr), c = level.col[f];
+      if (!c || !fl.obstacles) continue;
+      const front = new Map(), back = new Map();
+      const add = (m, a, b, bits) => { for (let k = Math.max(0, a); k <= Math.min(c.length - 1, b); k++) m.set(k, (m.get(k) || 0) | bits); };
+      for (const o of fl.obstacles) add(o.lane === 'front' ? front : back, col8(o.x0), col8(o.x1), rowsOf(o.h * tr.sy + 8));
+      for (const p of fl.pillars) add(back, col8(p.x0), col8(p.x1), 0xFE);
+      for (let k = Math.max(0, col8(fl.x0)); k <= Math.min(c.length - 1, col8(fl.x1)); k++) {
+        const v = c[k], inf = v & 0xFFFF;
+        if (LC.isStairInfo(inf) || LC.isDoorInfo(inf) || LC.isExitInfo(inf) || (v >>> 16) === 0xFFFF) continue;
+        const fr = ((v >>> 24) & 0x01) | (front.get(k) || 0), bk = (((v >>> 16) & 255) & 0x01) | (back.get(k) || 0);
+        const nv = ((fr << 24) | (bk << 16) | inf) >>> 0;
+        if (nv !== v) { c[k] = nv; changed++; }
+      }
+    }
+    return changed;
+  };
+  /* guards where the picture has them (each a guard of the stage's, in turn, in the lane
+   * it stands in) and the robbers' start where they are; returns {guards, start} */
+  LC.placeDetectedPeople = function (level, layout, tr, presets) {
+    const guards = [], robbers = [];
+    for (const fl of layout.floors) {
+      const f = traceFloor(level, fl, tr);
+      if (f < 0 || f >= level.floors || !fl.people) continue;
+      for (const p of fl.people) {
+        const x = Math.round(tr.x + p.x * tr.sx) + 32;
+        if (x < 48 || x > 16 * level.W) continue;
+        (p.kind === 'robber' ? robbers : guards).push({ f, x, lane: p.lane });
+      }
+    }
+    const out = { guards: 0, start: false };
+    if (presets && presets.length && guards.length) {
+      level.guards = guards.slice(0, 32).map((g, i) => {
+        const pr = presets[i % presets.length];
+        out.guards++;
+        return { x: g.x, y: 80 * g.f + pr.yoff, z: g.lane === 'back' ? 16 : 0, frame: pr.frame, beh: pr.beh, dir: pr.dir, attr: pr.attr, template: pr.template };
+      });
+    }
+    if (robbers.length) {
+      const before = JSON.stringify(level.players);
+      const r0 = robbers.sort((a, b) => b.f - a.f || a.x - b.x)[0];
+      level.players.forEach((p, i) => {
+        p.y = p.y - 80 * LC.floorOf(p.y, level.floors) + 80 * r0.f;
+        p.x = Math.max(48, Math.min(16 * level.W - 16, r0.x + 8 * i));
+      });
+      if (LC.startProblem(level)) level.players = JSON.parse(before); else out.start = true;
+    }
+    return out;
+  };
+
   /* stairs to the floor above in both directions, in the stage's look: the stage's own,
    * the missing direction mirrored */
   LC.stairStamps = function (stamps, N) {

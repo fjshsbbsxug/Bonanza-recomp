@@ -197,6 +197,14 @@ builder/      the HTML builder page
     the stage's free tiles after borrowed blocks) and the level's own frame table gets
     new pictures under the same frame numbers, so the game's code and animation
     scripts are unchanged.
+    `LC.detectContents` finds the rest of an arcade map's layout per floor: pillars (light
+    from ceiling to floor), things standing on the floor (the band's bottom 32 rows are the
+    floor strip, back lane above front lane; a column's strip is bare floor where it
+    matches the strip patterns that repeat across the floor, a thing in the back lane
+    covers the strip from the top down to its base, one in the front lane most of the
+    front half; height from where it differs from the columns beside it) and people (by
+    colours only they use; feet give the lane). `LC.placeDetectedCollision` and
+    `LC.placeDetectedPeople` put them into the level through the Trace tab's mapping.
 
   * *Extra stages* (`port/src/extrastages.c`, "New stage" in Bonanza Maker): new stages
     between the cartridge's own, e.g. the two arcade stages the Mega Drive left out

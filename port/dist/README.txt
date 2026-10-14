@@ -146,7 +146,12 @@ and the time limit stay as in the original stage. Flip (F) mirrors the stamp you
 of the stage, say) under the building so you can build over it. With a map of an arcade
 stage loaded, "Detect layout" finds its floors and staircases, "Match floor count" gives
 your building as many floors (up to 5), and "Place the stairs" builds every staircase
-where the map has it, going the same way.
+where the map has it, going the same way. Detect layout also finds the pillars (pink), the things
+standing on each floor (red: in the front lane, blue: in the back lane, outlined as high
+as they reach) and the people (yellow: guards, green: the robbers). "Place walls & things"
+makes them solid in their lane (pillars: a wall in the back lane), "Place guards & start"
+puts a guard where each one stands, in its lane, and the robbers' start where they are.
+It goes by colours and shapes, so check it: fix anything in the Collision tab.
 The Collision tab shows and changes what is solid: pick Front lane, Back lane, Wall (both
 lanes) or Open and drag a box over the building (8-pixel squares; red dots are the front
 lane, blue the back lane). Point at anything to see what it is (the floor, what is solid

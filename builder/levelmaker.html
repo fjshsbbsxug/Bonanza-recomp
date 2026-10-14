@@ -651,8 +651,13 @@
         <button class="chunky" id="tr-line" ${trace.layout ? '' : 'disabled'}>Line up floors</button>
         <button class="chunky" id="tr-floors" ${trace.layout ? '' : 'disabled'}>Match floor count</button>
         <button class="chunky save" id="tr-stairs" ${trace.layout ? '' : 'disabled'}>Place the stairs</button>
+        <button class="chunky save" id="tr-coll" ${trace.layout ? '' : 'disabled'} title="What is solid where the picture has things: front lane red, back lane blue, pillars">Place walls &amp; things</button>
+        <button class="chunky save" id="tr-people" ${trace.layout ? '' : 'disabled'} title="Guards where the picture has them, in their lane; the robbers' start">Place guards &amp; start</button>
         <span class="muted" id="tr-found">${trace.layout ? trace.layout.floors.length + ' floors, ' +
-          trace.layout.floors.reduce((n, f) => n + f.stairs.length, 0) + ' staircases found (shown in green)' : ''}</span></div>`;
+          trace.layout.floors.reduce((n, f) => n + f.stairs.length, 0) + ' staircases (green), ' +
+          trace.layout.floors.reduce((n, f) => n + (f.people || []).filter(p => p.kind === 'guard').length, 0) + ' guards (yellow), ' +
+          trace.layout.floors.reduce((n, f) => n + (f.obstacles || []).length, 0) + ' things on the floors (red: front lane, blue: back lane), ' +
+          trace.layout.floors.reduce((n, f) => n + (f.pillars || []).length, 0) + ' pillars (pink)' : ''}</span></div>`;
       const num = id => +$(id).value;
       $('tr-file').onchange = e => {
         const f = e.target.files[0];
@@ -673,12 +678,14 @@
         c.width = trace.img.width; c.height = trace.img.height;
         const cx = c.getContext('2d');
         cx.drawImage(trace.img, 0, 0);
-        trace.layout = LC.detectLayout(cx.getImageData(0, 0, c.width, c.height));
+        const data = cx.getImageData(0, 0, c.width, c.height);
+        trace.layout = LC.detectContents(data, LC.detectLayout(data));
         lineUpTrace();
         setTab('trace');
         sfx('save');
-        tip('Found ' + trace.layout.floors.length + ' floors and ' + trace.layout.floors.reduce((n, f) => n + f.stairs.length, 0) +
-            ' staircases (green: the way they go up). <b>Match floor count</b> gives the building as many floors, <b>Place the stairs</b> builds them.');
+        tip('Found the layout: floors, staircases (green: the way they go up), pillars (pink), things standing on the floors ' +
+            '(red: front lane, blue: back lane, the outline how high) and people (yellow: guards, green: the robbers). ' +
+            '<b>Match floor count</b>, <b>Place the stairs</b>, <b>Place walls &amp; things</b> and <b>Place guards &amp; start</b> build them.');
       };
       $('tr-line').onclick = () => { lineUpTrace(); sfx('pick'); };
       $('tr-floors').onclick = () => {
@@ -697,6 +704,23 @@
         })) {
           sfx('place');
           tip('Placed ' + n + ' staircases' + (skipped ? ' (' + skipped + ' did not fit: top floor or the building\'s end)' : '') + '. Now add rooms, doors and loot.');
+        }
+      };
+      $('tr-coll').onclick = () => {
+        let n = 0;
+        if (edit(() => { n = LC.placeDetectedCollision(level, trace.layout, trace); })) {
+          if (!walls) { walls = true; $('wallsbtn').setAttribute('aria-pressed', true); }
+          sfx('place');
+          tip('Made ' + n + ' columns (8 px) solid as the picture shows: red dots front lane, blue back lane. ' +
+              'Fix anything in the <b>Collision</b> tab. Stairs, doors and the exit were left as they are.');
+        }
+      };
+      $('tr-people').onclick = () => {
+        let r = null;
+        if (edit(() => { r = LC.placeDetectedPeople(level, trace.layout, trace, info.guardPresets); })) {
+          sfx('place');
+          tip('Placed ' + r.guards + ' guards in the lanes they stand in' + (r.start ? ' and moved the robbers\' start to where they are' : '') +
+              '. Each is one of this stage\'s guard types in turn: change them in the <b>Guards</b> tab.');
         }
       };
     } else if (t === 'paint') {
@@ -862,6 +886,23 @@
         ctx.save();
         ctx.globalAlpha = 1;
         ctx.strokeStyle = '#2fb24c'; ctx.lineWidth = 3;
+        const X = x => trace.x + x * trace.sx, Y = y => trace.y + y * trace.sy;
+        for (const fl of trace.layout.floors) {
+          const s0 = fl.bottom - 31;
+          ctx.lineWidth = 1;
+          for (const p of fl.pillars || []) { ctx.strokeStyle = '#ff4fd8'; ctx.strokeRect(X(p.x0), Y(fl.top), X(p.x1) - X(p.x0), Y(fl.bottom) - Y(fl.top)); }
+          for (const o of fl.obstacles || []) {
+            const yy = o.lane === 'back' ? s0 : s0 + 16;
+            ctx.fillStyle = o.lane === 'back' ? 'rgba(60,110,255,0.6)' : 'rgba(255,40,40,0.6)';
+            ctx.fillRect(X(o.x0), Y(yy), X(o.x1 + 1) - X(o.x0), Y(yy + 16) - Y(yy));
+            ctx.strokeStyle = ctx.fillStyle; ctx.strokeRect(X(o.x0), Y(s0 - o.h), X(o.x1 + 1) - X(o.x0), Y(s0) - Y(s0 - o.h));
+          }
+          for (const p of fl.people || []) {
+            ctx.strokeStyle = p.kind === 'guard' ? '#ffd12a' : '#2fb24c'; ctx.lineWidth = 2;
+            ctx.strokeRect(X(p.x0 - 4), Y(p.top), X(p.x1 + 4) - X(p.x0 - 4), Y(p.foot) - Y(p.top));
+          }
+          ctx.strokeStyle = '#2fb24c'; ctx.lineWidth = 3;
+        }
         for (const fl of trace.layout.floors)
           for (const s of fl.stairs) {
             const xa = trace.x + s.x0 * trace.sx, xb = trace.x + s.x1 * trace.sx;
