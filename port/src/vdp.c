@@ -96,6 +96,7 @@ int vdp_irq_within(int n, int mask)
 /* ---------------------------------------------------------------- ports */
 
 static void vram_log(uint16_t a, uint8_t old, uint8_t now);
+static void state_log(int kind, int i, uint16_t old);   /* 0 register, 1 palette, 2 vertical scroll */
 
 static inline void vram_set(uint16_t a, uint8_t v)
 {
@@ -121,14 +122,17 @@ static void port_write(uint16_t w)
         break;
     case 3: {
         int i = (vdp.addr >> 1) & 0x3F;
+        state_log(1, i, vdp.cram[i]);
         vdp.cram[i] = w & 0x0EEE;
         update_palette(i);
         break;
     }
     case 5: {
         int i = (vdp.addr >> 1) & 0x3F;
-        if (i < 40)
+        if (i < 40) {
+            state_log(2, i, vdp.vsram[i]);
             vdp.vsram[i] = w & 0x07FF;
+        }
         break;
     }
     default:
@@ -217,6 +221,7 @@ void vdp_write_ctrl(uint16_t w)
     if ((w & 0xC000) == 0x8000) {
         int r = (w >> 8) & 0x1F;
         if (r < 24) {
+            state_log(0, r, vdp.reg[r]);
             vdp.reg[r] = (uint8_t)w;
             if (r == 0 || r == 1)
                 cpu_set_irq(vdp_irq_level());
@@ -238,6 +243,7 @@ void vdp_set_reg(int r, uint8_t v)
         vdp_write_ctrl((uint16_t)(0x8000 | (r << 8) | v));
         return;
     }
+    state_log(0, r, vdp.reg[r]);
     vdp.reg[r] = v;
     if (r == 0 || r == 1)
         cpu_set_irq(vdp_irq_level());
@@ -900,9 +906,18 @@ typedef struct { uint16_t a; uint8_t old, now, line; } vram_change;
 static vram_change *changes;
 static int nchanges, changes_cap, changes_lost;
 
+/* a routine in C (draw.c) runs in one go: how far into it (68000 cycles past the end of
+ * the current line, negative: within it) a change is made, so it goes with the line the
+ * game's routine would have made it in */
+int vdp_ahead = VDP_AHEAD_NONE;
+
 static void vram_log(uint16_t a, uint8_t old, uint8_t now)
 {
     if (md.line >= 224) return;          /* between pictures: nothing shown changes */
+    int line = md.line;
+    if (vdp_ahead != VDP_AHEAD_NONE && vdp_ahead >= 0)
+        line += 1 + vdp_ahead / MD_CYC68K_LINE;
+    if (line > 224) line = 224;          /* after the picture */
     if (nchanges == changes_cap) {
         int c = changes_cap ? changes_cap * 2 : 4096;
         vram_change *n = c <= (1 << 20) ? realloc(changes, (size_t)c * sizeof(*n)) : 0;
@@ -912,8 +927,24 @@ static void vram_log(uint16_t a, uint8_t old, uint8_t now)
     changes[nchanges].a = a;
     changes[nchanges].old = old;
     changes[nchanges].now = now;
-    changes[nchanges].line = (uint8_t)md.line;
+    changes[nchanges].line = (uint8_t)line;
     nchanges++;
+}
+
+/* registers, palette and vertical scroll changed by a routine in C ahead of where the
+ * game's routine would have changed them: until that line, the lines are taken with
+ * what was there before */
+typedef struct { int line, kind, i; uint16_t old; } state_change;
+static state_change ahead[256];
+static int nahead;
+
+static void state_log(int kind, int i, uint16_t old)
+{
+    if (vdp_ahead == VDP_AHEAD_NONE || vdp_ahead < 0 || md.line >= 224 || nahead == 256)
+        return;
+    int line = md.line + 1 + vdp_ahead / MD_CYC68K_LINE;
+    if (line >= 224) line = 224;
+    ahead[nahead++] = (state_change){line, kind, i, old};
 }
 
 void vdp_line_capture(int y)
@@ -922,6 +953,17 @@ void vdp_line_capture(int y)
     memcpy(l->reg, vdp.reg, sizeof(l->reg));
     memcpy(l->cram, vdp.cram, sizeof(l->cram));
     memcpy(l->vsram, vdp.vsram, sizeof(l->vsram));
+    int keep = 0;
+    for (int k = nahead - 1; k >= 0; k--) {      /* not made yet at this line: as before */
+        state_change *c = &ahead[k];
+        if (c->line < y) continue;
+        if (c->kind == 0) l->reg[c->i] = (uint8_t)c->old;
+        else if (c->kind == 1) l->cram[c->i] = c->old;
+        else l->vsram[c->i] = c->old;
+    }
+    for (int k = 0; k < nahead; k++)
+        if (ahead[k].line >= y) ahead[keep++] = ahead[k];
+    nahead = keep;
 }
 
 void vdp_render_frame(void)
@@ -948,6 +990,7 @@ void vdp_render_frame(void)
     }
     if (replay) memcpy(vdp.vram, live_vram, sizeof(live_vram));
     nchanges = 0; changes_lost = 0;
+    nahead = 0;
     memcpy(vdp.reg, live.reg, sizeof(live.reg));
     memcpy(vdp.cram, live.cram, sizeof(live.cram));
     memcpy(vdp.vsram, live.vsram, sizeof(live.vsram));

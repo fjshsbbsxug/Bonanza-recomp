@@ -261,6 +261,9 @@ DRAW = {
     0x28AD0: "draw_vram_at_d6",
     0x28A90: "draw_map_rect",
     0x01836: "draw_map_column",
+    0x006CA: "draw_sprite_list",
+    0x0066A: "draw_sprites_clear",
+    0x114F0: "draw_targets_picture",
 }
 # the split screen's line effects: interrupt routines (rte)
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (

@@ -2633,6 +2633,7 @@ L_000664: CHK(0x664u)  /* move.w #$8f02, (a6) */
 L_000668: CHK(0x668u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_00066A: CHK(0x66Au)  /* movem.l d6-d7, -(a7) */
+	{ int r_ = draw_sprites_clear(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint i = 0;
 		uint register_list = 0x300u;
@@ -2864,6 +2865,7 @@ L_0006C4: CHK(0x6C4u)  /* movem.l (a7)+, d6-d7 */
 L_0006C8: CHK(0x6C8u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0006CA: CHK(0x6CAu)  /* movem.l d3-d7/a6, -(a7) */
+	{ int r_ = draw_sprite_list(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint i = 0;
 		uint register_list = 0x1F02u;

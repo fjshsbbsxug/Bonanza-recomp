@@ -16813,6 +16813,7 @@ L_0114EE: CHK(0x114EEu)  /* clr.l d0 */
 	}
 	USE_CYCLES(6);
 L_0114F0: CHK(0x114F0u)  /* lea.l $119e8(pc), a5 */
+	{ int r_ = draw_targets_picture(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		REG_A[5] = 0x119E8u;
 	}

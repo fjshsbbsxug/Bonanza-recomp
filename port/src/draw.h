@@ -48,6 +48,9 @@ int  draw_hud_time_10A4A(void);
 int  draw_vram_at_d6(void);     /* sub_28AD0 */
 int  draw_map_rect(void);       /* sub_28A90 */
 int  draw_map_column(void);     /* sub_01836 */
+int  draw_sprite_list(void);    /* sub_006CA */
+int  draw_sprites_clear(void);  /* sub_0066A */
+int  draw_targets_picture(void); /* 0x114F0 */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);

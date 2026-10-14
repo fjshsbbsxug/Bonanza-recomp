@@ -1,7 +1,7 @@
 /* Headless runner for testing: runs N frames, dumps screenshots and state hashes.
  *
  *   bonanza-headless ROM [--frames N] [--shot FRAME:file.ppm]... [--input FRAME:PAD:buttons]...
- *                        [--hash] [--wav file.wav] [--sounds bank]
+ *                        [--hash] [--picture-hash] [--wav file.wav] [--sounds bank]
  * --sounds: play the recorded sounds from that file (recorded there first if it is not
  * there yet) instead of running the sound hardware.
  *
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
     if (err) { fprintf(stderr, "%s\n", err); return 1; }
     md_load_rom(buf, n);
 
-    int frames = 600, hash = 0;
+    int frames = 600, hash = 0, picture_hash = 0;
     const char *dumpvdp = NULL;
     struct { int frame; char path[256]; } shots[64];
     struct { int frame, pad; uint8_t b; } inputs[256];
@@ -121,6 +121,7 @@ int main(int argc, char **argv)
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--hash")) hash = 1;
+        else if (!strcmp(argv[i], "--picture-hash")) picture_hash = 1;
         else if (!strcmp(argv[i], "--dumpvdp") && i + 1 < argc) dumpvdp = argv[++i];
         else if (!strcmp(argv[i], "--ini") && i + 1 < argc) {
             settings_load(argv[++i]);
@@ -256,6 +257,12 @@ int main(int argc, char **argv)
             net_frame_done(net_frame() % 60 == 59 ? md_state_hash() : 0);
         if (hash)
             printf("frame %d hash %08x pc %06x\n", fr, md_state_hash(), cpu_get_pc());
+        if (picture_hash) {                  /* the picture as shown, every frame */
+            const uint16_t *p = md_framebuffer_md();
+            uint32_t h = 2166136261u;
+            for (int k = 0; k < MD_SCREEN_H * MD_FB_W; k++) h = (h ^ p[k]) * 16777619u;
+            printf("frame %d picture %08x\n", fr, h);
+        }
     }
     if (online) {
         fprintf(stderr, "net: %s\n", net_status());

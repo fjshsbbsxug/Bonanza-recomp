@@ -53,7 +53,9 @@ int      vdp_out_width(void);   /* width of the picture in vdp.fb */
 int      vdp_irq_level(void);   /* highest pending & enabled interrupt (0, 4 or 6) */
 void     vdp_ack_irq(int level);
 void     vdp_line_start(int line); /* raster bookkeeping (HINT/VINT) */
-int      vdp_irq_within(int lines, int mask); /* an interrupt at one of the next line starts? */
+int      vdp_irq_within(int lines, int mask);
+#define VDP_AHEAD_NONE (-0x40000000)
+extern int vdp_ahead;               /* see vdp.c */ /* an interrupt at one of the next line starts? */
 
 /* online games: the player at this screen (0 or 1), -1 = local game. Each player sees
  * their own view at the bottom and the floor above them at the top. Display only. */
