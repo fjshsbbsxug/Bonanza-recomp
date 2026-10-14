@@ -965,6 +965,7 @@ L_00850A: CHK(0x850Au)  /* clr.w $a(a0) */
 L_00850E: CHK(0x850Eu)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_008510: CHK(0x8510u)  /* movea.l $ff57bc.l, a6 */
+	{ int r_ = draw_tile_stream_p2(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		REG_A[6] = m68ki_read_32(0xFF57BCu);
 	}

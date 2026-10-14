@@ -1985,3 +1985,186 @@ int draw_load_list(uint32_t at, int n)
     if (log) fprintf(stderr, "load list %05X frame %u: %s\n", at, md.frame, r ? "C" : "translated");
     return r;
 }
+
+/* ---------------------------------------------------------------- tile streams */
+
+/* sub_082D2 / sub_08510: a player's tile stream for this frame (each player's set: the
+ * source, the command for where it goes, the count of 32-byte tiles - 1), then the
+ * stream is marked sent; when more are waiting (a count at pending), d7 is the next
+ * non-zero word of the four after the set, and one is taken off. */
+static uint32_t ts_at, ts_set, ts_sent, ts_after;
+
+static void tile_stream(void)
+{
+    uint32_t b = ts_at, set = ts_set;
+    from(b);
+    reach(b + 0x06);
+    REG_A[6] = RD32(set);                                /* movea.l (src).l,a6 */
+    reach(b + 0x10);
+    uint32_t cmd = RD32(set + 4);
+    ctrl_long(cmd);                                      /* move.l (cmd).l,(VDP_CTRL).l */
+    reach(b + 0x16);
+    W(REG_D[7], RD16(set + 8));                          /* move.w (count).l,d7 */
+    reach(b + 0x1C);
+    REG_A[0] = 0xC00000u;                                /* lea (VDP_DATA).l,a0 */
+    uint32_t src = REG_A[6];
+    int n = (int)(uint16_t)REG_D[7] + 1;
+    for (int t = 0; t < n; t++) {
+        for (int i = 0; i < 8; i++) {
+            if (!dry) {
+                uint32_t v = RD32(src);
+                put((uint16_t)(v >> 16));
+                put((uint16_t)v);
+            }
+            src += 4;
+            COST(20);                                    /* move.l (a6)+,(a0) */
+        }
+        COST(dbra_cost(t == n - 1));
+    }
+    REG_A[6] = src;
+    REG_D[7] |= 0xFFFF;
+    from(b + 0x30);
+    reach(b + 0x3A);                                     /* lea; clr.w $c(a0) */
+    REG_A[0] = ts_sent;
+    if (!dry) WR16(ts_sent + 0xC, 0);
+    reach(b + 0x40);                                     /* tst.w (pending).l */
+    uint32_t pending = set + 0x12;
+    uint16_t p = (uint16_t)RD16(pending);
+    flags_move(p, 16);
+    if (!p) {
+        COST(10);                                        /* beq.w taken */
+        from(b + 0x64);
+        return;
+    }
+    COST(12 + 12 + 8);                                   /* beq.w; lea; move.w #3,d6 */
+    uint32_t a6 = set + 0xA;
+    W(REG_D[6], 3);
+    for (;;) {
+        uint16_t d7 = (uint16_t)RD16(a6);
+        a6 += 2;
+        W(REG_D[7], d7);
+        COST(8);                                         /* move.w (a6)+,d7 */
+        if (d7) { COST(10); break; }                     /* bne.w taken */
+        COST(12);
+        uint16_t d6 = (uint16_t)REG_D[6];
+        W(REG_D[6], d6 - 1);
+        COST(dbra_cost(d6 == 0));
+        if (d6 == 0) break;
+    }
+    REG_A[6] = a6;
+    COST(20 + 12);                                       /* subq.w #1,(pending).l; lea */
+    uint32_t r = (uint32_t)p - 1;
+    if (!dry) WR16(pending, (uint16_t)r);
+    FLAG_N = NFLAG_16(r);
+    FLAG_Z = MASK_OUT_ABOVE_16(r);
+    FLAG_V = VFLAG_SUB_16(1, p, r);
+    FLAG_X = FLAG_C = CFLAG_16(r);
+    REG_A[5] = ts_after;
+    from(b + 0x64);
+}
+int draw_tile_stream_p1(void)
+{
+    ts_at = 0x082D2; ts_set = 0xFF5712u; ts_sent = 0xFF1858u; ts_after = 0xFF1864u;
+    return run(tile_stream);
+}
+int draw_tile_stream_p2(void)
+{
+    ts_at = 0x08510; ts_set = 0xFF57BCu; ts_sent = 0xFF229Cu; ts_after = 0xFF22A8u;
+    return run(tile_stream);
+}
+
+/* ---------------------------------------------------------------- registers 17, 18 */
+
+/* sub_006EA: no window (registers 17, 18 through a0) */
+static void window_regs(void)
+{
+    from(0x6EA);
+    REG_A[0] = 0xC00004u;
+    reach(0x6F4);
+    if (!dry) vdp_set_reg(17, 0x00);
+    reach(0x6F8);
+    if (!dry) vdp_set_reg(18, 0x03);
+    flags_move(0x9203, 16);
+}
+int draw_window_regs(void) { return run(window_regs); }
+
+/* ---------------------------------------------------------------- hex number */
+
+/* sub_01296: d6+1 bytes (a6) as hex digit tiles (two per byte, from the table at
+ * 0x12F8) into the buffer at 0xFFC00C; when d6's top bit is set, leading zeros (up to
+ * 8) become blanks. a6 is left after the bytes; the other registers are kept. */
+static void hex_buffer(void)
+{
+    static const int saved[] = {0, 1, 2, 3, 4, 5, 6, 8 + 4, 8 + 5};   /* d0-d6/a4-a5 */
+    push_regs(saved, 9);
+    from(0x129A);
+    reach(0x12B4);
+    uint32_t src = REG_A[6], buf = 0xFFC00Cu;
+    uint16_t v = 0;
+    int n = (int)(uint16_t)REG_D[6] + 1;
+    for (int i = 0; i < n; i++) {
+        uint8_t b = (uint8_t)RD8(src++);
+        uint16_t hi = (uint16_t)RD16(0x12F8 + (b >> 4) * 2), lo = (uint16_t)RD16(0x12F8 + (b & 15) * 2);
+        if (!dry) { WR16(buf, hi); WR16(buf + 2, lo); }
+        buf += 4;
+        v = lo;
+        COST(span(0x12B4, 0x12CA) + dbra_cost(i == n - 1));
+    }
+    REG_A[6] = src;
+    flags_move(v, 16);
+    FLAG_X = XFLAG_CLEAR;                                /* add.w d1,d1 of a digit */
+    COST(span(0x12CE, 0x12D2));                          /* btst #31,d6 */
+    if (!(REG_D[6] & 0x80000000u)) {
+        FLAG_Z = ZFLAG_SET;
+        COST(10);                                        /* beq.w taken */
+    } else {
+        FLAG_Z = ZFLAG_CLEAR;
+        COST(12 + span(0x12D6, 0x12E4));                 /* lea; move.w #7,d6; move.w #$530,d5 */
+        uint32_t a = 0xFFC00Cu;
+        for (int i = 7; i >= 0; i--) {
+            uint16_t w = (uint16_t)RD16(a);
+            uint32_t r = (uint32_t)0x530 - w;            /* cmp.w (a5),d5 */
+            FLAG_N = NFLAG_16(r); FLAG_Z = MASK_OUT_ABOVE_16(r);
+            FLAG_V = VFLAG_SUB_16(w, 0x530, r); FLAG_C = CFLAG_16(r);
+            COST(8);
+            if (w != 0x530) { COST(10); break; }         /* bne.w taken */
+            if (!dry) WR16(a, 0x502);
+            a += 2;
+            flags_move(0x502, 16);
+            COST(12 + 12 + dbra_cost(i == 0));           /* bne; move.w #$502,(a5)+; dbra */
+        }
+    }
+    pop_cost(9);
+}
+
+/* sub_01268: d6+1 bytes (a6) as hex digits (sub_01296), each tile ORed with d7, to where
+ * the video data goes */
+static void hex_number(void)
+{
+    static const int saved[] = {4, 5, 6, 7, 8 + 6};      /* d4-d7/a6 */
+    uint32_t d4 = REG_D[4], d5 = REG_D[5], d6 = REG_D[6], d7 = REG_D[7], a6 = REG_A[6];
+    push_regs(saved, 5);
+    REG_A[7] -= 20;
+    call(hex_buffer, 0x1270, 18);
+    from(0x1270);
+    reach(0x127C);                                       /* lea, lea */
+    REG_A[5] = 0xC00000u;
+    uint32_t buf = 0xFFC00Cu;
+    uint16_t v = 0;
+    int n = (int)(uint16_t)d6 + 1;
+    for (int i = 0; i < n; i++) {
+        for (int k = 0; k < 2; k++) {
+            v = (uint16_t)d7 | (uint16_t)RD16(buf);
+            buf += 2;
+            COST(4 + 8 + 4);                             /* move.w d7,d5; move.w (a6)+,d4; or.w */
+            put(v);
+            COST(8);                                     /* move.w d5,(a5) */
+        }
+        COST(dbra_cost(i == n - 1));
+    }
+    REG_A[7] += 20;
+    pop_cost(5);
+    REG_D[4] = d4; REG_D[5] = d5; REG_D[6] = d6; REG_D[7] = d7; REG_A[6] = a6;
+    flags_move(v, 16);
+}
+int draw_hex_number(void) { return run(hex_number); }

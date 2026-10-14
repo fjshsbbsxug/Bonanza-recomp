@@ -3016,6 +3016,7 @@ L_0006E4: CHK(0x6E4u)  /* movem.l (a7)+, d3-d7/a6 */
 L_0006E8: CHK(0x6E8u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0006EA: CHK(0x6EAu)  /* lea.l $c00004.l, a0 */
+	{ int r_ = draw_window_regs(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		REG_A[0] = 0xC00004u;
 	}
@@ -8376,6 +8377,7 @@ L_001214: CHK(0x1214u)  /* movem.l (a7)+, d5-d7/a5 */
 L_001218: CHK(0x1218u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_001268: CHK(0x1268u)  /* movem.l d4-d7/a6, -(a7) */
+	{ int r_ = draw_hex_number(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint i = 0;
 		uint register_list = 0xF02u;
@@ -47612,6 +47614,7 @@ L_0082CC: CHK(0x82CCu)  /* clr.w $a(a0) */
 L_0082D0: CHK(0x82D0u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0082D2: CHK(0x82D2u)  /* movea.l $ff5712.l, a6 */
+	{ int r_ = draw_tile_stream_p1(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		REG_A[6] = m68ki_read_32(0xFF5712u);
 	}
