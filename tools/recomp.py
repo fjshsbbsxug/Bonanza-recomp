@@ -217,7 +217,8 @@ def specialise(body, op, addr, raw):
 
 
 # The game's drawing routines written in C (port/src/draw.c): called where they start;
-# the rts is done here. When one cannot run in one go, the routine runs as translated.
+# the rts is done here (or it went on into the game's code: 2). When one cannot run in
+# one go, the routine runs as translated.
 DRAW = {
     0x01146: "draw_tiles_packed",
     0x0119C: "draw_tiles_raw",
@@ -244,6 +245,10 @@ DRAW = {
     0x11DF8: "draw_hud_score_p1",
     0x11E88: "draw_hud_score_p2",
     0x0135A: "draw_tile_loads",
+    0x113E6: "draw_frame_113E6",
+    0x03420: "draw_frame_03420",
+    0x122FE: "draw_frame_122FE",
+    0x248DE: "draw_frame_248DE",
 }
 # the split screen's line effects: interrupt routines (rte)
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (
@@ -485,7 +490,8 @@ class Gen:
         if a in DRAW:
             # 0: an interrupt would come within it: the routine below, as translated
             self.stats["draw"] += 1
-            L.append("\tif (%s()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }" % DRAW[a])
+            L.append("\t{ int r_ = %s(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
+                     "if (r_ == 2) goto dispatch; }" % DRAW[a])
         elif a in DRAW_RTE:
             self.stats["draw"] += 1
             L.append("\tif (%s()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); "

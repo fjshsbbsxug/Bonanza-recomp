@@ -1655,6 +1655,7 @@ L_0248D6: CHK(0x248D6u)  /* jsr $1146.l */
 L_0248DC: CHK(0x248DCu)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0248DE: CHK(0x248DEu)  /* addq.w #$1, $ff17a0.l */
+	{ int r_ = draw_frame_248DE(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint src = (((0x5279u >> 9) - 1) & 7) + 1;
 		uint ea = 0xFF17A0u;
@@ -2557,7 +2558,7 @@ dispatch:
 	default: return;
 	}
 L_028200: CHK(0x28200u)  /* move.w sr, -(a7) */
-	if (draw_vram_copy()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
+	{ int r_ = draw_vram_copy(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	REG_PPC = 0x28200u; REG_PC = 0x28202u; REG_IR = 0x40E7;
 	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
 	USE_CYCLES(14);
@@ -4392,7 +4393,7 @@ L_028486: CHK(0x28486u)  /* dbra d0, $28390 */
 L_02848A: CHK(0x2848Au)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_02848C: CHK(0x2848Cu)  /* move.w d7, d6 */
-	if (draw_vram_at()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
+	{ int r_ = draw_vram_at(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = MASK_OUT_ABOVE_16(REG_D[7]);
 		uint* r_dst = &REG_D[6];

@@ -1,4 +1,5 @@
-/* The game's drawing routines, written in C (draw.c): 1 done, 0 not run (the game's
+/* The game's drawing routines, written in C (draw.c): 1 done (the caller does the
+ * return), 2 done and gone on into the game's code (REG_PC), 0 not run (the game's
  * routine runs as translated). */
 #ifndef DRAW_H
 #define DRAW_H
@@ -31,6 +32,10 @@ int  draw_hud_number_p2(void);  /* sub_11FB8 */
 int  draw_hud_score_p1(void);   /* sub_11DF8 */
 int  draw_hud_score_p2(void);   /* sub_11E88 */
 int  draw_tile_loads(void);     /* sub_0135A */
+int  draw_frame_113E6(void);
+int  draw_frame_03420(void);
+int  draw_frame_122FE(void);
+int  draw_frame_248DE(void);
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);

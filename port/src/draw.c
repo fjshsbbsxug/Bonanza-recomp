@@ -36,6 +36,7 @@ static int span(uint32_t a, uint32_t b)
     return n;
 }
 
+static int jumped;      /* the routine ended in a jmp to the game's code (REG_PC): 2 */
 static int stops_z80;   /* the routine holds the Z80 (its bus): it must not run past a line */
 
 /* may the routine, taking this long (its rts too), run in one go? */
@@ -66,10 +67,10 @@ static int run(void (*body)(void))
         return 0;
     }
     draw_stat_c++;
-    dry = 0; cyc = 0;
+    dry = 0; cyc = 0; jumped = 0;
     body();
     USE_CYCLES(cyc);
-    return 1;
+    return jumped ? 2 : 1;
 }
 
 static void put(uint16_t w) { if (!dry) vdp_write_data(w); }
@@ -1195,3 +1196,86 @@ static void tile_loads(void)
     }
 }
 int draw_tile_loads(void) { return run(tile_loads); }
+
+/* ---------------------------------------------------------------- each screen's frame
+ *
+ * The routine a screen runs every frame (the pointer at 0xFFC068) first sets the
+ * scroll for the frame, then jumps to the part of the screen's work its state is at:
+ * the scroll here, the work in the game's code (the jump: 2). */
+
+static void scroll_word(uint8_t code, uint16_t addr, uint16_t v)
+{
+    if (!dry) { vdp_command(code, addr); vdp_write_data(v); }
+}
+
+/* moveq #0 (or not) / move.w state,d0 / lsl.w #2,d0 / movea.l (table,d0.w),a0 / jmp (a0) */
+static void jump_by_state(uint32_t state, uint32_t table, int clear_d0)
+{
+    uint16_t w = (uint16_t)RD16(state);
+    uint32_t res = (uint32_t)w << 2;
+    if (clear_d0) REG_D[0] = 0;
+    W(REG_D[0], res);
+    FLAG_N = NFLAG_16(res);
+    FLAG_Z = MASK_OUT_ABOVE_16(res);
+    FLAG_V = VFLAG_CLEAR;
+    FLAG_X = FLAG_C = (w >> 6) & 0x100;                    /* the bit shifted out last (14) */
+    REG_A[0] = RD32(table + (uint32_t)(int16_t)(uint16_t)res);
+    REG_PC = REG_A[0];
+    jumped = 1;
+}
+
+/* sub_113E6: a stage: both planes scrolled together by 0xFF0680 / 0xFF0280 */
+static void frame_113E6(void)
+{
+    COST(span(0x113E6, 0x1144C));
+    if (!dry) WR16(0xFF17A4u, 0);
+    scroll_word(0x05, 0x0000, (uint16_t)RD16(0xFF0680u));
+    scroll_word(0x05, 0x0002, (uint16_t)RD16(0xFF0680u));
+    scroll_word(0x01, 0xB000, (uint16_t)RD16(0xFF0280u));
+    scroll_word(0x01, 0xB002, (uint16_t)RD16(0xFF0280u));
+    jump_by_state(0xFF6C1Cu, 0x1144C, 1);
+}
+int draw_frame_113E6(void) { return run(frame_113E6); }
+
+/* sub_03420 */
+static void frame_03420(void)
+{
+    COST(span(0x03420, 0x03470));
+    if (!dry) WR16(0xFF17A4u, 0);
+    scroll_word(0x05, 0x0000, (uint16_t)RD16(0xFF6C54u));
+    scroll_word(0x05, 0x0002, 0);
+    scroll_word(0x01, 0xB002, 0);
+    jump_by_state(0xFF6C5Cu, 0x03470, 0);
+}
+int draw_frame_03420(void) { return run(frame_03420); }
+
+/* sub_122FE: counts its frames at 0xFF5546 */
+static void frame_122FE(void)
+{
+    COST(span(0x122FE, 0x1236C));
+    if (!dry) {
+        WR16(0xFF17A4u, 0);
+        WR16(0xFF5546u, (uint16_t)(RD16(0xFF5546u) + 1));
+    }
+    scroll_word(0x05, 0x0000, (uint16_t)RD16(0xFF6C60u));
+    scroll_word(0x01, 0xB000, (uint16_t)RD16(0xFF6C5Eu));
+    scroll_word(0x05, 0x0002, (uint16_t)RD16(0xFF6C64u));
+    scroll_word(0x01, 0xB002, (uint16_t)RD16(0xFF6C62u));
+    jump_by_state(0xFF6C5Cu, 0x1236C, 0);
+}
+int draw_frame_122FE(void) { return run(frame_122FE); }
+
+/* sub_248DE: counts its frames at 0xFF17A0 */
+static void frame_248DE(void)
+{
+    COST(span(0x248DE, 0x24934));
+    if (!dry) {
+        WR16(0xFF17A0u, (uint16_t)(RD16(0xFF17A0u) + 1));
+        WR16(0xFF17A4u, 0);
+    }
+    scroll_word(0x05, 0x0000, (uint16_t)RD16(0xFF6C54u));
+    scroll_word(0x05, 0x0002, (uint16_t)RD16(0xFF6C56u));
+    scroll_word(0x01, 0xB002, 0);
+    jump_by_state(0xFF6C1Cu, 0x24934, 1);
+}
+int draw_frame_248DE(void) { return run(frame_248DE); }
