@@ -249,6 +249,13 @@ DRAW = {
     0x03420: "draw_frame_03420",
     0x122FE: "draw_frame_122FE",
     0x248DE: "draw_frame_248DE",
+    # parts of the vertical blank, each going on in the game's code
+    0x0098E: "draw_vblank_entry",
+    0x009C0: "draw_vblank_scroll_9C0",
+    0x009C6: "draw_vblank_scroll",
+    0x00A2C: "draw_vblank_sprites",
+    0x00AD2: "draw_vblank_palette",
+    0x00B58: "draw_vblank_hud",
 }
 # the split screen's line effects: interrupt routines (rte)
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (

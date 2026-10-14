@@ -1279,3 +1279,191 @@ static void frame_248DE(void)
     jump_by_state(0xFF6C1Cu, 0x24934, 1);
 }
 int draw_frame_248DE(void) { return run(frame_248DE); }
+
+/* ---------------------------------------------------------------- the vertical blank
+ *
+ * The game's frame (sub_0098E, the vertical blank interrupt) between its calls into the
+ * game's work: the parts that are video, each going on (2) at the instruction after it. */
+
+static void go_on(uint32_t pc) { REG_PC = pc; jumped = 1; }
+
+/* 0x98E: in the split screen (0xFF1814), the line effects started: the first one, no
+ * lines to it, line interrupts on (register 0); then the interrupts let in (0x9BC) */
+static void vblank_entry(void)
+{
+    uint16_t split = (uint16_t)RD16(0xFF1814u);
+    COST(16);
+    flags_move(split, 16);
+    if (!split) { COST(10); go_on(0x9C6); return; }
+    COST(10 + CYC_BCC_NOTAKE_W + span(0x998, 0x9BC));
+    uint16_t r0 = (uint16_t)(RD16(0xFFC07Au) | 0x8010);
+    if (!dry) {
+        WR32(0xFFC0B2u, 0x00C1E);
+        vdp_set_reg(10, 0x00);
+        WR16(0xFFC07Au, r0);
+        vdp_write_ctrl(r0);
+    }
+    flags_move(r0, 16);
+    go_on(0x9BC);
+}
+int draw_vblank_entry(void) { return run(vblank_entry); }
+
+/* 0x9C6 (0x9C0: the views not split yet first): the top of the picture's scroll; a
+ * frame whose work is not done yet (0xFF17B4) goes to 0xC10; else display off (register
+ * 1) for the copies, and on to the controls (0xA22) */
+static void vblank_scroll(void)
+{
+    uint16_t busy = (uint16_t)RD16(0xFF17B4u);
+    COST(span(0x9C6, 0xA04));
+    scroll_word(0x05, 0x0000, (uint16_t)RD16(0xFF0680u));
+    if (!dry) vdp_write_data(0x01CF);
+    scroll_word(0x01, 0xB000, (uint16_t)RD16(0xFF0280u));
+    if (!dry) vdp_write_data(0x00FF);
+    flags_move(busy, 16);
+    if (busy) { COST(10); go_on(0xC10); return; }
+    COST(10 + CYC_BCC_NOTAKE_W + span(0xA08, 0xA22));
+    uint16_t r1 = (uint16_t)(RD16(0xFFC07Cu) & 0x81BF);
+    if (!dry) {
+        WR16(0xFF17B4u, 1);
+        WR16(0xFFC07Cu, r1);
+        vdp_write_ctrl(r1);
+    }
+    flags_move(r1, 16);
+    go_on(0xA22);
+}
+static void vblank_scroll_9C0(void)
+{
+    COST(20);
+    if (!dry) WR16(0xFF17B6u, 0);
+    vblank_scroll();
+}
+int draw_vblank_scroll(void) { return run(vblank_scroll); }
+int draw_vblank_scroll_9C0(void) { return run(vblank_scroll_9C0); }
+
+/* the chip copies n words from RAM (src) to where code/addr say (DMA), the Z80 held
+ * off the bus; the first word written again after it, as the game does */
+static void dma_from_ram(uint32_t src, uint16_t n, uint16_t first, uint16_t second)
+{
+    if (dry) return;
+    WR16(0xA11100u, 0x100);
+    vdp_write_ctrl((uint16_t)(RD16(0xFFC07Cu) | 0x10));
+    vdp_set_reg(20, (uint8_t)(n >> 8));
+    vdp_set_reg(19, (uint8_t)n);
+    vdp_set_reg(22, (uint8_t)(src >> 9));
+    vdp_set_reg(21, (uint8_t)(src >> 1));
+    vdp_set_reg(23, (uint8_t)((src >> 17) & 0x7F));
+    vdp_write_ctrl(first);
+}
+
+/* 0xA2C: the sprite table (0xFF0000, 0x100 words) to video memory 0xBE00; then which
+ * player's new columns (0xFFC10C / 0xFFC110, by the frame 0xFF17A0) to call */
+static void vblank_sprites(void)
+{
+    stops_z80 = 1;
+    COST(span(0xA2C, 0xA94));
+    dma_from_ram(0xFF0000u, 0x100, 0x7E00, 0x82);
+    if (!dry) {
+        WR16(0xFF17CAu, 0x82);
+        vdp_write_ctrl((uint16_t)RD16(0xFF17CAu));       /* the copy */
+        vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+        vdp_command(0x01, 0xBE00);
+        vdp_write_data((uint16_t)RD16(0xFF0000u));
+        WR16(0xA11100u, 0);
+    }
+    REG_A[6] = 0xC00004u;
+    uint16_t odd = (uint16_t)(RD16(0xFF17A0u) & 1);
+    REG_D[7] = (REG_D[7] & 0xFFFF0000u) | odd;
+    uint32_t at = odd ? 0xFFC110u : 0xFFC10Cu;
+    COST(odd ? 10 + 20 : 10 + CYC_BCC_NOTAKE_W + 20);   /* bne; move.l */
+    uint32_t p = RD32(at);
+    REG_D[0] = p;
+    flags_move(p, 32);
+    if (!p) { COST(10); go_on(0xABC); return; }
+    COST(10 + CYC_BCC_NOTAKE_W);
+    go_on(odd ? 0xAB4 : 0xAA2);
+}
+int draw_vblank_sprites(void) { return run(vblank_sprites); }
+
+/* 0xAD2: the palette (0xFF0200, 0x40 words) to the chip when the game changed it
+ * (0xFF17C4); on a PAL console after a wait */
+static void vblank_palette(void)
+{
+    uint16_t changed = (uint16_t)RD16(0xFF17C4u);
+    COST(16);
+    flags_move(changed, 16);
+    if (!changed) { COST(10); go_on(0xB58); return; }
+    stops_z80 = 1;
+    COST(10 + CYC_BCC_NOTAKE_W + span(0xADC, 0xAE6));
+    uint8_t ver = (uint8_t)(RD8(0xA10001u) & 0x40);
+    REG_D[1] = (REG_D[1] & 0xFFFFFF00u) | ver;          /* move.b, andi.b: the low byte */
+    if (ver) {
+        COST(10 + CYC_BCC_NOTAKE_W + 8 + loop_cost(0xAEE, 0xAF0, 0x12C));
+        W(REG_D[1], 0xFFFF);
+    } else {
+        COST(10);
+    }
+    COST(span(0xAF4, 0xB58));
+    dma_from_ram(0xFF0200u, 0x40, 0xC000, 0x80);
+    if (!dry) {
+        WR16(0xFF17CAu, 0x80);
+        vdp_write_ctrl((uint16_t)RD16(0xFF17CAu));
+        vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+        vdp_command(0x03, 0x0000);
+        vdp_write_data((uint16_t)RD16(0xFF0200u));
+        WR16(0xA11100u, 0);
+        WR16(0xFF17C4u, 0);
+    }
+    REG_A[6] = 0xC00004u;
+    W(REG_D[7], RD16(0xFFC07Cu) | 0x10);
+    FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+    go_on(0xB58);
+}
+int draw_vblank_palette(void) { return run(vblank_palette); }
+
+/* tst.w flag / beq over a jsr to one of the routines here */
+static void if_set_call(uint32_t flag, void (*body)(void), uint32_t ret)
+{
+    uint16_t v = (uint16_t)RD16(flag);
+    COST(16);
+    flags_move(v, 16);
+    if (!v) { COST(10); return; }
+    COST(10 + CYC_BCC_NOTAKE_W);
+    call(body, ret, 20);
+}
+
+static void score_p1(void) { score_at = 0xFFC0F4u; score_table = 0x120BC; score_done = 0xFF6C2Eu; score_ret = 0x11E10; score_vram = 0xFD82; hud_score(); }
+static void score_p2(void) { score_at = 0xFFC100u; score_table = 0x120D0; score_done = 0xFF6C44u; score_ret = 0x11EA0; score_vram = 0xFF2E; hud_score(); }
+static void body_number_p1(void) { num = &number_p1; hud_number(); }
+static void body_number_p2(void) { num = &number_p2; hud_number(); }
+static void queue1(void) { queue_at = 0xFF6C82u; queue_offset = 0xF4; text_queue(); }
+static void queue2(void) { queue_at = 0xFF6C92u; queue_offset = 0x174; text_queue(); }
+
+/* 0xB58: the text and HUD waiting to be drawn; the display back on (register 1) unless
+ * the game keeps it off (0xFF1816); the buttons pressed this frame or the last (0xFF17B8,
+ * 0xFF17BE); then the screen's frame (0xFFC068) */
+static void vblank_hud(void)
+{
+    call(queue1, 0xB5E, 20);
+    call(queue2, 0xB64, 20);
+    if_set_call(0xFF6C2Eu, score_p1, 0xB74);
+    if_set_call(0xFF6C44u, score_p2, 0xB84);
+    if_set_call(0xFF6C30u, body_number_p1, 0xB94);
+    if_set_call(0xFF6C46u, body_number_p2, 0xBA4);
+    uint16_t off = (uint16_t)RD16(0xFF1816u);
+    COST(16);
+    if (off) {
+        COST(10);
+    } else {
+        COST(10 + CYC_BCC_NOTAKE_W + span(0xBAE, 0xBC0));
+        uint16_t r1 = (uint16_t)(RD16(0xFFC07Cu) | 0x8140);
+        if (!dry) { WR16(0xFFC07Cu, r1); vdp_write_ctrl(r1); }
+    }
+    COST(span(0xBC0, 0xBE8));
+    uint16_t b1 = (uint16_t)(RD16(0xFF17BAu) | RD16(0xFF17BCu));
+    uint16_t b2 = (uint16_t)(RD16(0xFF17C0u) | RD16(0xFF17C2u));
+    if (!dry) { WR16(0xFF17B8u, b1); WR16(0xFF17BEu, b2); }
+    REG_D[7] = b2;
+    flags_move(b2, 16);
+    go_on(0xBE8);
+}
+int draw_vblank_hud(void) { return run(vblank_hud); }

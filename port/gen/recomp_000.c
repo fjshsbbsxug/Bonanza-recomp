@@ -4735,6 +4735,7 @@ dispatch:
 	default: return;
 	}
 L_00098E: CHK(0x98Eu)  /* tst.w $ff1814.l */
+	{ int r_ = draw_vblank_entry(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = m68ki_read_16(0xFF1814u);
 	
@@ -4806,6 +4807,7 @@ L_0009BC: CHK(0x9BCu)  /* move.w #$2300, sr */
 	USE_CYCLES(16);
 	if (REG_PC != 0x9C0u) goto dispatch;
 L_0009C0: CHK(0x9C0u)  /* clr.w $ff17b6.l */
+	{ int r_ = draw_vblank_scroll_9C0(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		m68ki_write_16(0xFF17B6u, 0);
 	
@@ -4816,6 +4818,7 @@ L_0009C0: CHK(0x9C0u)  /* clr.w $ff17b6.l */
 	}
 	USE_CYCLES(20);
 L_0009C6: CHK(0x9C6u)  /* move.l #$40000010, $c00004.l */
+	{ int r_ = draw_vblank_scroll(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -4952,6 +4955,7 @@ L_000A26: CHK(0xA26u)  /* jsr $2dc2.l */
 	{ uint ea = 0x2DC2u; m68ki_push_32(0xA2Cu); USE_CYCLES(20);
 	  { REG_PC = 0x2DC2u; return; } }
 L_000A2C: CHK(0xA2Cu)  /* move.w #$100, $a11100.l */
+	{ int r_ = draw_vblank_sprites(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = 0x100u;
 		uint ea = 0xA11100u;
@@ -5232,6 +5236,7 @@ L_000ACC: CHK(0xACCu)  /* jsr $135a.l */
 	{ uint ea = 0x135Au; m68ki_push_32(0xAD2u); USE_CYCLES(20);
 	  { REG_PC = 0x135Au; return; } }
 L_000AD2: CHK(0xAD2u)  /* tst.w $ff17c4.l */
+	{ int r_ = draw_vblank_palette(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = m68ki_read_16(0xFF17C4u);
 	
@@ -5484,6 +5489,7 @@ L_000B52: CHK(0xB52u)  /* clr.w $ff17c4.l */
 	}
 	USE_CYCLES(20);
 L_000B58: CHK(0xB58u)  /* jsr $13318.l */
+	{ int r_ = draw_vblank_hud(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{ uint ea = 0x13318u; m68ki_push_32(0xB5Eu); USE_CYCLES(20);
 	  { REG_PC = 0x13318u; return; } }
 L_000B5E: CHK(0xB5Eu)  /* jsr $1376a.l */

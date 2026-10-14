@@ -36,6 +36,13 @@ int  draw_frame_113E6(void);
 int  draw_frame_03420(void);
 int  draw_frame_122FE(void);
 int  draw_frame_248DE(void);
+/* parts of the vertical blank (sub_0098E), each going on in the game's code */
+int  draw_vblank_entry(void);       /* 0x98E */
+int  draw_vblank_scroll_9C0(void);  /* 0x9C0 */
+int  draw_vblank_scroll(void);      /* 0x9C6 */
+int  draw_vblank_sprites(void);     /* 0xA2C */
+int  draw_vblank_palette(void);     /* 0xAD2 */
+int  draw_vblank_hud(void);         /* 0xB58 */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);
