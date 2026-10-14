@@ -442,7 +442,7 @@ L_02453E: CHK(0x2453Eu)  /* move.w $ffc07c.l, $c00004.l */
 		uint res = m68ki_read_16(0xFFC07Cu);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)res);
+		vdp_reg_word((uint16_t)res);
 	
 		FLAG_N = NFLAG_16(res);
 		FLAG_Z = res;
@@ -489,7 +489,7 @@ L_02457A: CHK(0x2457Au)  /* move.w $ffc092.l, $c00004.l */
 		uint res = m68ki_read_16(0xFFC092u);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)res);
+		vdp_reg_word((uint16_t)res);
 	
 		FLAG_N = NFLAG_16(res);
 		FLAG_Z = res;
@@ -924,7 +924,7 @@ L_024686: CHK(0x24686u)  /* move.w $ffc07c.l, $c00004.l */
 		uint res = m68ki_read_16(0xFFC07Cu);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)res);
+		vdp_reg_word((uint16_t)res);
 	
 		FLAG_N = NFLAG_16(res);
 		FLAG_Z = res;
@@ -1933,7 +1933,7 @@ L_024984: CHK(0x24984u)  /* move.w $ffc092.l, $c00004.l */
 		uint res = m68ki_read_16(0xFFC092u);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)res);
+		vdp_reg_word((uint16_t)res);
 	
 		FLAG_N = NFLAG_16(res);
 		FLAG_Z = res;
@@ -1962,7 +1962,7 @@ L_024998: CHK(0x24998u)  /* move.w $ffc092.l, $c00004.l */
 		uint res = m68ki_read_16(0xFFC092u);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)res);
+		vdp_reg_word((uint16_t)res);
 	
 		FLAG_N = NFLAG_16(res);
 		FLAG_Z = res;
@@ -1991,7 +1991,7 @@ L_0249AC: CHK(0x249ACu)  /* move.w $ffc07c.l, $c00004.l */
 		uint res = m68ki_read_16(0xFFC07Cu);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)res);
+		vdp_reg_word((uint16_t)res);
 	
 		FLAG_N = NFLAG_16(res);
 		FLAG_Z = res;
@@ -2021,7 +2021,7 @@ L_0249C4: CHK(0x249C4u)  /* move.w $ffc092.l, $c00004.l */
 		uint res = m68ki_read_16(0xFFC092u);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)res);
+		vdp_reg_word((uint16_t)res);
 	
 		FLAG_N = NFLAG_16(res);
 		FLAG_Z = res;
@@ -2048,7 +2048,7 @@ L_0249D6: CHK(0x249D6u)  /* move.w $ffc07c.l, $c00004.l */
 		uint res = m68ki_read_16(0xFFC07Cu);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)res);
+		vdp_reg_word((uint16_t)res);
 	
 		FLAG_N = NFLAG_16(res);
 		FLAG_Z = res;
@@ -4536,7 +4536,7 @@ L_0284A8: CHK(0x284A8u)  /* move.l d6, $c00004.l */
 		uint res = REG_D[6];
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)(res >> 16)); vdp_write_ctrl((uint16_t)res);
+		vdp_command_long(res);
 	
 		FLAG_N = NFLAG_32(res);
 		FLAG_Z = res;

@@ -101,8 +101,7 @@ static void put(uint16_t w) { if (!dry) { vdp_ahead = cyc - left0; vdp_write_dat
 static void ctrl_long(uint32_t v)
 {
     if (dry) return;
-    vdp_write_ctrl((uint16_t)(v >> 16));
-    vdp_write_ctrl((uint16_t)v);
+    vdp_command_long(v);
 }
 
 /* movem.l of n registers to / from the stack, as the routines save and restore them */
@@ -336,7 +335,7 @@ static void registers(void)
             COST(8 + (1 << CYC_SHIFT));                  /* lsr.l #1,d0 */
             if (x) {
                 COST(10 + CYC_BCC_NOTAKE_W);             /* bcc */
-                if (!dry) { vdp_ahead = cyc - left0; vdp_write_ctrl((uint16_t)RD16(0xFFC07Au + 2u * r)); }
+                if (!dry) { vdp_ahead = cyc - left0; vdp_reg_word((uint16_t)RD16(0xFFC07Au + 2u * r)); }
                 COST(12);                                /* move.w (a0),(a1) */
             } else {
                 COST(10);
@@ -526,7 +525,7 @@ static void band_010E8(void)
     COST(24);
     if (!dry) {
         WR16(0xFFC07Au, r0);
-        vdp_write_ctrl(r0);                                /* register 0: line interrupts off */
+        vdp_reg_word(r0);                                  /* register 0: line interrupts off */
     }
     COST(28);
     if (!dry && FLAG_S)                                    /* andi.w #$fdff,sr */
@@ -594,7 +593,7 @@ static uint16_t dma_fill0(int inc1, uint8_t len_lo, uint8_t len_hi, uint8_t code
     COST(16 + 8 + 8);                                    /* move.w, ori.b, move.w d7,(a6) */
     COST(20 + 12 + 20);                                  /* length, mode, command */
     if (!dry) {
-        vdp_write_ctrl(r1);
+        vdp_reg_word(r1);
         vdp_set_reg(19, len_lo);
         vdp_set_reg(20, len_hi);
         vdp_set_reg(23, 0x80);
@@ -609,7 +608,7 @@ static uint16_t dma_fill0(int inc1, uint8_t len_lo, uint8_t len_hi, uint8_t code
         if (!status) { COST(10 + CYC_BCC_NOTAKE_B); break; }
         COST(10);
     }
-    if (!dry) vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+    if (!dry) vdp_reg_word((uint16_t)RD16(0xFFC07Cu));
     COST(20);
     if (inc2) { if (!dry) vdp_set_reg(15, 2); COST(12); }
     return status;
@@ -671,7 +670,7 @@ static void video_init(void)
     COST(12 + 12 + 8 + 12 + 4);                          /* lea x4, moveq */
     for (int i = 0; i < 19; i++) {
         uint16_t w = (uint16_t)RD16(0x4FCu + 2u * i);
-        if (!dry) { vdp_write_ctrl(w); WR16(0xFFC07Au + 2u * i, w); }
+        if (!dry) { vdp_reg_word(w); WR16(0xFFC07Au + 2u * i, w); }
         COST(12 + 12 + dbra_cost(i == 18));
     }
     COST(4 + 28 + 8);                                    /* moveq, the palette at 0, move.w */
@@ -710,17 +709,16 @@ static void z80_bus(uint16_t v) { if (!dry) WR16(0xA11100u, v); }
 static void dma_to_plane(uint32_t src, uint16_t v, uint8_t len_hi, uint8_t len_lo)
 {
     if (dry) return;
-    vdp_write_ctrl((uint16_t)(RD16(0xFFC07Cu) | 0x10));
+    vdp_reg_word((uint16_t)(RD16(0xFFC07Cu) | 0x10));
     vdp_set_reg(20, len_hi);
     vdp_set_reg(19, len_lo);
     vdp_set_reg(21, (uint8_t)(src >> 1));
     vdp_set_reg(22, (uint8_t)(src >> 9));
     vdp_set_reg(23, (uint8_t)((src >> 17) & 0x7F));
-    vdp_write_ctrl((uint16_t)((v & 0x3FFF) | 0x4000));
     uint16_t second = (uint16_t)((v >> 14) | 0x80);      /* the copy starts with it */
     WR16(0xFF17CAu, second);
-    vdp_write_ctrl((uint16_t)RD16(0xFF17CAu));
-    vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+    vdp_command_long((uint32_t)((v & 0x3FFF) | 0x4000) << 16 | (uint16_t)RD16(0xFF17CAu));
+    vdp_reg_word((uint16_t)RD16(0xFFC07Cu));
 }
 
 static uint16_t entry_sr;
@@ -863,16 +861,15 @@ static void vram_copy(void)
         WR32(sp - 6, REG_A[6]);
         WR16(0xA11100u, 0x100);
         vdp_set_reg(15, 0x01);
-        vdp_write_ctrl((uint16_t)(RD16(0xFFC07Cu) | 0x10));
+        vdp_reg_word((uint16_t)(RD16(0xFFC07Cu) | 0x10));
         vdp_set_reg(19, (uint8_t)len);
         vdp_set_reg(20, (uint8_t)(len >> 8));
         vdp_set_reg(21, (uint8_t)from);
         vdp_set_reg(22, (uint8_t)(from >> 8));
         vdp_set_reg(23, 0xC0);                                /* a copy within video memory */
-        vdp_write_ctrl(to & 0x3FFF);
         uint32_t d6 = (REG_D[6] >> 14) | 0xC0;
         WR16(0xFF17CAu, (uint16_t)d6);
-        vdp_write_ctrl((uint16_t)RD16(0xFF17CAu));
+        vdp_command_long((uint32_t)(to & 0x3FFF) << 16 | (uint16_t)RD16(0xFF17CAu));
         REG_D[6] = d6;
     }
     for (;;) {                                               /* lea; move.w (a6),d7; andi; bne.s */
@@ -883,7 +880,7 @@ static void vram_copy(void)
     }
     COST(span(0x2828A, 0x282A2));
     if (dry) return;
-    vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+    vdp_reg_word((uint16_t)RD16(0xFFC07Cu));
     vdp_set_reg(15, 0x02);
     WR16(0xA11100u, 0);
     REG_D[5] = 0x9400u | (len >> 8);
@@ -1174,7 +1171,7 @@ static void tile_loads(void)
             uint32_t d7 = (v & 0xFFFF0000u) | (((uint16_t)v & 0xC000) >> 14);
             uint64_t sum = (uint64_t)d7 + d6;
             d7 = (uint32_t)sum;
-            if (!dry) { vdp_write_ctrl((uint16_t)(d7 >> 16)); vdp_write_ctrl((uint16_t)d7); }
+            if (!dry) vdp_command_long(d7);
             REG_A[6] = RD32(a0 + 2);
             W(d6, RD16(a0 + 0xA));                       /* tiles left */
             W(d7, RD16(a0 + 0xC));                       /* a frame's share */
@@ -1354,7 +1351,7 @@ static void vblank_entry(void)
     reach(0x9AA);
     if (!dry) WR16(0xFFC07Au, r0);
     reach(0x9B2);
-    if (!dry) vdp_write_ctrl(r0);
+    if (!dry) vdp_reg_word(r0);
     reach(0x9BC);
     flags_move(r0, 16);
     go_on(0x9BC);
@@ -1387,7 +1384,7 @@ static void vblank_scroll(void)
     uint16_t r1 = (uint16_t)(RD16(0xFFC07Cu) & 0x81BF);
     if (!dry) { WR16(0xFF17B4u, 1); WR16(0xFFC07Cu, r1); }
     reach(0xA18);
-    if (!dry) vdp_write_ctrl(r1);
+    if (!dry) vdp_reg_word(r1);
     reach(0xA22);
     flags_move(r1, 16);
     go_on(0xA22);
@@ -1410,19 +1407,17 @@ static void dma_from_ram(uint32_t at, uint32_t src, uint16_t n, uint16_t first, 
     from(at);
     if (!dry) WR16(0xA11100u, 0x100);
     reach(at + 0x18);
-    if (!dry) vdp_write_ctrl((uint16_t)(RD16(0xFFC07Cu) | 0x10));
+    if (!dry) vdp_reg_word((uint16_t)(RD16(0xFFC07Cu) | 0x10));
     reach(at + 0x1A);
     if (!dry) { vdp_set_reg(20, (uint8_t)(n >> 8)); vdp_set_reg(19, (uint8_t)n); }
     reach(at + 0x20);
     if (!dry) { vdp_set_reg(22, (uint8_t)(src >> 9)); vdp_set_reg(21, (uint8_t)(src >> 1)); }
     reach(at + 0x26);
     if (!dry) vdp_set_reg(23, (uint8_t)((src >> 17) & 0x7F));
-    reach(at + 0x2A);
-    if (!dry) vdp_write_ctrl(first);
-    reach(at + 0x36);
-    if (!dry) { WR16(0xFF17CAu, second); vdp_write_ctrl((uint16_t)RD16(0xFF17CAu)); }
+    reach(at + 0x36);                                    /* the first word at + 0x2A, the second here */
+    if (!dry) { WR16(0xFF17CAu, second); vdp_command_long((uint32_t)first << 16 | (uint16_t)RD16(0xFF17CAu)); }
     reach(at + 0x3C);
-    if (!dry) vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+    if (!dry) vdp_reg_word((uint16_t)RD16(0xFFC07Cu));
 }
 
 /* 0xA2C: the sprite table (0xFF0000, 0x100 words) to video memory 0xBE00; then which
@@ -1524,7 +1519,7 @@ static void vblank_hud(void)
         uint16_t r1 = (uint16_t)(RD16(0xFFC07Cu) | 0x8140);
         if (!dry) WR16(0xFFC07Cu, r1);
         reach(0xBB6);
-        if (!dry) vdp_write_ctrl(r1);
+        if (!dry) vdp_reg_word(r1);
         reach(0xBC0);
     }
     COST(span(0xBC0, 0xBE8));
@@ -1576,7 +1571,7 @@ static void vram_at_d6(void)
     COST(span(0x28AD0, 0x28AF2));
     REG_D[6] = (uint32_t)((a & 0x3FFF) | 0x4000);
     REG_D[5] = (uint32_t)((a & 0xC000) >> 14);
-    if (!dry) { vdp_write_ctrl((uint16_t)REG_D[6]); vdp_write_ctrl((uint16_t)REG_D[5]); }
+    if (!dry) vdp_command_long((uint32_t)(uint16_t)REG_D[6] << 16 | (uint16_t)REG_D[5]);
     flags_move(REG_D[5], 16);
     FLAG_X = XFLAG_CLEAR;
 }
@@ -1646,7 +1641,7 @@ static void map_column(void)
         uint16_t v = (uint16_t)(at + (half ? 0x80 : 0));
         uint32_t d7 = (uint32_t)((v & 0x3FFF) + 0x4000) << 16;
         uint32_t d6 = d7 + ((v & 0xC000u) >> 14);
-        if (!dry) { vdp_write_ctrl((uint16_t)(d6 >> 16)); vdp_write_ctrl((uint16_t)d6); }
+        if (!dry) vdp_command_long(d6);
         int n = (int)(uint16_t)RD16(a0 + 0xC) + 1;
         uint32_t a6 = RD32(a0 + 2), a5 = RD32(a0 + 6);
         set_sr_imm(0x2700);
@@ -1745,7 +1740,7 @@ static void targets_picture(void)
     uint16_t at = 0xC28C, last = 0;
     uint32_t src = 0x80, dst = 0, res = 0;
     for (int r = 0; r < 18; r++) {
-        if (!dry) { vdp_write_ctrl((uint16_t)((at & 0x3FFF) | 0x4000)); vdp_write_ctrl((uint16_t)((at & 0xC000) >> 14)); }
+        if (!dry) vdp_command_long((uint32_t)((at & 0x3FFF) | 0x4000) << 16 | ((at & 0xC000) >> 14));
         COST(span(0x11512, 0x1153A));
         for (int c = 0; c < 20; c++) {
             last = (uint16_t)RD16(a5);

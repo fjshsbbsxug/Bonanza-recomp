@@ -356,6 +356,12 @@ def video_calls(spec, stats):
             words = [v >> 16, v & 0xFFFF] if size == 32 else [v & 0xFFFF]
             call = video_words(words)
             stats["video_fixed"] += 1
+        elif port == VDP_CTRL and size == 32:
+            call = "vdp_command_long(res);"                  # a command made at run time
+            stats["video_decoded"] += 1
+        elif port == VDP_CTRL and re.search(r"uint res = m68ki_read_16\(0xFFC0[7-9A][0-9A-F]u\);", spec):
+            call = "vdp_reg_word((uint16_t)res);"            # the game's copy of a register
+            stats["video_decoded"] += 1
         else:
             fn = "vdp_write_data" if port == VDP_DATA else "vdp_write_ctrl"
             call = ("%s((uint16_t)(res >> 16)); %s((uint16_t)res);" % (fn, fn) if size == 32
@@ -384,7 +390,7 @@ class Gen:
         self.rom = rom
         self.tr = tr
         self.mu = Musashi()
-        self.stats = {"native": 0, "flow": 0, "special": 0, "call": 0, "video_fixed": 0, "video_port": 0, "draw": 0}
+        self.stats = {"native": 0, "flow": 0, "special": 0, "call": 0, "video_fixed": 0, "video_port": 0, "video_decoded": 0, "draw": 0}
         self.callop_names = {}
 
     # -- chunking --
@@ -714,8 +720,8 @@ void recomp_validate_all(void)
         total = sum(self.stats[k] for k in ("native", "flow", "special", "call"))
         print("recompiled %d instructions in %d regions: %d specialised, %d control flow, %d status register/exception, %d via interpreter"
               % (total, len(index), self.stats["native"], self.stats["flow"], self.stats["special"], self.stats["call"]))
-        print("video: %d fixed commands decoded, %d port accesses as calls, %d drawing routines in C"
-              % (self.stats["video_fixed"], self.stats["video_port"], self.stats["draw"]))
+        print("video: %d fixed commands decoded, %d decoded at run time, %d port accesses as calls, %d drawing routines in C"
+              % (self.stats["video_fixed"], self.stats["video_decoded"], self.stats["video_port"], self.stats["draw"]))
         for k, v in sorted(self.callop_names.items(), key=lambda x: -x[1])[:15]:
             print("   interpreter handler %-28s x%d" % (k, v))
 

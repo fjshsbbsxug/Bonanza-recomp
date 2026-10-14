@@ -975,7 +975,7 @@ L_008516: CHK(0x8516u)  /* move.l $ff57c0.l, $c00004.l */
 		uint res = m68ki_read_32(0xFF57C0u);
 		uint ea = 0xC00004u;
 	
-		vdp_write_ctrl((uint16_t)(res >> 16)); vdp_write_ctrl((uint16_t)res);
+		vdp_command_long(res);
 	
 		FLAG_N = NFLAG_32(res);
 		FLAG_Z = res;

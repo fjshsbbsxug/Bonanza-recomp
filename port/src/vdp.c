@@ -268,6 +268,39 @@ void vdp_command(uint8_t code, uint16_t addr)
     }
 }
 
+/* The game's register words (its copies of the registers at 0xFFC07A..), and commands
+ * it makes at run time, decoded here: what writing the words to the control port does.
+ * A word the decoding cannot place (half a command waiting) goes through the port's
+ * latch; vdp_raw_words counts them (none in the game). */
+unsigned long vdp_raw_words;
+
+void vdp_reg_word(uint16_t w)
+{
+    if (vdp.pending || (w & 0xC000) != 0x8000 || ((w >> 8) & 0x1F) >= 24) {
+        vdp_raw_words++;
+        vdp_write_ctrl(w);
+        return;
+    }
+    vdp_set_reg((w >> 8) & 0x1F, (uint8_t)w);
+}
+
+void vdp_command_long(uint32_t v)
+{
+    uint16_t hi = (uint16_t)(v >> 16), lo = (uint16_t)v;
+    if (vdp.pending) {
+        vdp_raw_words++;
+        vdp_write_ctrl(hi);
+        vdp_write_ctrl(lo);
+        return;
+    }
+    if ((hi & 0xC000) == 0x8000) {               /* two register words */
+        vdp_reg_word(hi);
+        vdp_reg_word(lo);
+        return;
+    }
+    vdp_command((uint8_t)(((hi >> 14) & 3) | ((lo >> 2) & 0x3C)), (uint16_t)((hi & 0x3FFF) | ((lo & 3) << 14)));
+}
+
 void vdp_write_data(uint16_t w)
 {
     vdp.pending = 0;
