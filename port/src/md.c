@@ -485,7 +485,9 @@ void md_run_frame(void)
     for (int line = 0; line < MD_LINES; line++) {
         md.line = line;
         if (line < 224)
-            vdp_render_line(line);
+            vdp_line_capture(line);
+        else if (line == 224)
+            vdp_render_frame();          /* the picture is complete: drawn before the next one's work starts */
         vdp_line_start(line);
         if (line == 224)
             z80r_gen_int(&zcpu, 0xFF);

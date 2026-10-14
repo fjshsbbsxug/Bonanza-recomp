@@ -1,4 +1,5 @@
 /* Mega Drive VDP (YM7101): ports, DMA and a per-scanline renderer. */
+#include <stdlib.h>
 #include <string.h>
 #include "vdp.h"
 #include "md.h"
@@ -70,12 +71,22 @@ void vdp_line_start(int line)
 
 /* ---------------------------------------------------------------- ports */
 
+static void vram_log(uint16_t a, uint8_t old, uint8_t now);
+
+static inline void vram_set(uint16_t a, uint8_t v)
+{
+    if (vdp.vram[a] != v) {
+        vram_log(a, vdp.vram[a], v);
+        vdp.vram[a] = v;
+    }
+}
+
 static void vram_write_word(uint16_t a, uint16_t w)
 {
     if (a & 1)
         w = (uint16_t)((w >> 8) | (w << 8));
-    vdp.vram[a & 0xFFFE] = (uint8_t)(w >> 8);
-    vdp.vram[(a & 0xFFFE) | 1] = (uint8_t)w;
+    vram_set(a & 0xFFFE, (uint8_t)(w >> 8));
+    vram_set((a & 0xFFFE) | 1, (uint8_t)w);
 }
 
 static void port_write(uint16_t w)
@@ -134,7 +145,7 @@ static void dma_copy(void)
     uint32_t len = dma_len();
     uint16_t src = vdp.reg[21] | (vdp.reg[22] << 8);
     while (len--) {
-        vdp.vram[vdp.addr] = vdp.vram[src];
+        vram_set(vdp.addr, vdp.vram[src]);
         src++;
         vdp.addr += vdp.reg[15];
     }
@@ -149,7 +160,7 @@ static void dma_fill(uint16_t w)
     uint8_t b = (uint8_t)(w >> 8);
     if ((vdp.code & 0x0F) == 1) {
         while (len--) {
-            vdp.vram[vdp.addr ^ 1] = b;
+            vram_set(vdp.addr ^ 1, b);
             vdp.addr += vdp.reg[15];
         }
     } else {
@@ -809,6 +820,80 @@ static int line_opaque(const uint8_t *buf, int m, int width)
 
 static int line_hscroll(int y, int plane_b);
 int line_hscroll_pub(int y, int plane_b) { return line_hscroll(y, plane_b); }
+
+/* ---------------------------------------------------------------- the frame, drawn at once
+ *
+ * The game's code runs for the whole frame first; while it runs, the state the picture
+ * takes line by line (registers, palette, vertical scroll, the line's horizontal scroll:
+ * what the game's line effects change between the split screen's bands) is kept for
+ * each line, and the picture is drawn from it when the frame is over. */
+typedef struct {
+    uint8_t  reg[24];
+    uint16_t cram[64];
+    uint16_t vsram[40];
+} line_state;
+static line_state lines[224];
+
+/* tiles and maps the game changes while the picture is shown (its frame's work goes on
+ * into the top of the screen, and the split screen's bands reuse rows of the planes):
+ * each change made during the shown lines, with what was there before, so the picture
+ * is drawn with what each line had */
+typedef struct { uint16_t a; uint8_t old, now, line; } vram_change;
+static vram_change *changes;
+static int nchanges, changes_cap, changes_lost;
+
+static void vram_log(uint16_t a, uint8_t old, uint8_t now)
+{
+    if (md.line >= 224) return;          /* between pictures: nothing shown changes */
+    if (nchanges == changes_cap) {
+        int c = changes_cap ? changes_cap * 2 : 4096;
+        vram_change *n = c <= (1 << 20) ? realloc(changes, (size_t)c * sizeof(*n)) : 0;
+        if (!n) { changes_lost = 1; return; }
+        changes = n; changes_cap = c;
+    }
+    changes[nchanges].a = a;
+    changes[nchanges].old = old;
+    changes[nchanges].now = now;
+    changes[nchanges].line = (uint8_t)md.line;
+    nchanges++;
+}
+
+void vdp_line_capture(int y)
+{
+    line_state *l = &lines[y];
+    memcpy(l->reg, vdp.reg, sizeof(l->reg));
+    memcpy(l->cram, vdp.cram, sizeof(l->cram));
+    memcpy(l->vsram, vdp.vsram, sizeof(l->vsram));
+}
+
+void vdp_render_frame(void)
+{
+    static uint8_t live_vram[0x10000];
+    line_state live;
+    memcpy(live.reg, vdp.reg, sizeof(live.reg));
+    memcpy(live.cram, vdp.cram, sizeof(live.cram));
+    memcpy(live.vsram, vdp.vsram, sizeof(live.vsram));
+    int replay = nchanges && !changes_lost;
+    if (replay) {                        /* back to the tiles and maps of the first line */
+        memcpy(live_vram, vdp.vram, sizeof(live_vram));
+        for (int i = nchanges - 1; i >= 0; i--) vdp.vram[changes[i].a] = changes[i].old;
+    }
+    int k = 0;
+    for (int y = 0; y < 224; y++) {
+        /* what was changed during the lines before this one is in place */
+        for (; replay && k < nchanges && changes[k].line < y; k++)
+            vdp.vram[changes[k].a] = changes[k].now;
+        memcpy(vdp.reg, lines[y].reg, sizeof(live.reg));
+        memcpy(vdp.cram, lines[y].cram, sizeof(live.cram));
+        memcpy(vdp.vsram, lines[y].vsram, sizeof(live.vsram));
+        vdp_render_line(y);
+    }
+    if (replay) memcpy(vdp.vram, live_vram, sizeof(live_vram));
+    nchanges = 0; changes_lost = 0;
+    memcpy(vdp.reg, live.reg, sizeof(live.reg));
+    memcpy(vdp.cram, live.cram, sizeof(live.cram));
+    memcpy(vdp.vsram, live.vsram, sizeof(live.vsram));
+}
 
 static int line_hscroll(int y, int plane_b)
 {

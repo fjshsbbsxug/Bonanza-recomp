@@ -40,6 +40,8 @@ uint16_t vdp_read_ctrl(void);
 uint16_t vdp_read_data(void);
 uint16_t vdp_read_hv(void);
 void     vdp_render_line(int y);
+void     vdp_line_capture(int y);  /* the state line y is drawn with (while the frame runs) */
+void     vdp_render_frame(void);   /* the picture, from the captured lines */
 int      vdp_width(void);       /* real screen width (256/320) */
 int      vdp_margin(void);      /* widescreen extra pixels per side */
 int      vdp_out_width(void);   /* width of the picture in vdp.fb */
