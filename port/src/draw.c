@@ -1951,3 +1951,37 @@ static void map_block_each(void)
     W(REG_D[0], 0xFFFF);
 }
 int draw_map_block_each(void) { return run(map_block_each); }
+
+/* ---------------------------------------------------------------- load lists */
+
+/* Routines that are only a list of tile loads (the recompiler finds them: tools/recomp.py
+ * load_lists): each 26 bytes, `lea (src).l,a6; move.l #command,(VDP_CTRL).l;
+ * move.w #count,d7; jsr (sub_01146 packed | sub_0119C raw).l`, then rts. The operands
+ * are read from the ROM, where the routine is. */
+static uint32_t list_at;
+static int list_n;
+
+static void load_list(void)
+{
+    from(list_at);
+    for (int i = 0; i < list_n; i++) {
+        uint32_t a = list_at + 26u * i;
+        reach(a + 16);                                   /* lea, move.l */
+        REG_A[6] = ROM32(a + 2);
+        ctrl_long(ROM32(a + 8));
+        reach(a + 20);                                   /* move.w */
+        W(REG_D[7], ROM16(a + 18));
+        flags_move(ROM16(a + 18), 16);
+        call(ROM32(a + 22) == 0x01146 ? tiles_packed : tiles_raw, a + 26, m68k_cost[(a + 20) >> 1]);
+        from(a + 26);
+    }
+}
+int draw_load_list(uint32_t at, int n)
+{
+    static int log = -1;
+    if (log < 0) log = getenv("LISTLOG") != NULL;
+    list_at = at; list_n = n;
+    int r = run(load_list);
+    if (log) fprintf(stderr, "load list %05X frame %u: %s\n", at, md.frame, r ? "C" : "translated");
+    return r;
+}

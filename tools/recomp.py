@@ -288,6 +288,29 @@ DRAW_RTE = {a: "draw_band_%05X" % a for a in (
     0x010E8,
 )}
 
+
+def load_lists(rom, tr):
+    """Routines that are only tile loads (draw.c load_list): groups of `lea (src).l,a6;
+    move.l #command,(VDP_CTRL).l; move.w #count,d7; jsr (sub_01146 | sub_0119C).l`,
+    then rts. {start: number of loads}"""
+    out = {}
+    for s in sorted(tr.calls):
+        if s >= len(rom) - 26:
+            continue
+        a, n = s, 0
+        while (rom[a:a + 2] == b"\x4d\xf9" and rom[a + 6:a + 8] == b"\x23\xfc"
+               and rom[a + 12:a + 16] == b"\x00\xc0\x00\x04" and rom[a + 16:a + 18] == b"\x3e\x3c"
+               and rom[a + 20:a + 22] == b"\x4e\xb9"
+               and struct.unpack(">I", rom[a + 22:a + 26])[0] in (0x01146, 0x0119C)):
+            a += 26
+            n += 1
+        if n and rom[a:a + 2] == b"\x4e\x75":
+            out[s] = n
+    return out
+
+
+LOAD_LISTS = {}
+
 # --------------------------------------------------------------------------
 # Video: the game's commands to the video chip, decoded here
 # --------------------------------------------------------------------------
@@ -509,6 +532,10 @@ class Gen:
             self.stats["draw"] += 1
             L.append("\t{ int r_ = %s(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
                      "if (r_ == 2) goto dispatch; }" % DRAW[a])
+        elif a in LOAD_LISTS:
+            self.stats["draw"] += 1
+            L.append("\t{ int r_ = draw_load_list(0x%Xu, %d); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } }"
+                     % (a, LOAD_LISTS[a]))
         elif a in DRAW_RTE:
             self.stats["draw"] += 1
             L.append("\tif (%s()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); "
@@ -807,6 +834,7 @@ def main():
     tr = disasm.Tracer(rom)
     tr.run()
     fm = disasm.Formatter(rom, tr)
+    LOAD_LISTS.update(load_lists(rom, tr))
     g = Gen(rom, tr)
     g.run()
     gen_slot(g.mu)
