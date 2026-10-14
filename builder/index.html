@@ -721,12 +721,37 @@
     webStarted = true;
     $('player').classList.add('show');
     const canvas = $('canvas');
+    /* the game's sounds, recorded from the ROM the first time it runs: kept in this
+     * browser (IndexedDB) and put back for the next start */
+    const SOUNDS = {
+      db: () => new Promise((ok, bad) => {
+        const r = indexedDB.open('bonanza-recomp', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('files');
+        r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error);
+      }),
+      async load(FS) {
+        try {
+          const db = await SOUNDS.db();
+          const data = await new Promise(ok => { const q = db.transaction('files').objectStore('files').get('sounds.bbs');
+            q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); });
+          if (data) FS.writeFile('/sounds.bbs', new Uint8Array(data));
+        } catch (e) { /* no storage: recorded again */ }
+      },
+      async save(FS, path) {
+        try {
+          const db = await SOUNDS.db(), data = FS.readFile(path);
+          db.transaction('files', 'readwrite').objectStore('files').put(data.buffer, 'sounds.bbs');
+        } catch (e) { /* no storage */ }
+      },
+    };
     window.Module = {
       canvas,
       locateFile: p => base + p,
       print: t => console.log(t),
       printErr: t => console.warn(t),
-      onRuntimeInitialized() {
+      bonanzaSoundsRecorded: path => SOUNDS.save(Module.FS, path),
+      async onRuntimeInitialized() {
+        await SOUNDS.load(Module.FS);
         Module.FS.writeFile('/baserom.md', rom);
         Module.FS.writeFile('/bonanza.ini', toIni());
         try { Module.FS.mkdir('/mods'); } catch (e) { /* there */ }

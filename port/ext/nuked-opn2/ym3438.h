@@ -193,6 +193,9 @@ typedef struct
     Bit8u ams[6];
     Bit8u pms[6];
     Bit8u status;
+    Bit8u mute;     /* Bonanza port: channels (bit n = channel n+1) left out of the output */
+    Bit8u lock_ch;  /* Bonanza port: the channel whose output was locked */
+    Bit8u out_ch;   /* Bonanza port: the channel (0-5) this clock's output belongs to */
     Bit32u status_time;
 } ym3438_t;
 

@@ -13,7 +13,7 @@ set(BONANZA_SDL_URL "https://github.com/libsdl-org/SDL/releases/download/release
 
 set(CORE_SOURCES
   src/md.c src/vdp.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c src/extrastages.c src/cheats.c src/net.c src/mods.c
-  src/m68k_rt.c
+  src/m68k_rt.c src/sndbank.c src/sndrec.c src/sndmix.c
   ext/nuked-opn2/ym3438.c
 )
 

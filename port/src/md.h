@@ -61,6 +61,16 @@ void md_set_aspect(double aspect);   /* 4/3 original, wider = widescreen */
 void md_audio_set_rate(int rate);
 int  md_audio_take(int16_t *out, int max_frames);
 
+/* sound alone (the audio recorder, sndrec.c): the driver loaded as the game does it,
+ * only the Z80 and the sound chips run */
+void md_snd_begin(int ym_mute, int psg_mute);
+void md_snd_command(uint8_t id);
+void md_snd_pause(uint8_t v);
+void md_snd_frame(void);
+#define MD_SND_STEMS 4              /* other channels, FM5, FM6, PSG3 + noise */
+int  md_snd_take(int16_t *out[MD_SND_STEMS], int max);
+void md_snd_end(void);
+
 /* bus (used by the CPU cores) */
 uint32_t md_read8(uint32_t a);
 uint32_t md_read16(uint32_t a);

@@ -29,6 +29,9 @@
 #include <emscripten.h>
 #endif
 
+#include "sndmix.h"
+#include "sndrec.h"
+
 #define APP_ORG  "bonanza-recomp"
 #define APP_NAME "Bonanza Bros"
 
@@ -45,6 +48,10 @@ static uint8_t *rom_buf;          /* the original ROM */
 static size_t rom_buf_size;
 static uint8_t *mod_rom;          /* the ROM with the enabled mods applied */
 static SDL_Texture *menu_tex;
+static sndrec *recording;          /* the sounds being recorded from the ROM (first start) */
+static char sounds_path[1024];
+static int out_rate = 48000;
+static int pending_stage, pending_extra;   /* --play-stage / --play-extra, after recording */
 static uint32_t menu_buf[MENU_W * MENU_H];
 static SDL_Rect menu_rect;              /* where the menu overlay is drawn (window pixels) */
 static char settings_path[1024];
@@ -205,6 +212,84 @@ static void save_rom_copy(const uint8_t *data, size_t size)
     }
 }
 
+/* The game's sounds, recorded from the ROM the first time (sndrec.c) and played back
+ * (sndmix.c): no sound hardware runs while the game plays. On the web the page keeps the
+ * file (IndexedDB) and puts it back before the game starts. */
+static void start_sounds(void)
+{
+    if (snd_ready() || recording)
+        return;
+    if (!sounds_path[0]) {
+#ifdef __EMSCRIPTEN__
+        snprintf(sounds_path, sizeof(sounds_path), "/sounds.bbs");
+#else
+        char *pref = SDL_GetPrefPath(APP_ORG, APP_NAME);
+        snprintf(sounds_path, sizeof(sounds_path), "%ssounds.bbs", pref ? pref : "");
+        SDL_free(pref);
+#endif
+    }
+    if (snd_open(sounds_path)) {
+        SDL_Log("sounds: %s", sounds_path);
+        return;
+    }
+    recording = snd_record_start(sounds_path);
+    if (!recording)
+        SDL_Log("could not write %s: the sound hardware is run instead", sounds_path);
+}
+
+static void start_stage(int entry);
+
+/* a slice of the recording (about 25 ms); when it is done the game starts */
+static void record_sounds(void)
+{
+    double t0 = (double)SDL_GetTicks();
+    int r;
+    do r = snd_record_step(recording, 10);
+    while (r == 0 && SDL_GetTicks() - t0 < 25);
+    if (r == 0)
+        return;
+    snd_record_free(recording);
+    recording = NULL;
+    md_audio_set_rate(out_rate);
+    if (r > 0 && snd_open(sounds_path)) {
+        SDL_Log("sounds recorded: %s", sounds_path);
+#ifdef __EMSCRIPTEN__
+        EM_ASM({ if (Module.bonanzaSoundsRecorded) Module.bonanzaSoundsRecorded(UTF8ToString($0)); }, sounds_path);
+#endif
+    } else
+        SDL_Log("could not record the sounds: the sound hardware is run instead");
+    md_reset();
+    if (pending_extra) { xs_play(pending_extra - 1); start_stage(2); }
+    else if (pending_stage) start_stage(pending_stage);
+    pending_stage = pending_extra = 0;
+}
+
+static void present_recording(void)
+{
+    int done, total;
+    snd_record_progress(recording, &done, &total);
+    memset(menu_buf, 0, sizeof(menu_buf));
+    for (int i = 0; i < MENU_W * MENU_H; i++) menu_buf[i] = 0xFF101018;
+    menu_text(menu_buf, MENU_W, MENU_H, 24, 92, "Recording the game's sounds", 0xFFFFFFFF);
+    menu_text(menu_buf, MENU_W, MENU_H, 24, 104, "from your ROM (first start only)", 0xFFB0B0C0);
+    char t[64];
+    snprintf(t, sizeof(t), "%d of %d", done, total);
+    menu_text(menu_buf, MENU_W, MENU_H, 24, 124, t, 0xFFFFD040);
+    for (int x = 24; x < MENU_W - 24; x++)
+        for (int y = 140; y < 148; y++)
+            menu_buf[y * MENU_W + x] = x - 24 < (MENU_W - 48) * done / (total ? total : 1) ? 0xFFFFD040 : 0xFF404050;
+    int ww, wh;
+    SDL_GetRendererOutputSize(renderer, &ww, &wh);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    int mh = wh, mw = wh * 4 / 3;
+    if (mw > ww) { mw = ww; mh = ww * 3 / 4; }
+    SDL_Rect r = { (ww - mw) / 2, (wh - mh) / 2, mw, mh };
+    SDL_UpdateTexture(menu_tex, NULL, menu_buf, MENU_W * 4);
+    SDL_RenderCopy(renderer, menu_tex, NULL, &r);
+    SDL_RenderPresent(renderer);
+}
+
 static int try_rom(const char *path, int report)
 {
     size_t size = 0;
@@ -226,6 +311,7 @@ static int try_rom(const char *path, int report)
     md_reset();
     have_rom = 1;
     SDL_Log("loaded ROM from %s", path);
+    start_sounds();
     return 1;
 }
 
@@ -923,6 +1009,11 @@ static void frame(void)
     if (dt > 250) dt = MD_FRAME_MS;          /* after a pause or a dragged window */
     avg = avg * 0.95 + dt * 0.05;
     handle_events();
+    if (recording) {                         /* first start: the sounds come first */
+        record_sounds();
+        if (recording) present_recording();
+        return;
+    }
     net_update();
     int locked = vsync_on && avg > 15.6 && avg < 17.6;
     if (locked) {
@@ -1024,7 +1115,8 @@ int main(int argc, char **argv)
     want.channels = 2;
     want.samples = 1024;
     audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
-    md_audio_set_rate(audio_dev ? have.freq : 48000);
+    out_rate = audio_dev ? have.freq : 48000;
+    md_audio_set_rate(out_rate);
     if (audio_dev)
         SDL_PauseAudioDevice(audio_dev, 0);
     open_pads();
@@ -1038,7 +1130,10 @@ int main(int argc, char **argv)
         net_host(atoi(host_port));
     else if (join_addr)
         net_join(join_addr);
-    if (play_extra > 0 && have_rom && play_extra <= xs_count()) {
+    if (recording) {                   /* test play waits for the sounds */
+        if (play_extra > 0 && have_rom && play_extra <= xs_count()) pending_extra = play_extra;
+        else if (play_stage > 0 && play_stage <= 13 && have_rom) pending_stage = play_stage;
+    } else if (play_extra > 0 && have_rom && play_extra <= xs_count()) {
         xs_play(play_extra - 1);       /* the stage dispatcher plays it instead */
         start_stage(2);
     } else if (play_stage > 0 && play_stage <= 13 && have_rom)

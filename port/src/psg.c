@@ -63,6 +63,22 @@ static void tick(void)
     }
 }
 
+/* the same, split: channels in mask_a and the others */
+void psg_sample_parts(double ticks, int mask_a, int16_t *a, int16_t *b)
+{
+    psg.frac += ticks;
+    int32_t acc[2] = {0, 0}, n = 0;
+    while (psg.frac >= 1.0) {
+        psg.frac -= 1.0;
+        tick();
+        for (int ch = 0; ch < 4; ch++)
+            acc[(mask_a >> ch) & 1 ? 0 : 1] += psg.out[ch] ? vol_table[psg.vol[ch]] : -vol_table[psg.vol[ch]];
+        n++;
+    }
+    *a = n ? (int16_t)(acc[0] / n / 2) : 0;
+    *b = n ? (int16_t)(acc[1] / n / 2) : 0;
+}
+
 int16_t psg_sample(double ticks)
 {
     psg.frac += ticks;
@@ -72,7 +88,8 @@ int16_t psg_sample(double ticks)
         tick();
         int32_t s = 0;
         for (int ch = 0; ch < 4; ch++)
-            s += psg.out[ch] ? vol_table[psg.vol[ch]] : -vol_table[psg.vol[ch]];
+            if (!((psg.mute >> ch) & 1))
+                s += psg.out[ch] ? vol_table[psg.vol[ch]] : -vol_table[psg.vol[ch]];
         acc += s;
         n++;
     }

@@ -85,6 +85,21 @@ builder/      the HTML builder page
   md.c runs the program it finds in Z80 RAM (`z80r_program`); writing over its code
   bytes makes it look again. The sound chips (YM2612, PSG) and the graphics chip are
   still simulated: the game's code drives them.
+* **Recorded sound** (`port/src/sndrec.c`, `sndbank.c`, `sndmix.c`): on first start the
+  port plays every sound the game can ask for (songs 0x81-0x8C, effects 0x98-0xBD,
+  voices E4/E5) alone through the game's own driver and sound chips (`md_snd_*`: the
+  driver loaded as sub_02C76 does it) and stores it losslessly (FLAC-style fixed
+  predictors and Rice codes, 44.1 kHz) in four parts: FM5, FM6, PSG3 + noise (the
+  channels the game's effects take over) and the rest. Where a song repeats is found from
+  the driver's state in Z80 RAM (the same tracks, timers and loops as at an earlier
+  moment). While the game plays, the 68000's writes to the driver's mailbox (Z80 RAM
+  0x1C0A, pause 0x1C10) go to a player that follows the driver's rules: a song stops the
+  song and effects before it; an effect needs a priority (table at ROM 0x381EF) not below
+  the playing one's, replaces the effect on its channels and leaves out the song's part
+  on them until it ends; E0 fades 0.75 dB every 6 music ticks for 40 steps, E1 stops,
+  E4/E5 (voices) cut the effects and hold the song; pause holds everything. A sound
+  starts at the line in the frame where it was asked for. The Z80, YM2612 and PSG are not
+  run while the game plays (`--sounds FILE` in the headless runner).
 * The recompiled code yields to the scheduler at exactly the points the interpreter
   does. A recompiled run is therefore **bit-identical** to an interpreted one; this was
   checked frame by frame over the attract mode, menus, and gameplay on x86-64, Windows

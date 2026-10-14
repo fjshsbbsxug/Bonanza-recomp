@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "extrastages.h"
 #include "z80recomp.h"
+#include "sndmix.h"
 #include "cheats.h"
 #include "md.h"
 #include "vdp.h"
@@ -76,9 +77,67 @@ static void ym_emit_sample(int32_t l, int32_t r)
     resample_pos -= 1.0;
 }
 
+/* recording (sndrec.c): the output in parts, by the channels the sound effects take
+ * over: 0 everything else, 1 FM5, 2 FM6, 3 PSG3 + noise */
+static int      snd_stems;
+static int32_t  st_acc[MD_SND_STEMS][2];
+static int16_t  st_last[MD_SND_STEMS][2], st_prev[MD_SND_STEMS][2];
+static int16_t  st_buf[MD_SND_STEMS][4096 * 2];
+static int      st_len;
+
+static int16_t clamp16(int32_t v) { return (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v); }
+
+static void ym_emit_stems(void)
+{
+    int16_t pm, p3;
+    psg_sample_parts(3579545.0 / 16.0 / YM_RATE, 0x3, &pm, &p3);
+    int32_t v[MD_SND_STEMS][2] = {
+        { st_acc[0][0] * 6 + pm, st_acc[0][1] * 6 + pm },
+        { st_acc[1][0] * 6, st_acc[1][1] * 6 },
+        { st_acc[2][0] * 6, st_acc[2][1] * 6 },
+        { p3, p3 },
+    };
+    for (int s = 0; s < MD_SND_STEMS; s++)
+        for (int c = 0; c < 2; c++) {
+            st_prev[s][c] = st_last[s][c];
+            st_last[s][c] = clamp16(v[s][c]);
+            st_acc[s][c] = 0;
+        }
+    double step = YM_RATE / out_rate;
+    while (resample_pos < 1.0) {
+        double t = resample_pos;
+        if (st_len < 4096) {
+            for (int s = 0; s < MD_SND_STEMS; s++)
+                for (int c = 0; c < 2; c++)
+                    st_buf[s][st_len * 2 + c] = (int16_t)(st_prev[s][c] + (st_last[s][c] - st_prev[s][c]) * t);
+            st_len++;
+        }
+        resample_pos += step;
+    }
+    resample_pos -= 1.0;
+}
+
 static void ym_sync(uint64_t target)
 {
     Bit16s buf[2];
+    if (snd_ready() && !snd_stems) {      /* recorded sounds: the sound chips do not run */
+        ym_time = target;
+        return;
+    }
+    if (snd_stems) {
+        while (ym_time + YM_DIV <= target) {
+            OPN2_Clock(&ym, buf);
+            int s = ym.out_ch == 4 ? 1 : ym.out_ch == 5 ? 2 : 0;
+            st_acc[s][0] += buf[0];
+            st_acc[s][1] += buf[1];
+            ym_time += YM_DIV;
+            if (++ym_phase == 24) {
+                ym_phase = 0;
+                ym_emit_stems();
+            }
+        }
+        return;
+    }
     while (ym_time + YM_DIV <= target) {
         OPN2_Clock(&ym, buf);
         ym_acc[0] += buf[0];
@@ -152,6 +211,17 @@ static uint8_t zin(z80 *z, uint8_t p) { (void)z; (void)p; return 0xFF; }
 static void zout(z80 *z, uint8_t p, uint8_t v) { (void)z; (void)p; (void)v; }
 
 static int z80_running(void) { return !md.z80_busreq && !md.z80_reset; }
+
+/* the 68000 writing Z80 RAM: with the recorded sounds (sndmix.c), the game's requests
+ * to the sound driver go to the player */
+static void z80_write_68k(uint32_t a, uint8_t v)
+{
+    if (snd_ready()) {
+        if (a == 0x1C0A) snd_request(v);
+        else if (a == 0x1C10) snd_pause(v);
+    }
+    z80_bus_write(a, v, now_68k());
+}
 
 /* the Z80's programs (the sound driver the 68000 copies at boot and never changes, the
  * boot stub before it) run as recompiled code (tools/z80recomp.py) */
@@ -286,7 +356,7 @@ void md_write8(uint32_t a, uint32_t v)
     }
     if (a >= 0xA00000 && a < 0xA10000) {
         if (md.z80_busreq || md.z80_reset)
-            z80_bus_write(a & 0x7FFF, (uint8_t)v, now_68k());
+            z80_write_68k(a & 0x7FFF, (uint8_t)v);
         return;
     }
     if (a >= 0xA10000 && a < 0xA10020) {
@@ -383,8 +453,31 @@ void md_reset(void)
     ym_phase = 0;
     xs_reset();
     cheat_reset();
+    snd_reset();
+    snd_stems = 0;
     cpu_init();
     cpu_reset();
+}
+
+/* the Z80's share of a line */
+static void z80_line(void)
+{
+    if (z80_running()) {
+        while (z80_line_cyc < MD_CYCZ80_LINE) {
+            if (z80_program() >= 0) {
+                int r = z80r_run(z80_prog, &zcpu, &z80_line_cyc, MD_CYCZ80_LINE);
+                if (r == 1) break;
+                if (r == 2) continue;         /* its code was written: look again */
+            }
+            if (z80_line_cyc >= MD_CYCZ80_LINE)
+                break;
+            /* no native program at its PC (never, for the game): it waits out the line */
+            if (z80_stat_no_code++ < 8)
+                fprintf(stderr, "z80: no native code at %04X\n", zcpu.pc);
+            z80_line_cyc = MD_CYCZ80_LINE;
+        }
+        z80_line_cyc -= MD_CYCZ80_LINE;
+    }
 }
 
 void md_run_frame(void)
@@ -398,27 +491,22 @@ void md_run_frame(void)
             z80r_gen_int(&zcpu, 0xFF);
         z80_line_cyc = 0;
         cpu_run(MD_CYC68K_LINE);
-        if (z80_running()) {
-            while (z80_line_cyc < MD_CYCZ80_LINE) {
-                if (z80_program() >= 0) {
-                    int r = z80r_run(z80_prog, &zcpu, &z80_line_cyc, MD_CYCZ80_LINE);
-                    if (r == 1) break;
-                    if (r == 2) continue;         /* its code was written: look again */
-                }
-                if (z80_line_cyc >= MD_CYCZ80_LINE)
-                    break;
-                /* no native program at its PC (never, for the game): it waits out the line */
-                if (z80_stat_no_code++ < 8)
-                    fprintf(stderr, "z80: no native code at %04X\n", zcpu.pc);
-                z80_line_cyc = MD_CYCZ80_LINE;
-            }
-            z80_line_cyc -= MD_CYCZ80_LINE;
-        }
+        if (!snd_ready()) z80_line();     /* recorded sounds: no sound hardware runs */
         if (line == 225)
             zcpu.int_pending = 0;
         z80_line_cyc = 0;
         master_line_start += MASTER_LINE;
-        ym_sync(master_line_start);
+        if (!snd_ready()) ym_sync(master_line_start);
+    }
+    if (snd_ready()) {                    /* this frame's sound from the player */
+        static double due;
+        int16_t buf[2048 * 2];
+        due += (double)out_rate * MASTER_LINE * MD_LINES / 53693175.0;
+        int n = (int)due;
+        if (n > 2048) n = 2048;
+        due -= n;
+        snd_render(buf, n, out_rate);
+        for (int i = 0; i < n; i++) push_output(buf[i * 2], buf[i * 2 + 1]);
     }
     md.frame++;
 }
@@ -447,7 +535,79 @@ uint32_t md_state_hash(void)
     HB(vdp.vram, sizeof(vdp.vram));
     HB(vdp.cram, sizeof(vdp.cram));
     HB(vdp.vsram, sizeof(vdp.vsram));
-    HB(md.zram, sizeof(md.zram));
+    /* not Z80 RAM: the game never reads it, and with the recorded sounds no Z80 runs */
 #undef HB
     return h;
+}
+
+/* ------------------------------------------------- sound alone (the recorder) */
+
+/* The sound driver as the game's boot code loads it (sub_02C76: the program, its data
+ * and settings), with the Z80 and the sound chips only: no 68000, no video. Channels in
+ * the masks are left out of the output (YM2612 bit n = FM n+1, PSG bit n = channel n). */
+void md_snd_begin(int ym_mute, int psg_mute)
+{
+    snd_stems = 1;
+    st_len = 0;
+    memset(st_acc, 0, sizeof(st_acc));
+    memset(st_last, 0, sizeof(st_last));
+    memset(st_prev, 0, sizeof(st_prev));
+    static const uint8_t cfg[10] = { 0x03, 0x80, 0x00, 0x80, 0x00, 0x00, 0xCD, 0x80, 0x00, 0x00 };
+    memset(md.zram, 0, sizeof(md.zram));
+    memcpy(md.zram, md.rom + 0x33000, 0x118B);
+    memcpy(md.zram + 0x1200, md.rom + 0x3418C, 0x6FE);
+    memcpy(md.zram + 0x1C00, cfg, sizeof(cfg));
+    md.zram[0x1BFF] = 0;
+    md.zram[0x1C10] = 0x80;
+    zram_dirty = 1;
+    psg_reset();
+    psg.mute = psg_mute;
+    OPN2_SetChipType(ym3438_mode_ym2612);
+    OPN2_Reset(&ym);
+    ym.mute = (Bit8u)ym_mute;
+    z80_do_reset();
+    md.z80_busreq = 0;
+    md.z80_reset = 0;
+    master_line_start = ym_time = 0;
+    z80_line_cyc = 0;
+    ym_phase = 0;
+    ym_acc[0] = ym_acc[1] = 0;
+    resample_pos = 0;
+    last_in[0] = last_in[1] = prev_in[0] = prev_in[1] = 0;
+    audio_len = 0;
+}
+
+/* the parts made so far (each stereo), taken out */
+int md_snd_take(int16_t *out[MD_SND_STEMS], int max)
+{
+    int n = st_len < max ? st_len : max;
+    for (int s = 0; s < MD_SND_STEMS; s++) {
+        memcpy(out[s], st_buf[s], n * 4);
+        memmove(st_buf[s], st_buf[s] + n * 2, (st_len - n) * 4);
+    }
+    st_len -= n;
+    return n;
+}
+
+/* back to the normal machine (the next md_reset sets everything up) */
+void md_snd_end(void) { snd_stems = 0; }
+
+/* a request, as the game's sub_02DC2 / sub_02D98 make it (pause: 0x1C10) */
+void md_snd_command(uint8_t id) { md.zram[0x1C0A] = id; }
+void md_snd_pause(uint8_t v) { md.zram[0x1C10] = v; }
+
+/* one video frame's time of sound (output in md_audio_take) */
+void md_snd_frame(void)
+{
+    for (int line = 0; line < MD_LINES; line++) {
+        if (line == 224)
+            z80r_gen_int(&zcpu, 0xFF);
+        z80_line_cyc = 0;
+        z80_line();
+        if (line == 225)
+            zcpu.int_pending = 0;
+        z80_line_cyc = 0;
+        master_line_start += MASTER_LINE;
+        ym_sync(master_line_start);
+    }
 }

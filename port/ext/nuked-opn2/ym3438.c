@@ -964,20 +964,23 @@ static void OPN2_ChOutput(ym3438_t *chip)
         if (!test_dac)
         {
             /* Lock value */
-            chip->ch_lock = chip->ch_out[channel];
+            chip->ch_lock = (chip->mute >> channel) & 1 ? 0 : chip->ch_out[channel];
         }
+        chip->lock_ch = (Bit8u)channel;
         chip->ch_lock_l = chip->pan_l[channel];
         chip->ch_lock_r = chip->pan_r[channel];
     }
     /* Ch 6 */
-    if (((cycles >> 2) == 1 && chip->dacen) || test_dac)
+    if ((((cycles >> 2) == 1 && chip->dacen) || test_dac) && !((chip->mute >> 5) & 1))
     {
         out = (Bit16s)chip->dacdata;
         out = SIGN_EXTEND(8, out);
+        chip->out_ch = 5;
     }
     else
     {
         out = chip->ch_lock;
+        chip->out_ch = chip->lock_ch;
     }
     chip->mol = 0;
     chip->mor = 0;

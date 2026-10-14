@@ -1,7 +1,9 @@
 /* Headless runner for testing: runs N frames, dumps screenshots and state hashes.
  *
  *   bonanza-headless ROM [--frames N] [--shot FRAME:file.ppm]... [--input FRAME:PAD:buttons]...
- *                        [--hash] [--wav file.wav]
+ *                        [--hash] [--wav file.wav] [--sounds bank]
+ * --sounds: play the recorded sounds from that file (recorded there first if it is not
+ * there yet) instead of running the sound hardware.
  *
  * buttons: any of U D L R A B C S (S = Start). An input entry stays active until the next one
  * for the same pad.
@@ -19,6 +21,8 @@
 #include "md.h"
 #include "cheats.h"
 #include "z80recomp.h"
+#include "sndmix.h"
+#include "sndrec.h"
 extern unsigned long z80_stat_no_code;
 #include "vdp.h"
 #include "settings.h"
@@ -111,6 +115,7 @@ int main(int argc, char **argv)
     int npokes = 0, play_extra = 0;
     int nshots = 0, ninputs = 0;
     const char *wav = NULL;
+    const char *sounds = NULL;
     const char *net_host_port = NULL, *net_join_addr = NULL;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
@@ -135,6 +140,7 @@ int main(int argc, char **argv)
                 md_set_aspect(a / b);
         }
         else if (!strcmp(argv[i], "--wav") && i + 1 < argc) wav = argv[++i];
+        else if (!strcmp(argv[i], "--sounds") && i + 1 < argc) sounds = argv[++i];
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc && nshots < 64) {
             char *c = strchr(argv[++i], ':');
             if (!c) continue;
@@ -182,6 +188,16 @@ int main(int argc, char **argv)
             fprintf(stderr, "mod %s: %s%s%s\n", mods_get(k)->file, mods_get(k)->name,
                     mods_get(k)->enabled ? " (on)" : "", mods_get(k)->error);
         fprintf(stderr, "mods: %s\n", mods_status());
+    }
+    if (sounds) {                       /* the recorded sounds: made once, then played */
+        FILE *t = fopen(sounds, "rb");
+        if (t) fclose(t);
+        else {
+            fprintf(stderr, "recording the sounds to %s...\n", sounds);
+            if (snd_record_bank(sounds, 0, 0)) { fprintf(stderr, "could not write %s\n", sounds); return 1; }
+            md_audio_set_rate(48000);
+        }
+        if (!snd_open(sounds)) { fprintf(stderr, "could not read %s\n", sounds); return 1; }
     }
     int online = net_host_port || net_join_addr;
     if (online) {

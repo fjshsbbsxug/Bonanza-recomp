@@ -36,6 +36,15 @@ on-screen pad is shown; it hides while you use a controller and comes back when 
 touch the screen.
 F11 or Alt+Enter: full screen   P: pause   F3: reset   Esc: menu
 
+Sound: the first time the game starts, it records its own songs, effects and voices from
+your ROM (about one to two minutes, shown on screen) into sounds.bbs in its settings
+folder (Windows: %APPDATA%\bonanza-recomp\Bonanza Bros, Linux: ~/.local/share/
+bonanza-recomp/Bonanza Bros, web: kept by the browser). From then on the game plays
+those recordings the way the Mega Drive's sound driver would (a song, the effects over
+it taking their channels, fades, voices, pause); no sound hardware is simulated while you
+play. Delete sounds.bbs to record it again. If it cannot be written, the sound hardware
+is simulated as before.
+
 Stage select (offline only): on the 1 PLAYER / 2 PLAYERS / OPTIONS menu press Left,
 Left, Right, Up, Shoot, Jump (Shoot and Jump as set in Options > CONTROL; at the start
 B and A or C). A chime plays and Options gets a STAGE line under EXIT, the stage select
