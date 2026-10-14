@@ -58,6 +58,7 @@ int  draw_tile_stream_p1(void); /* sub_082D2 */
 int  draw_tile_stream_p2(void); /* sub_08510 */
 int  draw_window_regs(void);    /* sub_006EA */
 int  draw_hex_number(void);     /* sub_01268 */
+int  draw_title_clear(void);    /* sub_02E34 at 0x2E7C */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);

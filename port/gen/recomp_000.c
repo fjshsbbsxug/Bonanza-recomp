@@ -15791,6 +15791,7 @@ L_002E76: CHK(0x2E76u)  /* jsr $6fa.l */
 	{ uint ea = 0x6FAu; m68ki_push_32(0x2E7Cu); USE_CYCLES(20);
 	  { REG_PC = 0x6FAu; return; } }
 L_002E7C: CHK(0x2E7Cu)  /* lea.l $c00004.l, a6 */
+	{ int r_ = draw_title_clear(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		REG_A[6] = 0xC00004u;
 	}

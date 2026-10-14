@@ -270,6 +270,7 @@ DRAW = {
     0x08510: "draw_tile_stream_p2",
     0x006EA: "draw_window_regs",
     0x01268: "draw_hex_number",
+    0x02E7C: "draw_title_clear",
 }
 # the split screen's line effects: interrupt routines (rte)
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (

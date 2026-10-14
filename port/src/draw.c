@@ -2168,3 +2168,18 @@ static void hex_number(void)
     flags_move(v, 16);
 }
 int draw_hex_number(void) { return run(hex_number); }
+
+/* ---------------------------------------------------------------- the title's start */
+
+/* sub_02E34 from 0x2E7C: all of the video memory cleared (a fill of 0xFFFF bytes), then
+ * on in the game's code (jsr sub_00522) */
+static void title_clear(void)
+{
+    COST(12);                                            /* lea */
+    uint16_t s = dma_fill0(1, 0xFF, 0xFF, 0x21, 0x0000, 1);
+    REG_A[6] = 0xC00004u;
+    W(REG_D[7], s);
+    flags_move(0x8F02, 16);
+    go_on(0x2EBC);
+}
+int draw_title_clear(void) { return run(title_clear); }
