@@ -23,7 +23,7 @@ file(GLOB RECOMP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gen/*.c)
 if(NOT RECOMP_SOURCES)
   message(FATAL_ERROR "port/gen is missing: run make recomp")
 endif()
-list(APPEND CORE_SOURCES ${RECOMP_SOURCES} src/slotcode.c)
+list(APPEND CORE_SOURCES ${RECOMP_SOURCES} src/slotcode.c src/draw.c)
 
 add_library(bonanza_core STATIC ${CORE_SOURCES})
 target_include_directories(bonanza_core PUBLIC src ext/musashi)

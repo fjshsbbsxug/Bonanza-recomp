@@ -7718,25 +7718,7 @@ L_001144: CHK(0x1144u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_001146: CHK(0x1146u)  /* movem.l d1-d4/a1-a2, -(a7) */
-	{
-		uint i = 0;
-		uint register_list = 0x7860u;
-		uint ea = REG_A[7];
-		uint count = 0;
-	
-		for(; i < 16; i++)
-			if(register_list & (1 << i))
-			{
-				ea -= 4;
-				m68ki_write_16(ea+2, REG_DA[15-i] & 0xFFFF );
-				m68ki_write_16(ea, (REG_DA[15-i] >> 16) & 0xFFFF );
-				count++;
-			}
-		REG_A[7] = ea;
-	
-		USE_CYCLES(count<<CYC_MOVEM_L);
-	}
-	USE_CYCLES(8);
+	draw_tiles_packed(); REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_00114A: CHK(0x114Au)  /* moveq #$0, d1 */
 	{
 		uint res = REG_D[1] = MAKE_INT_8(MASK_OUT_ABOVE_8(0x7200u));

@@ -216,6 +216,12 @@ def specialise(body, op, addr, raw):
     return out
 
 
+# The game's drawing routines written in C (port/src/draw.c): called where they start;
+# the rts is done here
+DRAW = {
+    0x01146: "draw_tiles_packed",
+}
+
 # --------------------------------------------------------------------------
 # Video: the game's commands to the video chip, decoded here
 # --------------------------------------------------------------------------
@@ -284,7 +290,7 @@ class Gen:
         self.rom = rom
         self.tr = tr
         self.mu = Musashi()
-        self.stats = {"native": 0, "flow": 0, "special": 0, "call": 0, "video_fixed": 0, "video_port": 0}
+        self.stats = {"native": 0, "flow": 0, "special": 0, "call": 0, "video_fixed": 0, "video_port": 0, "draw": 0}
         self.callop_names = {}
 
     # -- chunking --
@@ -432,6 +438,9 @@ class Gen:
             # from it), 2 = the hook set where to go on
             L.append("\tif (game_hooks) { int h = game_hook(0x%Xu); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
                      "if (h == 2) goto dispatch; }" % a)
+        if a in DRAW:
+            self.stats["draw"] += 1
+            return L + ["\t%s(); REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;" % DRAW[a]]
         flow = self.emit_flow(i, op, cyc, inchunk)
         if flow is not None:
             self.stats["flow"] += 1
@@ -600,8 +609,8 @@ void recomp_validate_all(void)
         total = sum(self.stats[k] for k in ("native", "flow", "special", "call"))
         print("recompiled %d instructions in %d regions: %d specialised, %d control flow, %d status register/exception, %d via interpreter"
               % (total, len(index), self.stats["native"], self.stats["flow"], self.stats["special"], self.stats["call"]))
-        print("video: %d fixed commands decoded, %d port accesses as calls"
-              % (self.stats["video_fixed"], self.stats["video_port"]))
+        print("video: %d fixed commands decoded, %d port accesses as calls, %d drawing routines in C"
+              % (self.stats["video_fixed"], self.stats["video_port"], self.stats["draw"]))
         for k, v in sorted(self.callop_names.items(), key=lambda x: -x[1])[:15]:
             print("   interpreter handler %-28s x%d" % (k, v))
 
