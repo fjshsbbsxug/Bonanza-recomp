@@ -6,7 +6,7 @@
   package.py site    --out DIR [--version TEXT]
 
 The site layout is what builder/index.html expects:
-  index.html, levelmaker.html (+ levelcore.js, jszip.min.js)
+  index.html, levelmaker.html (+ levelcore.js, jszip.min.js), play.html, record.html
   packages/manifest.json
   packages/bonanza-windows-x64.zip, bonanza-linux-x64.zip, bonanza-android.apk
   web/bonanza.js, web/bonanza.wasm, web/bonanza-single.js (level maker test play)
@@ -53,7 +53,7 @@ def web(args):
 def site(args):
     out = args.out
     os.makedirs(os.path.join(out, "packages"), exist_ok=True)
-    for name in ("index.html", "jszip.min.js", "levelmaker.html", "levelcore.js", "play.html"):
+    for name in ("index.html", "jszip.min.js", "levelmaker.html", "levelcore.js", "play.html", "record.html"):
         shutil.copy(os.path.join(ROOT, "builder", name), os.path.join(out, name))
     pk = {}
     for key, name in (("windows", "packages/bonanza-windows-x64.zip"), ("linux", "packages/bonanza-linux-x64.zip"),

@@ -31,6 +31,7 @@
 
 #include "sndmix.h"
 #include "sndrec.h"
+#include "sndbank.h"
 
 #define APP_ORG  "bonanza-recomp"
 #define APP_NAME "Bonanza Bros"
@@ -52,6 +53,7 @@ static sndrec *recording;          /* the sounds being recorded from the ROM (fi
 static char sounds_path[1024];
 static int out_rate = 48000;
 static int pending_stage, pending_extra;   /* --play-stage / --play-extra, after recording */
+static int make_sounds_only;       /* --make-sounds FILE: only record the sounds (the builder) */
 static uint32_t menu_buf[MENU_W * MENU_H];
 static SDL_Rect menu_rect;              /* where the menu overlay is drawn (window pixels) */
 static char settings_path[1024];
@@ -220,6 +222,11 @@ static void start_sounds(void)
 {
     if (snd_ready() || recording)
         return;
+    if (make_sounds_only) {             /* sounds_path is the file to make */
+        recording = snd_record_start(sounds_path);
+        if (!recording) SDL_Log("could not write %s", sounds_path);
+        return;
+    }
     if (!sounds_path[0]) {
 #ifdef __EMSCRIPTEN__
         snprintf(sounds_path, sizeof(sounds_path), "/sounds.bbs");
@@ -265,6 +272,16 @@ static void record_sounds(void)
     snd_record_free(recording);
     recording = NULL;
     md_audio_set_rate(out_rate);
+    if (make_sounds_only) {            /* done: hand the file over and stop */
+        SDL_Log(r > 0 ? "sounds made: %s" : "could not make %s", sounds_path);
+#ifdef __EMSCRIPTEN__
+        EM_ASM({ if (Module.bonanzaSoundsMade) Module.bonanzaSoundsMade(UTF8ToString($0), $1); }, sounds_path, r > 0);
+        emscripten_cancel_main_loop();
+#else
+        running = 0;
+#endif
+        return;
+    }
     if (r > 0 && snd_open(sounds_path)) {
         SDL_Log("sounds recorded: %s", sounds_path);
 #ifdef __EMSCRIPTEN__
@@ -285,7 +302,7 @@ static void present_recording(void)
     memset(menu_buf, 0, sizeof(menu_buf));
     for (int i = 0; i < MENU_W * MENU_H; i++) menu_buf[i] = 0xFF101018;
     menu_text(menu_buf, MENU_W, MENU_H, 24, 92, "Recording the game's sounds", 0xFFFFFFFF);
-    menu_text(menu_buf, MENU_W, MENU_H, 24, 104, "from your ROM (first start only)", 0xFFB0B0C0);
+    menu_text(menu_buf, MENU_W, MENU_H, 24, 104, make_sounds_only ? "from your ROM (lossless)" : "from your ROM (first start only)", 0xFFB0B0C0);
     char t[64];
     snprintf(t, sizeof(t), "%d of %d", done, total);
     menu_text(menu_buf, MENU_W, MENU_H, 24, 124, t, 0xFFFFD040);
@@ -349,6 +366,7 @@ static void find_rom(int argc, char **argv)
 {
     for (int i = 1; i < argc; i++) {
         if (i > 1 && (!strcmp(argv[i - 1], "--join") || !strcmp(argv[i - 1], "--play-stage") ||
+                      !strcmp(argv[i - 1], "--make-sounds") ||
                       !strcmp(argv[i - 1], "--play-extra") ||
                       (!strcmp(argv[i - 1], "--host") && atoi(argv[i]) > 0)))
             continue;                            /* an address or port, not a ROM */
@@ -1083,6 +1101,11 @@ int main(int argc, char **argv)
             host_port = i + 1 < argc && argv[i + 1][0] != '-' ? argv[++i] : "";
         else if (!strcmp(argv[i], "--join") && i + 1 < argc)
             join_addr = argv[++i];
+        else if (!strcmp(argv[i], "--make-sounds") && i + 1 < argc) {
+            make_sounds_only = 1;           /* only record the sounds into this file */
+            snprintf(sounds_path, sizeof(sounds_path), "%s", argv[++i]);
+        } else if (!strcmp(argv[i], "--opus"))
+            sb_write_lossless = 0;          /* record them in Opus (small), not lossless */
     }
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");

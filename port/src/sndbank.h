@@ -56,7 +56,7 @@ int  sb_decode_packet(void *dec, const sb_stem *st, uint32_t k, int16_t *pcm);  
 
 /* writing a bank: start (Opus, or lossless), add parts, finish */
 typedef struct sb_writer sb_writer;
-extern int sb_write_lossless;      /* new banks lossless (44.1 kHz) rather than Opus */
+extern int sb_write_lossless;      /* new banks lossless (44.1 kHz, the default) or Opus (0) */
 uint32_t sb_write_rate(void);      /* the rate new banks are recorded at */
 sb_writer *sb_write_begin(const char *path);
 void sb_write_sound(sb_writer *w, uint8_t id, uint8_t kind, uint8_t channels, uint32_t len, int32_t loop,

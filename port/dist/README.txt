@@ -36,15 +36,15 @@ on-screen pad is shown; it hides while you use a controller and comes back when 
 touch the screen.
 F11 or Alt+Enter: full screen   P: pause   F3: reset   Esc: menu
 
-Sound: the game's songs, effects and voices were recorded from the ROM when the game was
-built (sounds.bbs, next to the program). The game plays those recordings the way the
-Mega Drive's sound driver would (a song, the effects over it taking their channels,
-fades, voices, pause); no sound hardware is simulated while you play. Without
-sounds.bbs next to it, the game records them itself the first time it starts (about one
-to two minutes, shown on screen) into its settings folder (Windows:
+Sound: the game's songs, effects and voices were recorded from your ROM, losslessly, by
+the port builder (or the build) into sounds.bbs next to the program. The game plays those
+recordings the way the Mega Drive's sound driver would (a song, the effects over it
+taking their channels, fades, voices, pause); no sound hardware is simulated while you
+play. Without sounds.bbs next to it, the game records them itself the first time it
+starts (about one to two minutes, shown on screen) into its settings folder (Windows:
 %APPDATA%\bonanza-recomp\Bonanza Bros, Linux: ~/.local/share/bonanza-recomp/Bonanza
-Bros, web: kept by the browser). If they cannot be written, the sound hardware is
-simulated as before.
+Bros, Android: the app's data, web: kept by the browser). If they cannot be written, the
+sound hardware is simulated as before.
 
 Graphics: the game's drawing is done by its own drawing routines written in C, and each
 picture is drawn in one go. The light effects of the stage briefing (the projector), the

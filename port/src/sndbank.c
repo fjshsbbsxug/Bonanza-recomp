@@ -283,7 +283,7 @@ struct sb_writer {
     wsound s[96];
 };
 
-int sb_write_lossless;
+int sb_write_lossless = 1;    /* lossless unless asked for Opus (small, to ship) */
 uint32_t sb_write_rate(void) { return sb_write_lossless ? 44100 : 48000; }
 
 /* per stereo part: songs 96 kbit/s; effects and voices (short, sharp) 160 */

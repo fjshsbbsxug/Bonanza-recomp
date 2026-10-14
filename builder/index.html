@@ -201,7 +201,7 @@
     <div class="row">
       <button class="secondary" id="preview">Start live preview</button>
       <button class="secondary" id="pick">Pick a color in the game</button>
-      <button class="secondary" id="resetopts">Reset options</button>
+      <button class="secondary" id="resetopts">Back to the best settings</button>
     </div>
     <details style="margin-top:12px">
       <summary class="note" style="cursor:pointer">Add a color by its Mega Drive value</summary>
@@ -440,6 +440,59 @@
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
   }
 
+  /* ---------- the game's sounds, lossless, for the package ---------- */
+  /* recorded from the ROM in this browser by the game itself (record.html runs the
+   * browser runtime with --make-sounds) and kept here (IndexedDB) for the next package */
+  const SOUNDS_DB = () => new Promise((ok, bad) => {
+    const r = indexedDB.open('bonanza-recomp', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('files');
+    r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error);
+  });
+  const isLossless = b => b && b.length > 16 && String.fromCharCode(...b.subarray(0, 8)) === 'BBSND001';
+  async function storedSounds() {
+    try {
+      const db = await SOUNDS_DB();
+      const data = await new Promise(ok => { const q = db.transaction('files').objectStore('files').get('sounds.bbs');
+        q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); });
+      const b = data ? new Uint8Array(data) : null;
+      return isLossless(b) ? b : null;
+    } catch (e) { return null; }
+  }
+  async function storeSounds(bytes) {
+    try {
+      const db = await SOUNDS_DB();
+      db.transaction('files', 'readwrite').objectStore('files').put(bytes.buffer, 'sounds.bbs');
+    } catch (e) { /* no storage: recorded again next time */ }
+  }
+  function recordSounds() {
+    return new Promise(resolve => {
+      const frame = document.createElement('iframe');
+      frame.src = 'record.html';
+      frame.title = 'Recording the game\'s sounds';
+      frame.style.cssText = 'display:block;width:100%;max-width:640px;aspect-ratio:4/3;border:0;border-radius:8px;margin:10px 0';
+      $('log').after(frame);
+      const onMsg = e => {
+        if (e.source !== frame.contentWindow || !e.data) return;
+        if (e.data.type === 'bbro-record-ready') {
+          frame.contentWindow.postMessage({ type: 'bbro-record', rom }, '*');
+        } else if (e.data.type === 'bbro-sounds') {
+          window.removeEventListener('message', onMsg);
+          frame.remove();
+          resolve(e.data.ok ? new Uint8Array(e.data.data) : null);
+        }
+      };
+      window.addEventListener('message', onMsg);
+    });
+  }
+  async function losslessSounds() {
+    let b = await storedSounds();
+    if (b) { log('Sounds: using the lossless recording kept in this browser.'); return b; }
+    log('Recording the game\'s songs, effects and voices from your ROM, losslessly (a few minutes; once per browser)…');
+    b = await recordSounds();
+    if (b) await storeSounds(b);
+    return b;
+  }
+
   async function buildNative(t) {
     $('log').innerHTML = '';
     log('Fetching the ' + label(t) + ' runtime…');
@@ -453,6 +506,7 @@
     if (t === 'android') {
       download(pkg, OUTPUT.android, 'application/vnd.android.package-archive');
       log('✓ Downloaded ' + OUTPUT.android + '. Install it, open “Bonanza Bros” and select your ROM once.', 'ok');
+      log('On its first start the app records the game\'s sounds from your ROM, losslessly (a few minutes).');
       log('(Allow installing apps from your browser / file manager when Android asks.)');
       if (modList().length) log('Mods: copy your .bbro files to Android/data/com.bonanzarecomp.port/files/mods on the phone, then turn them on in the game menu (Mods...).');
       return;
@@ -468,6 +522,13 @@
     log('Added your ROM as ' + dir + 'baserom.md');
     zip.file(dir + 'bonanza.ini', toIni());
     log('Added your screen & color settings as ' + dir + 'bonanza.ini');
+    const sounds = await losslessSounds();
+    if (sounds) {
+      zip.file(dir + 'sounds.bbs', sounds, { binary: true, compression: 'STORE' });
+      log('Added the lossless sounds as ' + dir + 'sounds.bbs (' + (sounds.length / 1048576).toFixed(0) + ' MB): the game starts without recording them.');
+    } else {
+      log('The sounds could not be recorded here (open the builder from its web site, not from disk): the game records them itself on its first start.', 'bad');
+    }
     for (const n of modList()) {
       zip.file(dir + 'mods/' + n, MODFILES[n], { binary: true });
       log('Added mod ' + dir + 'mods/' + n);
@@ -487,7 +548,9 @@
                      'mobo.shirt': '#0000ff', 'mobo.pants': '#000000', 'mobo.skin': '#ff9200' };
   const SKIN_TONES = ['#ffe0c8', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#6b4226', '#3b2219'];
   const CLOTHES = ['#101010', '#f0f0f0', '#e02020', '#f08020', '#f0d020', '#20b040', '#2050e0', '#8030c0', '#f070b0'];
-  const freshOpts = () => ({ screen: 'original', upper: 'room', cutscenes: '4:3', guards: 'return', floor_alert: 'off', join: '', mods: '', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
+  /* the best settings: widescreen, the room above Robo, guards back to their posts and
+   * active anywhere on the wide screen; original colors and sharp pixels */
+  const freshOpts = () => ({ screen: '16:9', upper: 'room', cutscenes: '4:3', guards: 'return', floor_alert: 'semi', join: '', mods: '', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
                              recolor: {}, chars: {} });
   const OPT = freshOpts();
   const SLIDERS = ['brightness', 'contrast', 'saturation', 'hue'];

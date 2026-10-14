@@ -28,10 +28,17 @@ it, drop in your ROM, pick a platform, and press *Build*:
 
 | Target | What you get |
 |---|---|
-| Windows | `BonanzaBros-Windows.zip`: `bonanza.exe` plus your ROM, ready to run |
-| Linux | `BonanzaBros-Linux.zip`: `bonanza` (x86-64) plus your ROM |
-| Android | `BonanzaBros.apk`: the app asks for the ROM once on first start |
+| Windows | `BonanzaBros-Windows.zip`: `bonanza.exe` plus your ROM and the game's sounds, ready to run |
+| Linux | `BonanzaBros-Linux.zip`: `bonanza` (x86-64) plus your ROM and the game's sounds |
+| Android | `BonanzaBros.apk`: the app asks for the ROM once and records the sounds on first start |
 | Browser | plays right in the page (WebAssembly) |
+
+For Windows and Linux the page records the game's songs, effects and voices from your ROM
+with the game itself (`builder/record.html` runs the browser runtime with
+`--make-sounds`), losslessly, once per browser (about two minutes; the same bytes a native
+build makes), and adds them as `sounds.bbs`. The settings start at the best ones:
+widescreen 16:9, the room above Robo, guards walking back to their posts and active
+anywhere on the wide screen, original colors, sharp pixels.
 
 The ROM never leaves your device. The page checks its SHA-1 and adds it to the package
 locally. No game data is part of any runtime package.
