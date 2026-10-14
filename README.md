@@ -28,15 +28,14 @@ it, drop in your ROM, pick a platform, and press *Build*:
 
 | Target | What you get |
 |---|---|
-| Windows | `BonanzaBros-Windows.zip`: `bonanza.exe` plus your ROM and the game's sounds, ready to run |
-| Linux | `BonanzaBros-Linux.zip`: `bonanza` (x86-64) plus your ROM and the game's sounds |
+| Windows | `BonanzaBros-Windows.zip`: `bonanza.exe` plus your ROM, ready to run |
+| Linux | `BonanzaBros-Linux.zip`: `bonanza` (x86-64) plus your ROM |
 | Android | `BonanzaBros.apk`: the app asks for the ROM once and records the sounds on first start |
 | Browser | plays right in the page (WebAssembly) |
 
-For Windows and Linux the page records the game's songs, effects and voices from your ROM
-with the game itself (`builder/record.html` runs the browser runtime with
-`--make-sounds`), losslessly, once per browser (about two minutes; the same bytes a native
-build makes), and adds them as `sounds.bbs`. The settings start at the best ones:
+The page only adds your ROM and settings, so a build takes a moment. On every device the
+game records its songs, effects and voices from the ROM on its first start, losslessly
+(about a minute or two, shown on screen), and keeps them in its settings folder. The settings start at the best ones:
 widescreen 16:9, the room above Robo, guards walking back to their posts and active
 anywhere on the wide screen, original colors, sharp pixels.
 

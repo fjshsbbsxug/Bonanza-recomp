@@ -36,8 +36,8 @@ on-screen pad is shown; it hides while you use a controller and comes back when 
 touch the screen.
 F11 or Alt+Enter: full screen   P: pause   F3: reset   Esc: menu
 
-Sound: the game's songs, effects and voices were recorded from your ROM, losslessly, by
-the port builder (or the build) into sounds.bbs next to the program. The game plays those
+Sound: the game's songs, effects and voices are recorded from your ROM, losslessly, the
+first time the game starts (or by the build, into sounds.bbs next to the program). The game plays those
 recordings the way the Mega Drive's sound driver would (a song, the effects over it
 taking their channels, fades, voices, pause); no sound hardware is simulated while you
 play. Without sounds.bbs next to it, the game records them itself the first time it

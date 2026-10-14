@@ -11,7 +11,7 @@ single: the builder as one HTML file (BonanzaBuilder.html) that carries the runt
 works opened from disk with no web server or network.
 
 The site layout is what builder/index.html expects:
-  index.html, levelmaker.html (+ levelcore.js, jszip.min.js), play.html, record.html
+  index.html, levelmaker.html (+ levelcore.js, jszip.min.js), play.html
   packages/manifest.json
   packages/bonanza-windows-x64.zip, bonanza-linux-x64.zip, bonanza-android.apk
   web/bonanza.js, web/bonanza.wasm, web/bonanza-single.js (level maker test play)
@@ -58,7 +58,7 @@ def web(args):
 def site(args):
     out = args.out
     os.makedirs(os.path.join(out, "packages"), exist_ok=True)
-    for name in ("index.html", "jszip.min.js", "levelmaker.html", "levelcore.js", "play.html", "record.html"):
+    for name in ("index.html", "jszip.min.js", "levelmaker.html", "levelcore.js", "play.html"):
         shutil.copy(os.path.join(ROOT, "builder", name), os.path.join(out, name))
     pk = {}
     for key, name in (("windows", "packages/bonanza-windows-x64.zip"), ("linux", "packages/bonanza-linux-x64.zip"),
@@ -93,7 +93,6 @@ def single(args):
     web = os.path.join(site_dir, "web", "bonanza-single.js")
     if os.path.exists(web):
         embed["web"] = b64(web)
-    embed["record"] = b64(os.path.join(ROOT, "builder", "record.html"))
     tag = '<script src="jszip.min.js"></script>'
     assert tag in page, "builder/index.html: the jszip script tag moved"
     # the zip library and the runtimes in the page ("</" never occurs in base64 or JSON here)
