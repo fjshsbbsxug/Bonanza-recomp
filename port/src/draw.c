@@ -66,6 +66,10 @@ static int may_run(int cost)
 /* runs body dry, then (if it may) for real */
 static int run(void (*body)(void))
 {
+    static int trace = -1;
+    if (trace < 0) trace = getenv("DRAWTRACE") ? atoi(getenv("DRAWTRACE")) : 0;
+    if (trace && md.frame >= (uint32_t)trace)
+        fprintf(stderr, "run frame %u body %ld sp %06X\n", md.frame, (long)((char *)body - (char *)run), REG_A[7]);
     m68ki_cpu_core saved = m68ki_cpu;  /* the dry run may change registers: put back */
     dry = 1; cyc = 0; stops_z80 = 0; mask_floor = 7;
     body();

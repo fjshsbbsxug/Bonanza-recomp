@@ -282,6 +282,10 @@ int main(int argc, char **argv)
             net_frame_done(net_frame() % 60 == 59 ? md_state_hash() : 0);
         if (hash)
             printf("frame %d hash %08x pc %06x\n", fr, md_state_hash(), cpu_get_pc());
+        if (getenv("RAMLOG")) {              /* RAMLOG=ADDR: a RAM word every frame (tests) */
+            unsigned a = (unsigned)strtoul(getenv("RAMLOG"), 0, 16) & 0xFFFE;
+            printf("frame %d ram %04x=%04x\n", fr, a, md.ram[a] << 8 | md.ram[a + 1]);
+        }
         if (picture_hash) {                  /* the picture as shown, every frame */
             const uint16_t *p = md_framebuffer_md();
             uint32_t h = 2166136261u;
