@@ -3,6 +3,7 @@
 #define RECOMP_RT_H
 
 #include "md.h"
+#include "vdp.h"
 #include "recomp.h"
 #include "gamemods.h"
 #include "m68k.h"

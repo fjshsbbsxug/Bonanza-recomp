@@ -974,7 +974,7 @@ L_008516: CHK(0x8516u)  /* move.l $ff57c0.l, $c00004.l */
 		uint res = m68ki_read_32(0xFF57C0u);
 		uint ea = 0xC00004u;
 	
-		m68ki_write_32(ea, res);
+		vdp_write_ctrl((uint16_t)(res >> 16)); vdp_write_ctrl((uint16_t)res);
 	
 		FLAG_N = NFLAG_32(res);
 		FLAG_Z = res;
@@ -29759,7 +29759,7 @@ L_00BE30: CHK(0xBE30u)  /* move.l #$64800000, $c00004.l */
 		uint res = 0x64800000u;
 		uint ea = 0xC00004u;
 	
-		m68ki_write_32(ea, res);
+		vdp_command(0x01, 0x2480);
 	
 		FLAG_N = NFLAG_32(res);
 		FLAG_Z = res;
@@ -29793,7 +29793,7 @@ L_00BE4A: CHK(0xBE4Au)  /* move.l #$64a00000, $c00004.l */
 		uint res = 0x64A00000u;
 		uint ea = 0xC00004u;
 	
-		m68ki_write_32(ea, res);
+		vdp_command(0x01, 0x24A0);
 	
 		FLAG_N = NFLAG_32(res);
 		FLAG_Z = res;
@@ -29827,7 +29827,7 @@ L_00BE64: CHK(0xBE64u)  /* move.l #$64c00000, $c00004.l */
 		uint res = 0x64C00000u;
 		uint ea = 0xC00004u;
 	
-		m68ki_write_32(ea, res);
+		vdp_command(0x01, 0x24C0);
 	
 		FLAG_N = NFLAG_32(res);
 		FLAG_Z = res;
@@ -29861,7 +29861,7 @@ L_00BE7E: CHK(0xBE7Eu)  /* move.l #$64e00000, $c00004.l */
 		uint res = 0x64E00000u;
 		uint ea = 0xC00004u;
 	
-		m68ki_write_32(ea, res);
+		vdp_command(0x01, 0x24E0);
 	
 		FLAG_N = NFLAG_32(res);
 		FLAG_Z = res;

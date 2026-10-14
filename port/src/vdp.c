@@ -172,7 +172,7 @@ static void dma_fill(uint16_t w)
 
 #include <stdio.h>
 #include <stdlib.h>
-static int vlog = -1;
+static int vlog = -1;   /* VDPLOG: every control word (the decoded commands go through it) */
 void vdp_write_ctrl(uint16_t w)
 {
     if (vlog < 0) vlog = getenv("VDPLOG") != NULL;
@@ -202,6 +202,40 @@ void vdp_write_ctrl(uint16_t w)
     vdp.addr = (vdp.addr & 0xC000) | (w & 0x3FFF);
     vdp.code = (vdp.code & 0x3C) | (w >> 14);
     vdp.pending = 1;
+}
+
+/* The game's video commands, decoded when its code was translated (tools/recomp.py):
+ * a register, or where the data that follows goes (and the copy it may start). They do
+ * what the command words do when written to the control port one after the other. */
+void vdp_set_reg(int r, uint8_t v)
+{
+    if (vlog < 0) vlog = getenv("VDPLOG") != NULL;
+    if (vdp.pending || vlog > 0) {       /* half a command waits: the word completes it */
+        vdp_write_ctrl((uint16_t)(0x8000 | (r << 8) | v));
+        return;
+    }
+    vdp.reg[r] = v;
+    if (r == 0 || r == 1)
+        cpu_set_irq(vdp_irq_level());
+}
+
+void vdp_command(uint8_t code, uint16_t addr)
+{
+    if (vlog < 0) vlog = getenv("VDPLOG") != NULL;
+    if (vdp.pending || vlog > 0) {
+        vdp_write_ctrl((uint16_t)(((code & 3) << 14) | (addr & 0x3FFF)));
+        vdp_write_ctrl((uint16_t)(((code & 0x3C) << 2) | (addr >> 14)));
+        return;
+    }
+    vdp.addr = addr;
+    vdp.code = code;
+    if ((code & 0x20) && (vdp.reg[1] & 0x10)) {
+        switch (vdp.reg[23] >> 6) {
+        case 0: case 1: dma_68k(); break;
+        case 2: vdp.fill_pending = 1; break;
+        case 3: dma_copy(); break;
+        }
+    }
 }
 
 void vdp_write_data(uint16_t w)

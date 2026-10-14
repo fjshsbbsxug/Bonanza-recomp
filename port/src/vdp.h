@@ -39,6 +39,8 @@ void     vdp_reset(void);
 void     vdp_refresh_palette(void);  /* after md_color_lut changes */
 void     vdp_write_ctrl(uint16_t w);
 void     vdp_write_data(uint16_t w);
+void     vdp_set_reg(int r, uint8_t v);            /* a register (decoded command) */
+void     vdp_command(uint8_t code, uint16_t addr); /* where data goes (decoded command) */
 uint16_t vdp_read_ctrl(void);
 uint16_t vdp_read_data(void);
 uint16_t vdp_read_hv(void);

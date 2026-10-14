@@ -217,6 +217,60 @@ def specialise(body, op, addr, raw):
 
 
 # --------------------------------------------------------------------------
+# Video: the game's commands to the video chip, decoded here
+# --------------------------------------------------------------------------
+
+VDP_DATA, VDP_CTRL = 0xC00000, 0xC00004
+
+
+def video_words(words):
+    """C calls for control words written one after the other (none waiting before)."""
+    out, i = [], 0
+    while i < len(words):
+        w = words[i]
+        if (w & 0xC000) == 0x8000 and ((w >> 8) & 0x1F) < 24:
+            out.append("vdp_set_reg(%d, 0x%02X);" % ((w >> 8) & 0x1F, w & 0xFF))
+            i += 1
+        elif (w & 0xC000) != 0x8000 and i + 1 < len(words):
+            hi, lo = w, words[i + 1]
+            code = ((hi >> 14) & 3) | ((lo >> 2) & 0x3C)
+            addr = (hi & 0x3FFF) | ((lo & 3) << 14)
+            out.append("vdp_command(0x%02X, 0x%04X);" % (code, addr))
+            i += 2
+        else:
+            out.append("vdp_write_ctrl(0x%04X);" % w)
+            i += 1
+    return " ".join(out)
+
+
+def video_calls(spec, stats):
+    """Writes and reads of the video chip's ports as direct calls; fixed control words
+    (registers, where data goes) decoded now."""
+    m = re.search(r"uint ea = 0x([0-9A-F]+)u;", spec)
+    w = re.search(r"m68ki_write_(16|32)\(ea, res\);", spec)
+    if m and w and int(m.group(1), 16) in (VDP_DATA, VDP_CTRL):
+        port, size = int(m.group(1), 16), int(w.group(1))
+        k = re.search(r"uint res = 0x([0-9A-F]+)u;", spec)
+        if port == VDP_CTRL and k:
+            v = int(k.group(1), 16)
+            words = [v >> 16, v & 0xFFFF] if size == 32 else [v & 0xFFFF]
+            call = video_words(words)
+            stats["video_fixed"] += 1
+        else:
+            fn = "vdp_write_data" if port == VDP_DATA else "vdp_write_ctrl"
+            call = ("%s((uint16_t)(res >> 16)); %s((uint16_t)res);" % (fn, fn) if size == 32
+                    else "%s((uint16_t)res);" % fn)
+            stats["video_port"] += 1
+        spec = spec[:w.start()] + call + spec[w.end():]
+    for port, fn in ((VDP_DATA, "vdp_read_data"), (VDP_CTRL, "vdp_read_ctrl")):
+        pat = "m68ki_read_16(0x%Xu)" % port
+        if pat in spec:
+            spec = spec.replace(pat, "%s()" % fn)
+            stats["video_port"] += 1
+    return spec
+
+
+# --------------------------------------------------------------------------
 # Code generation
 # --------------------------------------------------------------------------
 
@@ -230,7 +284,7 @@ class Gen:
         self.rom = rom
         self.tr = tr
         self.mu = Musashi()
-        self.stats = {"native": 0, "flow": 0, "special": 0, "call": 0}
+        self.stats = {"native": 0, "flow": 0, "special": 0, "call": 0, "video_fixed": 0, "video_port": 0}
         self.callop_names = {}
 
     # -- chunking --
@@ -394,6 +448,7 @@ class Gen:
             assert mark in spec, "live operand at %X not found" % a
             spec = spec.replace(mark, "ROM%d(0x%Xu)" % (8 * size, a + off))
         if spec is not None:
+            spec = video_calls(spec, self.stats)
             self.stats["native"] += 1
             lines = spec.strip("\n").split("\n")
             has_ret = any(re.search(r"\breturn;", x) for x in lines)
@@ -542,9 +597,11 @@ void recomp_validate_all(void)
 """ % (len(index), len(index), self.mu.lookup(0x4EF9)[1], n, n))
         with open(os.path.join(OUT, "recomp_index.c"), "w") as fh:
             fh.write("\n".join(L))
-        total = sum(self.stats.values())
+        total = sum(self.stats[k] for k in ("native", "flow", "special", "call"))
         print("recompiled %d instructions in %d regions: %d specialised, %d control flow, %d status register/exception, %d via interpreter"
               % (total, len(index), self.stats["native"], self.stats["flow"], self.stats["special"], self.stats["call"]))
+        print("video: %d fixed commands decoded, %d port accesses as calls"
+              % (self.stats["video_fixed"], self.stats["video_port"]))
         for k, v in sorted(self.callop_names.items(), key=lambda x: -x[1])[:15]:
             print("   interpreter handler %-28s x%d" % (k, v))
 
