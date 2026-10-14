@@ -1,5 +1,95 @@
-| ROM 0x248DE
+| ROM 0x246B6
 
+sub_246B6:
+	lea (dat_5A000).l,a6
+	move.l #0x60000000,(VDP_CTRL).l
+	move.w #0x27,d7
+	jsr (sub_0119C).l
+	lea (dat_61040).l,a6
+	move.l #0x70000000,(VDP_CTRL).l
+	move.w #0x2C,d7
+	jsr (sub_0119C).l
+	lea (dat_6AAB0).l,a6
+	move.l #0x60200001,(VDP_CTRL).l
+	move.w #0x8B,d7
+	jsr (sub_01146).l
+	lea (dat_6B334).l,a6
+	move.l #0x6E800003,(VDP_CTRL).l
+	move.w #0x11,d7
+	jsr (sub_01146).l
+	rts
+sub_24720:
+	lea (dat_60900).l,a6
+	move.l #0x55400002,(VDP_CTRL).l
+	move.w #0x5,d7
+	jsr (sub_0119C).l
+	lea (dat_67DE0).l,a6
+	move.l #0x56000002,(VDP_CTRL).l
+	move.w #0x5,d7
+	jsr (sub_0119C).l
+	lea (dat_2958C).l,a6
+	move.l #0x51E00002,(VDP_CTRL).l
+	move.w #0x1A,d7
+	jsr (sub_01146).l
+	lea (dat_6BC9E).l,a6
+	move.l #0x71A00001,(VDP_CTRL).l
+	move.w #0x3A,d7
+	jsr (sub_01146).l
+	rts
+sub_2478A:
+	lea (dat_5A000).l,a6
+	move.l #0x60000000,(VDP_CTRL).l
+	move.w #0x27,d7
+	jsr (sub_0119C).l
+	lea (dat_61040).l,a6
+	move.l #0x70000000,(VDP_CTRL).l
+	move.w #0x2C,d7
+	jsr (sub_0119C).l
+	lea (dat_5C740).l,a6
+	move.l #0x65000000,(VDP_CTRL).l
+	move.w #0x3F,d7
+	jsr (sub_0119C).l
+	lea (dat_63BA0).l,a6
+	move.l #0x75A00000,(VDP_CTRL).l
+	move.w #0x3F,d7
+	jsr (sub_0119C).l
+	lea (dat_6C600).l,a6
+	move.l #0x40000001,(VDP_CTRL).l
+	move.w #0x75,d7
+	jsr (sub_01146).l
+	lea (dat_6CDEC).l,a6
+	move.l #0x7AC00001,(VDP_CTRL).l
+	move.w #0x9,d7
+	jsr (sub_01146).l
+	lea (dat_6CEB0).l,a6
+	move.l #0x46800002,(VDP_CTRL).l
+	move.w #0xC,d7
+	jsr (sub_01146).l
+	lea (dat_6CF58).l,a6
+	move.l #0x70C00003,(VDP_CTRL).l
+	move.w #0x11,d7
+	jsr (sub_01146).l
+	lea (dat_6D08C).l,a6
+	move.l #0x48200002,(VDP_CTRL).l
+	move.w #0xB,d7
+	jsr (sub_01146).l
+	lea (dat_6D2EA).l,a6
+	move.l #0x44000002,(VDP_CTRL).l
+	move.w #0xB,d7
+	jsr (sub_01146).l
+	lea (dat_6A000).l,a6
+	move.l #0x4EC00001,(VDP_CTRL).l
+	move.w #0x8A,d7
+	jsr (sub_01146).l
+	lea (dat_6A7D0).l,a6
+	move.l #0x49A00002,(VDP_CTRL).l
+	move.w #0x18,d7
+	jsr (sub_01146).l
+	lea (dat_6A94A).l,a6
+	move.l #0x6B200003,(VDP_CTRL).l
+	move.w #0xD,d7
+	jsr (sub_01146).l
+	rts
 sub_248DE:
 	addq.w #0x1,(0xFF17A0).l
 	clr.w (0xFF17A4).l

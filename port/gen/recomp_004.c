@@ -289,6 +289,138 @@ dispatch:
 	case 0x2467E: goto L_02467E;
 	case 0x24686: goto L_024686;
 	case 0x24690: goto L_024690;
+	case 0x246B6: goto L_0246B6;
+	case 0x246BC: goto L_0246BC;
+	case 0x246C6: goto L_0246C6;
+	case 0x246CA: goto L_0246CA;
+	case 0x246D0: goto L_0246D0;
+	case 0x246D6: goto L_0246D6;
+	case 0x246E0: goto L_0246E0;
+	case 0x246E4: goto L_0246E4;
+	case 0x246EA: goto L_0246EA;
+	case 0x246F0: goto L_0246F0;
+	case 0x246FA: goto L_0246FA;
+	case 0x246FE: goto L_0246FE;
+	case 0x24704: goto L_024704;
+	case 0x2470A: goto L_02470A;
+	case 0x24714: goto L_024714;
+	case 0x24718: goto L_024718;
+	case 0x2471E: goto L_02471E;
+	case 0x24720: goto L_024720;
+	case 0x24726: goto L_024726;
+	case 0x24730: goto L_024730;
+	case 0x24734: goto L_024734;
+	case 0x2473A: goto L_02473A;
+	case 0x24740: goto L_024740;
+	case 0x2474A: goto L_02474A;
+	case 0x2474E: goto L_02474E;
+	case 0x24754: goto L_024754;
+	case 0x2475A: goto L_02475A;
+	case 0x24764: goto L_024764;
+	case 0x24768: goto L_024768;
+	case 0x2476E: goto L_02476E;
+	case 0x24774: goto L_024774;
+	case 0x2477E: goto L_02477E;
+	case 0x24782: goto L_024782;
+	case 0x24788: goto L_024788;
+	case 0x2478A: goto L_02478A;
+	case 0x24790: goto L_024790;
+	case 0x2479A: goto L_02479A;
+	case 0x2479E: goto L_02479E;
+	case 0x247A4: goto L_0247A4;
+	case 0x247AA: goto L_0247AA;
+	case 0x247B4: goto L_0247B4;
+	case 0x247B8: goto L_0247B8;
+	case 0x247BE: goto L_0247BE;
+	case 0x247C4: goto L_0247C4;
+	case 0x247CE: goto L_0247CE;
+	case 0x247D2: goto L_0247D2;
+	case 0x247D8: goto L_0247D8;
+	case 0x247DE: goto L_0247DE;
+	case 0x247E8: goto L_0247E8;
+	case 0x247EC: goto L_0247EC;
+	case 0x247F2: goto L_0247F2;
+	case 0x247F8: goto L_0247F8;
+	case 0x24802: goto L_024802;
+	case 0x24806: goto L_024806;
+	case 0x2480C: goto L_02480C;
+	case 0x24812: goto L_024812;
+	case 0x2481C: goto L_02481C;
+	case 0x24820: goto L_024820;
+	case 0x24826: goto L_024826;
+	case 0x2482C: goto L_02482C;
+	case 0x24836: goto L_024836;
+	case 0x2483A: goto L_02483A;
+	case 0x24840: goto L_024840;
+	case 0x24846: goto L_024846;
+	case 0x24850: goto L_024850;
+	case 0x24854: goto L_024854;
+	case 0x2485A: goto L_02485A;
+	case 0x24860: goto L_024860;
+	case 0x2486A: goto L_02486A;
+	case 0x2486E: goto L_02486E;
+	case 0x24874: goto L_024874;
+	case 0x2487A: goto L_02487A;
+	case 0x24884: goto L_024884;
+	case 0x24888: goto L_024888;
+	case 0x2488E: goto L_02488E;
+	case 0x24894: goto L_024894;
+	case 0x2489E: goto L_02489E;
+	case 0x248A2: goto L_0248A2;
+	case 0x248A8: goto L_0248A8;
+	case 0x248AE: goto L_0248AE;
+	case 0x248B8: goto L_0248B8;
+	case 0x248BC: goto L_0248BC;
+	case 0x248C2: goto L_0248C2;
+	case 0x248C8: goto L_0248C8;
+	case 0x248D2: goto L_0248D2;
+	case 0x248D6: goto L_0248D6;
+	case 0x248DC: goto L_0248DC;
+	case 0x248DE: goto L_0248DE;
+	case 0x248E4: goto L_0248E4;
+	case 0x248EA: goto L_0248EA;
+	case 0x248F4: goto L_0248F4;
+	case 0x248FE: goto L_0248FE;
+	case 0x24908: goto L_024908;
+	case 0x24912: goto L_024912;
+	case 0x2491C: goto L_02491C;
+	case 0x24924: goto L_024924;
+	case 0x24926: goto L_024926;
+	case 0x2492C: goto L_02492C;
+	case 0x2492E: goto L_02492E;
+	case 0x24932: goto L_024932;
+	case 0x24938: goto L_024938;
+	case 0x2493E: goto L_02493E;
+	case 0x24946: goto L_024946;
+	case 0x2494A: goto L_02494A;
+	case 0x24950: goto L_024950;
+	case 0x24954: goto L_024954;
+	case 0x2495A: goto L_02495A;
+	case 0x2495C: goto L_02495C;
+	case 0x2495E: goto L_02495E;
+	case 0x24964: goto L_024964;
+	case 0x24966: goto L_024966;
+	case 0x2496A: goto L_02496A;
+	case 0x24970: goto L_024970;
+	case 0x24978: goto L_024978;
+	case 0x2497C: goto L_02497C;
+	case 0x24984: goto L_024984;
+	case 0x2498E: goto L_02498E;
+	case 0x24990: goto L_024990;
+	case 0x24998: goto L_024998;
+	case 0x249A2: goto L_0249A2;
+	case 0x249A4: goto L_0249A4;
+	case 0x249AC: goto L_0249AC;
+	case 0x249B6: goto L_0249B6;
+	case 0x249BC: goto L_0249BC;
+	case 0x249C4: goto L_0249C4;
+	case 0x249CE: goto L_0249CE;
+	case 0x249D6: goto L_0249D6;
+	case 0x249E0: goto L_0249E0;
+	case 0x249E6: goto L_0249E6;
+	case 0x249EC: goto L_0249EC;
+	case 0x249F4: goto L_0249F4;
+	case 0x249FE: goto L_0249FE;
 	default: return;
 	}
 L_024536: CHK(0x24536u)  /* andi.w #$81bf, $ffc07c.l */
@@ -802,59 +934,726 @@ L_024686: CHK(0x24686u)  /* move.w $ffc07c.l, $c00004.l */
 	USE_CYCLES(28);
 L_024690: CHK(0x24690u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
-}
-
-void rc_0248DE(void)
-{
-dispatch:
-	switch (REG_PC) {
-	case 0x248DE: goto L_0248DE;
-	case 0x248E4: goto L_0248E4;
-	case 0x248EA: goto L_0248EA;
-	case 0x248F4: goto L_0248F4;
-	case 0x248FE: goto L_0248FE;
-	case 0x24908: goto L_024908;
-	case 0x24912: goto L_024912;
-	case 0x2491C: goto L_02491C;
-	case 0x24924: goto L_024924;
-	case 0x24926: goto L_024926;
-	case 0x2492C: goto L_02492C;
-	case 0x2492E: goto L_02492E;
-	case 0x24932: goto L_024932;
-	case 0x24938: goto L_024938;
-	case 0x2493E: goto L_02493E;
-	case 0x24946: goto L_024946;
-	case 0x2494A: goto L_02494A;
-	case 0x24950: goto L_024950;
-	case 0x24954: goto L_024954;
-	case 0x2495A: goto L_02495A;
-	case 0x2495C: goto L_02495C;
-	case 0x2495E: goto L_02495E;
-	case 0x24964: goto L_024964;
-	case 0x24966: goto L_024966;
-	case 0x2496A: goto L_02496A;
-	case 0x24970: goto L_024970;
-	case 0x24978: goto L_024978;
-	case 0x2497C: goto L_02497C;
-	case 0x24984: goto L_024984;
-	case 0x2498E: goto L_02498E;
-	case 0x24990: goto L_024990;
-	case 0x24998: goto L_024998;
-	case 0x249A2: goto L_0249A2;
-	case 0x249A4: goto L_0249A4;
-	case 0x249AC: goto L_0249AC;
-	case 0x249B6: goto L_0249B6;
-	case 0x249BC: goto L_0249BC;
-	case 0x249C4: goto L_0249C4;
-	case 0x249CE: goto L_0249CE;
-	case 0x249D6: goto L_0249D6;
-	case 0x249E0: goto L_0249E0;
-	case 0x249E6: goto L_0249E6;
-	case 0x249EC: goto L_0249EC;
-	case 0x249F4: goto L_0249F4;
-	case 0x249FE: goto L_0249FE;
-	default: return;
+L_0246B6: CHK(0x246B6u)  /* lea.l $5a000.l, a6 */
+	{
+		REG_A[6] = 0x5A000u;
 	}
+	USE_CYCLES(12);
+L_0246BC: CHK(0x246BCu)  /* move.l #$60000000, $c00004.l */
+	{
+		uint res = 0x60000000u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_0246C6: CHK(0x246C6u)  /* move.w #$27, d7 */
+	{
+		uint res = 0x27u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0246CA: CHK(0x246CAu)  /* jsr $119c.l */
+	{ uint ea = 0x119Cu; m68ki_push_32(0x246D0u); USE_CYCLES(20);
+	  { REG_PC = 0x119Cu; return; } }
+L_0246D0: CHK(0x246D0u)  /* lea.l $61040.l, a6 */
+	{
+		REG_A[6] = 0x61040u;
+	}
+	USE_CYCLES(12);
+L_0246D6: CHK(0x246D6u)  /* move.l #$70000000, $c00004.l */
+	{
+		uint res = 0x70000000u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_0246E0: CHK(0x246E0u)  /* move.w #$2c, d7 */
+	{
+		uint res = 0x2Cu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0246E4: CHK(0x246E4u)  /* jsr $119c.l */
+	{ uint ea = 0x119Cu; m68ki_push_32(0x246EAu); USE_CYCLES(20);
+	  { REG_PC = 0x119Cu; return; } }
+L_0246EA: CHK(0x246EAu)  /* lea.l $6aab0.l, a6 */
+	{
+		REG_A[6] = 0x6AAB0u;
+	}
+	USE_CYCLES(12);
+L_0246F0: CHK(0x246F0u)  /* move.l #$60200001, $c00004.l */
+	{
+		uint res = 0x60200001u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_0246FA: CHK(0x246FAu)  /* move.w #$8b, d7 */
+	{
+		uint res = 0x8Bu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0246FE: CHK(0x246FEu)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x24704u); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_024704: CHK(0x24704u)  /* lea.l $6b334.l, a6 */
+	{
+		REG_A[6] = 0x6B334u;
+	}
+	USE_CYCLES(12);
+L_02470A: CHK(0x2470Au)  /* move.l #$6e800003, $c00004.l */
+	{
+		uint res = 0x6E800003u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_024714: CHK(0x24714u)  /* move.w #$11, d7 */
+	{
+		uint res = 0x11u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_024718: CHK(0x24718u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x2471Eu); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_02471E: CHK(0x2471Eu)  /* rts */
+	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
+L_024720: CHK(0x24720u)  /* lea.l $60900.l, a6 */
+	{
+		REG_A[6] = 0x60900u;
+	}
+	USE_CYCLES(12);
+L_024726: CHK(0x24726u)  /* move.l #$55400002, $c00004.l */
+	{
+		uint res = 0x55400002u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_024730: CHK(0x24730u)  /* move.w #$5, d7 */
+	{
+		uint res = 0x5u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_024734: CHK(0x24734u)  /* jsr $119c.l */
+	{ uint ea = 0x119Cu; m68ki_push_32(0x2473Au); USE_CYCLES(20);
+	  { REG_PC = 0x119Cu; return; } }
+L_02473A: CHK(0x2473Au)  /* lea.l $67de0.l, a6 */
+	{
+		REG_A[6] = 0x67DE0u;
+	}
+	USE_CYCLES(12);
+L_024740: CHK(0x24740u)  /* move.l #$56000002, $c00004.l */
+	{
+		uint res = 0x56000002u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_02474A: CHK(0x2474Au)  /* move.w #$5, d7 */
+	{
+		uint res = 0x5u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_02474E: CHK(0x2474Eu)  /* jsr $119c.l */
+	{ uint ea = 0x119Cu; m68ki_push_32(0x24754u); USE_CYCLES(20);
+	  { REG_PC = 0x119Cu; return; } }
+L_024754: CHK(0x24754u)  /* lea.l $2958c.l, a6 */
+	{
+		REG_A[6] = 0x2958Cu;
+	}
+	USE_CYCLES(12);
+L_02475A: CHK(0x2475Au)  /* move.l #$51e00002, $c00004.l */
+	{
+		uint res = 0x51E00002u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_024764: CHK(0x24764u)  /* move.w #$1a, d7 */
+	{
+		uint res = 0x1Au;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_024768: CHK(0x24768u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x2476Eu); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_02476E: CHK(0x2476Eu)  /* lea.l $6bc9e.l, a6 */
+	{
+		REG_A[6] = 0x6BC9Eu;
+	}
+	USE_CYCLES(12);
+L_024774: CHK(0x24774u)  /* move.l #$71a00001, $c00004.l */
+	{
+		uint res = 0x71A00001u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_02477E: CHK(0x2477Eu)  /* move.w #$3a, d7 */
+	{
+		uint res = 0x3Au;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_024782: CHK(0x24782u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x24788u); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_024788: CHK(0x24788u)  /* rts */
+	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
+L_02478A: CHK(0x2478Au)  /* lea.l $5a000.l, a6 */
+	{
+		REG_A[6] = 0x5A000u;
+	}
+	USE_CYCLES(12);
+L_024790: CHK(0x24790u)  /* move.l #$60000000, $c00004.l */
+	{
+		uint res = 0x60000000u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_02479A: CHK(0x2479Au)  /* move.w #$27, d7 */
+	{
+		uint res = 0x27u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_02479E: CHK(0x2479Eu)  /* jsr $119c.l */
+	{ uint ea = 0x119Cu; m68ki_push_32(0x247A4u); USE_CYCLES(20);
+	  { REG_PC = 0x119Cu; return; } }
+L_0247A4: CHK(0x247A4u)  /* lea.l $61040.l, a6 */
+	{
+		REG_A[6] = 0x61040u;
+	}
+	USE_CYCLES(12);
+L_0247AA: CHK(0x247AAu)  /* move.l #$70000000, $c00004.l */
+	{
+		uint res = 0x70000000u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_0247B4: CHK(0x247B4u)  /* move.w #$2c, d7 */
+	{
+		uint res = 0x2Cu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0247B8: CHK(0x247B8u)  /* jsr $119c.l */
+	{ uint ea = 0x119Cu; m68ki_push_32(0x247BEu); USE_CYCLES(20);
+	  { REG_PC = 0x119Cu; return; } }
+L_0247BE: CHK(0x247BEu)  /* lea.l $5c740.l, a6 */
+	{
+		REG_A[6] = 0x5C740u;
+	}
+	USE_CYCLES(12);
+L_0247C4: CHK(0x247C4u)  /* move.l #$65000000, $c00004.l */
+	{
+		uint res = 0x65000000u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_0247CE: CHK(0x247CEu)  /* move.w #$3f, d7 */
+	{
+		uint res = 0x3Fu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0247D2: CHK(0x247D2u)  /* jsr $119c.l */
+	{ uint ea = 0x119Cu; m68ki_push_32(0x247D8u); USE_CYCLES(20);
+	  { REG_PC = 0x119Cu; return; } }
+L_0247D8: CHK(0x247D8u)  /* lea.l $63ba0.l, a6 */
+	{
+		REG_A[6] = 0x63BA0u;
+	}
+	USE_CYCLES(12);
+L_0247DE: CHK(0x247DEu)  /* move.l #$75a00000, $c00004.l */
+	{
+		uint res = 0x75A00000u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_0247E8: CHK(0x247E8u)  /* move.w #$3f, d7 */
+	{
+		uint res = 0x3Fu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0247EC: CHK(0x247ECu)  /* jsr $119c.l */
+	{ uint ea = 0x119Cu; m68ki_push_32(0x247F2u); USE_CYCLES(20);
+	  { REG_PC = 0x119Cu; return; } }
+L_0247F2: CHK(0x247F2u)  /* lea.l $6c600.l, a6 */
+	{
+		REG_A[6] = 0x6C600u;
+	}
+	USE_CYCLES(12);
+L_0247F8: CHK(0x247F8u)  /* move.l #$40000001, $c00004.l */
+	{
+		uint res = 0x40000001u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_024802: CHK(0x24802u)  /* move.w #$75, d7 */
+	{
+		uint res = 0x75u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_024806: CHK(0x24806u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x2480Cu); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_02480C: CHK(0x2480Cu)  /* lea.l $6cdec.l, a6 */
+	{
+		REG_A[6] = 0x6CDECu;
+	}
+	USE_CYCLES(12);
+L_024812: CHK(0x24812u)  /* move.l #$7ac00001, $c00004.l */
+	{
+		uint res = 0x7AC00001u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_02481C: CHK(0x2481Cu)  /* move.w #$9, d7 */
+	{
+		uint res = 0x9u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_024820: CHK(0x24820u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x24826u); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_024826: CHK(0x24826u)  /* lea.l $6ceb0.l, a6 */
+	{
+		REG_A[6] = 0x6CEB0u;
+	}
+	USE_CYCLES(12);
+L_02482C: CHK(0x2482Cu)  /* move.l #$46800002, $c00004.l */
+	{
+		uint res = 0x46800002u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_024836: CHK(0x24836u)  /* move.w #$c, d7 */
+	{
+		uint res = 0xCu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_02483A: CHK(0x2483Au)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x24840u); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_024840: CHK(0x24840u)  /* lea.l $6cf58.l, a6 */
+	{
+		REG_A[6] = 0x6CF58u;
+	}
+	USE_CYCLES(12);
+L_024846: CHK(0x24846u)  /* move.l #$70c00003, $c00004.l */
+	{
+		uint res = 0x70C00003u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_024850: CHK(0x24850u)  /* move.w #$11, d7 */
+	{
+		uint res = 0x11u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_024854: CHK(0x24854u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x2485Au); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_02485A: CHK(0x2485Au)  /* lea.l $6d08c.l, a6 */
+	{
+		REG_A[6] = 0x6D08Cu;
+	}
+	USE_CYCLES(12);
+L_024860: CHK(0x24860u)  /* move.l #$48200002, $c00004.l */
+	{
+		uint res = 0x48200002u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_02486A: CHK(0x2486Au)  /* move.w #$b, d7 */
+	{
+		uint res = 0xBu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_02486E: CHK(0x2486Eu)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x24874u); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_024874: CHK(0x24874u)  /* lea.l $6d2ea.l, a6 */
+	{
+		REG_A[6] = 0x6D2EAu;
+	}
+	USE_CYCLES(12);
+L_02487A: CHK(0x2487Au)  /* move.l #$44000002, $c00004.l */
+	{
+		uint res = 0x44000002u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_024884: CHK(0x24884u)  /* move.w #$b, d7 */
+	{
+		uint res = 0xBu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_024888: CHK(0x24888u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x2488Eu); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_02488E: CHK(0x2488Eu)  /* lea.l $6a000.l, a6 */
+	{
+		REG_A[6] = 0x6A000u;
+	}
+	USE_CYCLES(12);
+L_024894: CHK(0x24894u)  /* move.l #$4ec00001, $c00004.l */
+	{
+		uint res = 0x4EC00001u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_02489E: CHK(0x2489Eu)  /* move.w #$8a, d7 */
+	{
+		uint res = 0x8Au;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0248A2: CHK(0x248A2u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x248A8u); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_0248A8: CHK(0x248A8u)  /* lea.l $6a7d0.l, a6 */
+	{
+		REG_A[6] = 0x6A7D0u;
+	}
+	USE_CYCLES(12);
+L_0248AE: CHK(0x248AEu)  /* move.l #$49a00002, $c00004.l */
+	{
+		uint res = 0x49A00002u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_0248B8: CHK(0x248B8u)  /* move.w #$18, d7 */
+	{
+		uint res = 0x18u;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0248BC: CHK(0x248BCu)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x248C2u); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_0248C2: CHK(0x248C2u)  /* lea.l $6a94a.l, a6 */
+	{
+		REG_A[6] = 0x6A94Au;
+	}
+	USE_CYCLES(12);
+L_0248C8: CHK(0x248C8u)  /* move.l #$6b200003, $c00004.l */
+	{
+		uint res = 0x6B200003u;
+		uint ea = 0xC00004u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_0248D2: CHK(0x248D2u)  /* move.w #$d, d7 */
+	{
+		uint res = 0xDu;
+		uint* r_dst = &REG_D[7];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(8);
+L_0248D6: CHK(0x248D6u)  /* jsr $1146.l */
+	{ uint ea = 0x1146u; m68ki_push_32(0x248DCu); USE_CYCLES(20);
+	  { REG_PC = 0x1146u; return; } }
+L_0248DC: CHK(0x248DCu)  /* rts */
+	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0248DE: CHK(0x248DEu)  /* addq.w #$1, $ff17a0.l */
 	{
 		uint src = (((0x5279u >> 9) - 1) & 7) + 1;

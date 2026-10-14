@@ -114,9 +114,9 @@ static void interp_step(void)
 #ifdef INTERP_TRACE
     if (md.use_recomp) {
         static unsigned char seen[0x40000];
-        if (REG_PC < 0x80000 && !seen[REG_PC >> 1]) {
-            seen[REG_PC >> 1] = 1;
-            fprintf(stderr, "interp %06x\n", REG_PC);
+        if (!seen[(REG_PC >> 1) & 0x3FFFF]) {
+            seen[(REG_PC >> 1) & 0x3FFFF] = 1;
+            fprintf(stderr, "interp %06x frame %u line %d sp %06x ret %06x\n", REG_PC, md.frame, md.line, REG_A[7], m68ki_read_32(REG_A[7]));
         }
     }
 #endif

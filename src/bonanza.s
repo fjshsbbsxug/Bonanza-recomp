@@ -90,4 +90,4 @@ _start:
 	.include "src/rom_0FDE8.s"
 	.include "src/rom_147FA.s"
 	.include "src/rom_18916.s"
-	.include "src/rom_248DE.s"
+	.include "src/rom_246B6.s"
