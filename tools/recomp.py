@@ -260,6 +260,7 @@ DRAW = {
     0x10A4A: "draw_hud_time_10A4A",
     0x28AD0: "draw_vram_at_d6",
     0x28A90: "draw_map_rect",
+    0x01836: "draw_map_column",
 }
 # the split screen's line effects: interrupt routines (rte)
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (

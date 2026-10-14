@@ -12370,6 +12370,7 @@ L_001830: CHK(0x1830u)  /* dbra d0, $182a */
 L_001834: CHK(0x1834u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_001836: CHK(0x1836u)  /* move.w $a(a0), d7 */
+	{ int r_ = draw_map_column(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = m68ki_read_16((REG_A[0]+0xAu));
 		uint* r_dst = &REG_D[7];

@@ -38,6 +38,7 @@ static int span(uint32_t a, uint32_t b)
 
 static int jumped;      /* the routine ended in a jmp to the game's code (REG_PC): 2 */
 static int stops_z80;   /* the routine holds the Z80 (its bus): it must not run past a line */
+static int mask_floor;  /* the lowest interrupt mask the routine sets (7: it sets none) */
 
 /* may the routine, taking this long (its rts too), run in one go? */
 static int may_run(int cost)
@@ -46,20 +47,22 @@ static int may_run(int cost)
     if (cpu_irq_dirty)
         return 0;
     int left = GET_CYCLES();
-    if (cost <= left)
+    if (cost <= left && !(mask_floor < 7 && vdp_irq_level() > mask_floor))
         return 1;
     /* while the Z80 runs (no recorded sounds) it would run in the lines the game's
      * routine keeps it stopped */
     if (stops_z80 && !snd_ready())
         return 0;
-    return !vdp_irq_within((cost - left) / MD_CYC68K_LINE + 2, (FLAG_INT_MASK >> 8) & 7);
+    int mask = (FLAG_INT_MASK >> 8) & 7;
+    if (mask_floor < mask) mask = mask_floor;
+    return !vdp_irq_within((cost - left) / MD_CYC68K_LINE + 2, mask);
 }
 
 /* runs body dry, then (if it may) for real */
 static int run(void (*body)(void))
 {
     m68ki_cpu_core saved = m68ki_cpu;  /* the dry run may change registers: put back */
-    dry = 1; cyc = 0; stops_z80 = 0;
+    dry = 1; cyc = 0; stops_z80 = 0; mask_floor = 7;
     body();
     m68ki_cpu = saved;
     if (!may_run(cyc)) {
@@ -1551,3 +1554,59 @@ static void map_rect(void)
     FLAG_X = FLAG_C = CFLAG_16(res);
 }
 int draw_map_rect(void) { return run(map_rect); }
+
+/* ---------------------------------------------------------------- a column of the map */
+
+/* sub_01836: a column of the level map (a0: busy, source of map cells, their 2x2 tiles,
+ * video address, cells - 1, ..., the map's width): the cells' top tiles at the address,
+ * their bottom tiles a plane row (0x80) below, each with interrupts off; the address
+ * moved on 2 rows (0x100) and the source a map row */
+static void set_sr_imm(uint16_t v)
+{
+    if (((v >> 8) & 7) < mask_floor) mask_floor = (v >> 8) & 7;
+    if (!dry) m68ki_set_sr(v);
+    else m68ki_set_sr_noint(v);
+}
+
+static void map_column(void)
+{
+    uint32_t a0 = REG_A[0];
+    uint16_t at = (uint16_t)RD16(a0 + 0xA);
+    COST(span(0x1836, 0x186C));
+    for (int half = 0; half < 2; half++) {
+        uint16_t v = (uint16_t)(at + (half ? 0x80 : 0));
+        uint32_t d7 = (uint32_t)((v & 0x3FFF) + 0x4000) << 16;
+        uint32_t d6 = d7 + ((v & 0xC000u) >> 14);
+        if (!dry) { vdp_write_ctrl((uint16_t)(d6 >> 16)); vdp_write_ctrl((uint16_t)d6); }
+        int n = (int)(uint16_t)RD16(a0 + 0xC) + 1;
+        uint32_t a6 = RD32(a0 + 2), a5 = RD32(a0 + 6);
+        set_sr_imm(0x2700);
+        for (int i = 0; i < n; i++) {
+            uint16_t idx = (uint16_t)(RD16(a6) << 3);
+            a6 += 2;
+            uint32_t e = a5 + (uint32_t)(int16_t)idx + (half ? 4 : 0);
+            put((uint16_t)RD16(e));
+            put((uint16_t)RD16(e + 2));
+            W(d7, idx);
+        }
+        COST(loop_cost(half ? 0x18C2 : 0x186C, half ? 0x18D6 : 0x1880, n));
+        set_sr_imm(0x2300);
+        if (!half) COST(span(0x1884, 0x18C2));
+        REG_D[6] = d6;
+        REG_D[7] = d7;
+        REG_A[5] = a5;
+        W(REG_D[1], 0xFFFF);
+    }
+    COST(span(0x18DA, 0x18FA));
+    uint32_t src = (uint16_t)RD16(a0 + 0x10);           /* move.w $10(a0),d7; add.w d7,d7 */
+    uint32_t res = src + src;
+    uint32_t a6 = RD32(a0 + 2) + (uint32_t)(int16_t)(uint16_t)res;
+    if (!dry) { WR16(a0 + 0xA, (uint16_t)(at + 0x100)); WR32(a0 + 2, a6); }
+    REG_A[6] = a6;
+    W(REG_D[7], res);
+    FLAG_N = NFLAG_16(res);
+    FLAG_Z = MASK_OUT_ABOVE_16(res);
+    FLAG_V = VFLAG_ADD_16(src, src, res);
+    FLAG_X = FLAG_C = CFLAG_16(res);
+}
+int draw_map_column(void) { return run(map_column); }
