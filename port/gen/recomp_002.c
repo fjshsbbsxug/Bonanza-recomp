@@ -10072,6 +10072,7 @@ L_01031E: CHK(0x1031Eu)  /* and.b d3, d0 */
 L_010320: CHK(0x10320u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_01044A: CHK(0x1044Au)  /* lea.l $110f4(pc), a0 */
+	if (draw_hud_frame()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[0] = 0x110F4u;
 	}
@@ -10559,6 +10560,7 @@ L_01050A: CHK(0x1050Au)  /* move.w d1, (a1) */
 	}
 	USE_CYCLES(8);
 L_01050C: CHK(0x1050Cu)  /* move.w $ffc05a.l, d0 */
+	if (draw_hud_stage_name()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		uint res = m68ki_read_16(0xFFC05Au);
 		uint* r_dst = &REG_D[0];

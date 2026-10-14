@@ -857,3 +857,83 @@ static void vram_copy(void)
     m68ki_set_sr(m68ki_get_sr());                            /* move.w (a7)+,sr: as it was */
 }
 int draw_vram_copy(void) { return run(vram_copy); }
+
+/* the time of a loop run n times: its instructions from a to its dbra at b, and the dbra */
+static int loop_cost(uint32_t a, uint32_t b, int n)
+{
+    return n * span(a, b) + (n - 1) * dbra_cost(0) + dbra_cost(1);
+}
+
+/* ---------------------------------------------------------------- the HUD */
+
+/* words from the ROM (or RAM) at *src, each + 0x500, to where the video data goes; the
+ * last one is left in d1 (low word) and its addition in X */
+static uint16_t tiles_plus_500(uint32_t *src, int n)
+{
+    uint32_t sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum = (uint32_t)(uint16_t)RD16(*src) + 0x500;
+        *src += 2;
+        put((uint16_t)sum);
+    }
+    if (!dry) FLAG_X = sum > 0xFFFF ? XFLAG_SET : XFLAG_CLEAR;
+    return (uint16_t)sum;
+}
+
+static void set_low_word(int d, uint16_t v) { REG_D[d] = (REG_D[d] & 0xFFFF0000u) | v; }
+
+/* sub_1050C: the stage's name (4 rows of 10 tiles from the table at 0x10598, by the
+ * stage 0xFFC05A) in the HUD */
+static void hud_stage_name(void)
+{
+    uint16_t d0 = (uint16_t)((RD16(0xFFC05Au) - 1) << 2);
+    uint32_t src = RD32(0x10598u + (uint32_t)(int16_t)d0);
+    uint16_t last = 0;
+    static const uint16_t rows[4] = {0xFD96, 0xFE16, 0xFE96, 0xFF16};
+    COST(span(0x1050C, 0x1052C));
+    for (int r = 0; r < 4; r++) {
+        if (r) COST(28 + 8);                             /* the next row's command, move.w #9 */
+        if (!dry) vdp_command(0x01, rows[r]);
+        last = tiles_plus_500(&src, 10);
+        COST(loop_cost(0x1052C, 0x10538, 10));
+    }
+    if (dry) return;
+    set_low_word(0, 0xFFFF);
+    set_low_word(1, last);
+    REG_A[0] = src;
+    flags_move(last, 16);
+}
+int draw_hud_stage_name(void) { return run(hud_stage_name); }
+
+/* sub_1044A: the HUD's frame (0x180 tiles at 0xFD00), the stage number, the time
+ * (0xFF6C4A: set to 3:00 with the minutes by the difficulty), then the stage's name */
+static void hud_frame(void)
+{
+    uint16_t d0 = (uint16_t)(RD16(0xFFC04Eu) << 1);
+    COST(span(0x1044A, 0x10482));
+    if (!dry) {
+        WR32(0xFF6C4Au, 0x30000);
+        WR8(0xFF6C4Au, RD8(0x110F4u + (uint32_t)(int16_t)d0));
+        vdp_command(0x01, 0xFD00);
+    }
+    uint32_t src = 0x10DF4;
+    tiles_plus_500(&src, 0x180);
+    COST(loop_cost(0x10482, 0x1048A, 0x180));
+    COST(span(0x1048E, 0x1050C));
+    if (!dry) vdp_command(0x01, 0xFEB2);
+    src = 0x10D84u + (uint16_t)(RD16(0xFFC05Au) << 2);   /* the stage number: 2 tiles */
+    tiles_plus_500(&src, 2);
+    uint8_t t[3];
+    for (int i = 0; i < 3; i++) t[i] = dry ? 0 : (uint8_t)RD8(0xFF6C4Bu + i);
+    if (!dry) {
+        vdp_command(0x01, 0xFE8A);                       /* the time: minutes, then seconds */
+        vdp_write_data((uint16_t)(t[0] + 0x8520));
+        vdp_command(0x01, 0xFE8E);
+        vdp_write_data((uint16_t)(t[1] + 0x8520));
+        vdp_write_data((uint16_t)(t[2] + 0x8520));
+        REG_A[1] = 0xC00000u;
+        REG_D[0] = 0;                                    /* andi.l #$ffff: upper word 0 */
+    }
+    hud_stage_name();
+}
+int draw_hud_frame(void) { return run(hud_frame); }
