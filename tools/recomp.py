@@ -225,6 +225,26 @@ DRAW = {
     0x011F2: "draw_text_d7",
     0x13318: "draw_text_queue",
 }
+# the split screen's line effects: interrupt routines (rte)
+DRAW_RTE = {a: "draw_band_%05X" % a for a in (
+    0x00C1E,
+    0x00C32,
+    0x00CD8,
+    0x00D2C,
+    0x00D74,
+    0x00DAC,
+    0x00DEC,
+    0x00E34,
+    0x00E7C,
+    0x00EC4,
+    0x00F5A,
+    0x00FA0,
+    0x00FE8,
+    0x01020,
+    0x01058,
+    0x010A0,
+    0x010E8,
+)}
 
 # --------------------------------------------------------------------------
 # Video: the game's commands to the video chip, decoded here
@@ -446,6 +466,11 @@ class Gen:
             # 0: an interrupt would come within it: the routine below, as translated
             self.stats["draw"] += 1
             L.append("\tif (%s()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }" % DRAW[a])
+        elif a in DRAW_RTE:
+            self.stats["draw"] += 1
+            L.append("\tif (%s()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); "
+                     "CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(%d); goto dispatch; }"
+                     % (DRAW_RTE[a], self.mu.lookup(0x4E73)[1]))
         flow = self.emit_flow(i, op, cyc, inchunk)
         if flow is not None:
             self.stats["flow"] += 1

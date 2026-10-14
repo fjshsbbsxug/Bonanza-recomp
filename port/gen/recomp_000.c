@@ -5756,6 +5756,7 @@ L_000C1C: CHK(0xC1Cu)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000C1E: CHK(0xC1Eu)  /* move.w #$8a04, $c00004.l */
+	if (draw_band_00C1E()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x8A04u;
 		uint ea = 0xC00004u;
@@ -5787,6 +5788,7 @@ L_000C30: CHK(0xC30u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000C32: CHK(0xC32u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00C32()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -6032,6 +6034,7 @@ L_000CD6: CHK(0xCD6u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000CD8: CHK(0xCD8u)  /* move.l #$70000002, $c00004.l */
+	if (draw_band_00CD8()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x70000002u;
 		uint ea = 0xC00004u;
@@ -6154,6 +6157,7 @@ L_000D2A: CHK(0xD2Au)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000D2C: CHK(0xD2Cu)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00D2C()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -6263,6 +6267,7 @@ L_000D72: CHK(0xD72u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000D74: CHK(0xD74u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00D74()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -6346,6 +6351,7 @@ L_000DAA: CHK(0xDAAu)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000DAC: CHK(0xDACu)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00DAC()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -6442,6 +6448,7 @@ L_000DEA: CHK(0xDEAu)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000DEC: CHK(0xDECu)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00DEC()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -6551,6 +6558,7 @@ L_000E32: CHK(0xE32u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000E34: CHK(0xE34u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00E34()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -6660,6 +6668,7 @@ L_000E7A: CHK(0xE7Au)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000E7C: CHK(0xE7Cu)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00E7C()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -6769,6 +6778,7 @@ L_000EC2: CHK(0xEC2u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000EC4: CHK(0xEC4u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00EC4()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -6988,6 +6998,7 @@ L_000F58: CHK(0xF58u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000F5A: CHK(0xF5Au)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00F5A()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -7084,6 +7095,7 @@ L_000F9E: CHK(0xF9Eu)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000FA0: CHK(0xFA0u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00FA0()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -7193,6 +7205,7 @@ L_000FE6: CHK(0xFE6u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_000FE8: CHK(0xFE8u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_00FE8()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -7276,6 +7289,7 @@ L_00101E: CHK(0x101Eu)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_001020: CHK(0x1020u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_01020()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -7359,6 +7373,7 @@ L_001056: CHK(0x1056u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_001058: CHK(0x1058u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_01058()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -7468,6 +7483,7 @@ L_00109E: CHK(0x109Eu)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_0010A0: CHK(0x10A0u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_010A0()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;
@@ -7577,6 +7593,7 @@ L_0010E6: CHK(0x10E6u)  /* rte */
 	USE_CYCLES(20);
 	goto dispatch;
 L_0010E8: CHK(0x10E8u)  /* move.l #$40000010, $c00004.l */
+	if (draw_band_010E8()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; USE_CYCLES(20); goto dispatch; }
 	{
 		uint res = 0x40000010u;
 		uint ea = 0xC00004u;

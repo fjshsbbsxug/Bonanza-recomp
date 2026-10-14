@@ -25,7 +25,7 @@ static int dry;     /* only working out the time */
 /* may the routine, taking this long (its rts too), run in one go? */
 static int may_run(int cost)
 {
-    cost += 16;
+    cost += 20;                         /* its return (rts 16, rte 20) */
     if (cpu_irq_dirty)
         return 0;
     int left = GET_CYCLES();
@@ -263,3 +263,196 @@ static void text_queue(void)
     FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
 }
 int draw_text_queue(void) { return run(text_queue); }
+
+/* ---------------------------------------------------------------- the split screen's bands
+ *
+ * The game's line effects (interrupt routines at sub_00C1E..sub_010E8, one after the
+ * other through the RAM vector 0xFFC0B2): each sets the vertical scroll of both planes
+ * (VSRAM 0/1) and the horizontal scroll (the first entry of the table at 0xB000) for the
+ * band of lines that follows, how many lines on the next one comes (register 10), and
+ * which one that is. Top to bottom: player 2's view (or the 2P panel), the HUD between
+ * them, player 1's view, the bottom border. The rte is done by the caller. */
+
+static void at_vscroll(void) { if (!dry) vdp_command(0x05, 0x0000); COST(28); }   /* move.l #$40000010 */
+static void at_hscroll(void) { if (!dry) vdp_command(0x01, 0xB000); COST(28); }   /* move.l #$70000002 */
+static void word(uint16_t v) { put(v); COST(20); }                                /* move.w #v */
+static void word_ram(uint32_t a) { put((uint16_t)RD16(a)); COST(28); }            /* move.w (a).l */
+static void lines_to_next(uint8_t n) { if (!dry) vdp_set_reg(10, n); COST(20); }
+static void next_band(uint32_t stub) { if (!dry) WR32(0xFFC0B2u, stub); COST(28); }
+static void views_split(void) { if (!dry) WR16(0xFF17B6u, 1); COST(20); }      /* move.w #1,$ff17b6 */
+
+/* tst.w / cmpi.w #1 / cmpi.w #2 of a mode, each followed by a beq: 0-3 (3: none of them) */
+static int mode_of(uint32_t a)
+{
+    uint16_t m = (uint16_t)RD16(a);
+    COST(16);
+    if (m == 0) { COST(10); return 0; }
+    COST(10 + CYC_BCC_NOTAKE_W + 20);
+    if (m == 1) { COST(10); return 1; }
+    COST(10 + CYC_BCC_NOTAKE_W + 20);
+    if (m == 2) { COST(10); return 2; }
+    COST(10 + CYC_BCC_NOTAKE_W);
+    return 3;
+}
+
+static void band_00C1E(void) { lines_to_next(0x04); next_band(0x00C32); }
+
+/* the top border; then player 2's view as the 2P panel mode (0xFF6C6C) has it */
+static void band_00C32(void)
+{
+    at_vscroll(); word(0x00F3); word(0x01CF);
+    at_hscroll(); word(0x0000); word(0x00FF);
+    switch (mode_of(0xFF6C6Cu)) {
+    case 0:  lines_to_next(0x4F); next_band(0x00CD8); break;
+    case 1:  lines_to_next(0x17); next_band(0x00D2C); break;
+    case 2:  lines_to_next(0x17); next_band(0x00DEC); break;
+    default: lines_to_next(0x17); next_band(0x00E34); break;
+    }
+}
+
+/* player 2's view, following his camera */
+static void band_00CD8(void)
+{
+    at_hscroll(); word_ram(0xFF228Au); word(0x0000);
+    at_vscroll(); word_ram(0xFF2288u); word(0xFFF9);
+    views_split();
+    lines_to_next(0x17); next_band(0x00E7C);
+}
+
+static void band_00D2C(void)
+{
+    at_vscroll(); word(0x00EB); word(0xFFF9);
+    at_hscroll(); word(0x0000); word(0x0100);
+    lines_to_next(0x17); next_band(0x00D74);
+}
+
+static void band_00D74(void)
+{
+    at_vscroll(); word(0x00D3);
+    at_hscroll(); word(0x0000);
+    lines_to_next(0x1F); next_band(0x00DAC);
+}
+
+static void band_00DAC(void)
+{
+    at_vscroll(); word(0x00B9);
+    at_hscroll(); word(0x0000);
+    views_split();
+    lines_to_next(0x17); next_band(0x00E7C);
+}
+
+static void band_00DEC(void)
+{
+    at_vscroll(); word(0x00EB); word(0x0049);
+    at_hscroll(); word(0x0000); word(0x0100);
+    lines_to_next(0x17); next_band(0x00D74);
+}
+
+static void band_00E34(void)
+{
+    at_vscroll(); word(0x00EB); word(0x0098);
+    at_hscroll(); word(0x0000); word(0x0100);
+    lines_to_next(0x17); next_band(0x00D74);
+}
+
+/* the HUD */
+static void band_00E7C(void)
+{
+    at_vscroll(); word(0x009B); word(0x0179);
+    at_hscroll(); word(0x0000); word(0x0000);
+    lines_to_next(0x17); next_band(0x00EC4);
+}
+
+/* below the HUD: player 1's view as the mode (0xFF6C6A) has it */
+static void band_00EC4(void)
+{
+    at_vscroll(); word(0x0084);
+    at_hscroll(); word(0x0000);
+    switch (mode_of(0xFF6C6Au)) {
+    case 0:  lines_to_next(0x4F); next_band(0x00F5A); break;
+    case 1:  lines_to_next(0x17); next_band(0x00FA0); break;
+    case 2:  lines_to_next(0x17); next_band(0x01058); break;
+    default: lines_to_next(0x17); next_band(0x010A0); break;
+    }
+}
+
+/* player 1's view, following his camera */
+static void band_00F5A(void)
+{
+    at_vscroll(); word_ram(0xFF1848u);
+    at_hscroll(); word_ram(0xFF184Au);
+    if (!dry) WR32(0xFF1848u, RD32(0xFF1844u));           /* move.l $ff1844,$ff1848 */
+    COST(36);
+    lines_to_next(0x0E); next_band(0x010E8);
+}
+
+static void band_00FA0(void)
+{
+    at_vscroll(); word(0x006B); word(0xFF78);
+    at_hscroll(); word(0x0000); word(0x0100);
+    lines_to_next(0x17); next_band(0x00FE8);
+}
+
+static void band_00FE8(void)
+{
+    at_vscroll(); word(0x0053);
+    at_hscroll(); word(0x0000);
+    lines_to_next(0x1F); next_band(0x01020);
+}
+
+static void band_01020(void)
+{
+    at_vscroll(); word(0x0039);
+    at_hscroll(); word(0x0000);
+    lines_to_next(0x0E); next_band(0x010E8);
+}
+
+static void band_01058(void)
+{
+    at_vscroll(); word(0x006B); word(0xFFC9);
+    at_hscroll(); word(0x0000); word(0x0000);
+    lines_to_next(0x17); next_band(0x00FE8);
+}
+
+static void band_010A0(void)
+{
+    at_vscroll(); word(0x006B); word(0x0018);
+    at_hscroll(); word(0x0000); word(0x0000);
+    lines_to_next(0x17); next_band(0x00FE8);
+}
+
+/* the bottom border; the line effects off until the next frame */
+static void band_010E8(void)
+{
+    at_vscroll(); word(0x001D); word(0x0111);
+    at_hscroll(); word(0x0000); word(0x00FF);
+    lines_to_next(0x00); next_band(0x00C1E);
+    uint16_t r0 = (uint16_t)(RD16(0xFFC07Au) & 0x80EF);    /* andi.w #$80ef,$ffc07a: */
+    COST(24);
+    if (!dry) {
+        WR16(0xFFC07Au, r0);
+        vdp_write_ctrl(r0);                                /* register 0: line interrupts off */
+    }
+    COST(28);
+    if (!dry && FLAG_S)                                    /* andi.w #$fdff,sr */
+        m68ki_set_sr(m68ki_get_sr() & 0xFDFF);
+    COST(20);
+}
+
+int draw_band_00C1E(void) { return run(band_00C1E); }
+int draw_band_00C32(void) { return run(band_00C32); }
+int draw_band_00CD8(void) { return run(band_00CD8); }
+int draw_band_00D2C(void) { return run(band_00D2C); }
+int draw_band_00D74(void) { return run(band_00D74); }
+int draw_band_00DAC(void) { return run(band_00DAC); }
+int draw_band_00DEC(void) { return run(band_00DEC); }
+int draw_band_00E34(void) { return run(band_00E34); }
+int draw_band_00E7C(void) { return run(band_00E7C); }
+int draw_band_00EC4(void) { return run(band_00EC4); }
+int draw_band_00F5A(void) { return run(band_00F5A); }
+int draw_band_00FA0(void) { return run(band_00FA0); }
+int draw_band_00FE8(void) { return run(band_00FE8); }
+int draw_band_01020(void) { return run(band_01020); }
+int draw_band_01058(void) { return run(band_01058); }
+int draw_band_010A0(void) { return run(band_010A0); }
+int draw_band_010E8(void) { return run(band_010E8); }
