@@ -13,6 +13,11 @@ int  draw_text_d7(void);        /* sub_011F2 */
 int  draw_text_queue(void);     /* sub_13318 */
 int  draw_text_queue2(void);    /* sub_1376A */
 int  draw_registers(void);      /* sub_0070A */
+int  draw_vram_at(void);        /* sub_2848C */
+int  draw_no_window(void);      /* sub_006FA */
+int  draw_clear_00628(void);    /* sub_00628 */
+int  draw_clear_planes(void);   /* sub_0052E */
+int  draw_video_init(void);     /* sub_00484 */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);

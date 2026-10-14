@@ -502,3 +502,143 @@ int draw_band_01020(void) { return run(band_01020); }
 int draw_band_01058(void) { return run(band_01058); }
 int draw_band_010A0(void) { return run(band_010A0); }
 int draw_band_010E8(void) { return run(band_010E8); }
+
+/* ---------------------------------------------------------------- clearing video memory */
+
+/* sub_2848C: where data goes: video memory at d7 (written) */
+static void vram_at(void)
+{
+    uint16_t a = (uint16_t)REG_D[7];
+    uint32_t hi = (uint32_t)((a & 0x3FFF) + 0x4000) << 16;
+    uint32_t cmd = hi + ((a & 0xC000u) >> 14);
+    COST(4 + 14 + 8 + 2 * (8 + (8 << CYC_SHIFT)) + 14 + (6 + (8 << CYC_SHIFT)) + (6 + (6 << CYC_SHIFT)) + 6 + 20);
+    if (dry) return;
+    vdp_command(0x01, a);
+    REG_D[7] = hi;
+    REG_D[6] = cmd;
+    flags_move(cmd, 32);
+    FLAG_X = XFLAG_CLEAR;
+}
+int draw_vram_at(void) { return run(vram_at); }
+
+/* sub_006FA: no window plane (registers 17, 18) */
+static void no_window(void)
+{
+    COST(12 + 12 + 12);
+    if (dry) return;
+    vdp_set_reg(17, 0x00);
+    vdp_set_reg(18, 0x00);
+    REG_A[0] = 0xC00004u;
+    flags_move(0x9200, 16);
+}
+int draw_no_window(void) { return run(no_window); }
+
+/* a fill of video memory by the chip (the game's DMA fill): register 15 set to 1 first
+ * (if inc1), the length (registers 19, 20), the command, the fill value 0, then the
+ * game waits while the chip is busy and puts register 1 back; register 15 to 2 after
+ * (if inc2). Returns the last status read & 2 (what d7 is left with). */
+static uint16_t dma_fill0(int inc1, uint8_t len_lo, uint8_t len_hi, uint8_t code, uint16_t addr, int inc2)
+{
+    uint16_t status = 0;
+    if (inc1) { if (!dry) vdp_set_reg(15, 1); COST(12); }
+    uint16_t r1 = (uint16_t)(RD16(0xFFC07Cu) | 0x10);    /* the DMA allowed */
+    COST(16 + 8 + 8);                                    /* move.w, ori.b, move.w d7,(a6) */
+    COST(20 + 12 + 20 + 20);                             /* length, mode, command, the value */
+    if (!dry) {
+        vdp_write_ctrl(r1);
+        vdp_set_reg(19, len_lo);
+        vdp_set_reg(20, len_hi);
+        vdp_set_reg(23, 0x80);
+        vdp_command(code, addr);
+        vdp_write_data(0);
+    }
+    for (;;) {                                           /* move.w (a6),d7; andi.w #2; bne.s */
+        if (!dry) status = vdp_read_ctrl() & 2;
+        COST(8 + 8);
+        if (!status) { COST(10 + CYC_BCC_NOTAKE_B); break; }
+        COST(10);
+    }
+    if (!dry) vdp_write_ctrl((uint16_t)RD16(0xFFC07Cu));
+    COST(20);
+    if (inc2) { if (!dry) vdp_set_reg(15, 2); COST(12); }
+    return status;
+}
+
+/* sub_00628: video memory 0x0000-0xFFFF? no: 0xFF bytes from 0 cleared */
+static void clear_vram_00628(void)
+{
+    COST(12);                                            /* lea */
+    uint16_t s = dma_fill0(1, 0xFF, 0x00, 0x21, 0x0000, 1);
+    if (dry) return;
+    REG_A[6] = 0xC00004u;
+    REG_D[7] = (REG_D[7] & 0xFFFF0000u) | s;
+    flags_move(0x8F02, 16);
+}
+int draw_clear_00628(void) { return run(clear_vram_00628); }
+
+/* sub_0052E: the planes (0xC000, 0xE000: 0x1FFF bytes each) and the scroll table
+ * (0xB000) cleared in video memory, the game's copies of the scroll (0xFF0280,
+ * 0xFF0680) and the vertical scroll cleared */
+static void clear_planes(void)
+{
+    static const int saved[] = {6, 7};
+    push_regs(saved, 2);
+    COST(12);
+    dma_fill0(1, 0xFF, 0x1F, 0x21, 0xC000, 1);
+    COST(12);
+    dma_fill0(1, 0xFF, 0x1F, 0x21, 0xE000, 1);
+    COST(12);
+    dma_fill0(0, 0xFF, 0x01, 0x21, 0xB000, 0);
+    COST(12 + 8 + 4);                                    /* lea, move.w, moveq */
+    for (int i = 0; i < 0x200; i++) {
+        if (!dry) WR16(0xFF0280u + 2u * i, 0);
+        COST(8 + dbra_cost(i == 0x1FF));
+    }
+    COST(12 + 8 + 4);
+    for (int i = 0; i < 0x50; i++) {
+        if (!dry) WR16(0xFF0680u + 2u * i, 0);
+        COST(8 + dbra_cost(i == 0x4F));
+    }
+    COST(28 + 28);                                       /* the vertical scroll: 0, 0 */
+    pop_cost(2);
+    if (dry) return;
+    vdp_command(0x05, 0x0000);
+    vdp_write_data(0);
+    vdp_write_data(0);
+    REG_A[6] = 0xC00004u;
+    REG_A[0] = 0xFF0720u;
+    REG_D[0] |= 0xFFFF;
+    REG_D[1] = 0;
+    flags_move(0, 32);
+}
+int draw_clear_planes(void) { return run(clear_planes); }
+
+/* sub_00484: the video registers from the table at 0x4FC (also kept at 0xFFC07A), the
+ * palette cleared, all of video memory cleared */
+static void video_init(void)
+{
+    COST(12 + 12 + 8 + 12 + 4);                          /* lea x4, moveq */
+    for (int i = 0; i < 19; i++) {
+        uint16_t w = (uint16_t)RD16(0x4FCu + 2u * i);
+        if (!dry) { vdp_write_ctrl(w); WR16(0xFFC07Au + 2u * i, w); }
+        COST(12 + 12 + dbra_cost(i == 18));
+    }
+    COST(4 + 28 + 8);                                    /* moveq, the palette at 0, move.w */
+    if (!dry) vdp_command(0x03, 0x0000);
+    for (int i = 0; i < 64; i++) {
+        if (!dry) vdp_write_data(0);
+        COST(8 + dbra_cost(i == 63));
+    }
+    COST(12);
+    uint16_t s = dma_fill0(1, 0xFF, 0xFF, 0x21, 0x0000, 1);
+    if (dry) return;
+    REG_A[0] = 0xC00004u;
+    REG_A[1] = 0xC00000u;
+    REG_A[2] = 0x522u;
+    REG_A[3] = 0xFFC0A0u;
+    REG_A[6] = 0xC00004u;
+    REG_D[0] = 0;
+    REG_D[7] = s;
+    flags_move(0x8F02, 16);
+}
+int draw_video_init(void) { return run(video_init); }

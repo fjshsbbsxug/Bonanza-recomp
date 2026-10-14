@@ -4391,6 +4391,7 @@ L_028486: CHK(0x28486u)  /* dbra d0, $28390 */
 L_02848A: CHK(0x2848Au)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_02848C: CHK(0x2848Cu)  /* move.w d7, d6 */
+	if (draw_vram_at()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		uint res = MASK_OUT_ABOVE_16(REG_D[7]);
 		uint* r_dst = &REG_D[6];

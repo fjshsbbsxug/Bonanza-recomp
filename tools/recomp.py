@@ -226,6 +226,11 @@ DRAW = {
     0x13318: "draw_text_queue",
     0x1376A: "draw_text_queue2",
     0x0070A: "draw_registers",
+    0x2848C: "draw_vram_at",
+    0x006FA: "draw_no_window",
+    0x00628: "draw_clear_00628",
+    0x0052E: "draw_clear_planes",
+    0x00484: "draw_video_init",
 }
 # the split screen's line effects: interrupt routines (rte)
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (
