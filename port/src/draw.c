@@ -1467,3 +1467,32 @@ static void vblank_hud(void)
     go_on(0xBE8);
 }
 int draw_vblank_hud(void) { return run(vblank_hud); }
+
+/* ---------------------------------------------------------------- the time in the HUD */
+
+/* 0x106E4 / 0x10A4A (in the HUD's frame work): the time left (a0 + 1: minutes, then two
+ * digits of seconds) as tiles 0x8520 + digit; then on to the sprites */
+static uint32_t time_at;
+
+static void hud_time(void)
+{
+    COST(span(time_at, time_at + 0x40));
+    uint32_t a0 = REG_A[0] + 1;
+    uint16_t d1 = 0;
+    static const uint16_t place[3] = {0xFE8A, 0xFE8E, 0};
+    for (int i = 0; i < 3; i++) {
+        d1 = (uint16_t)((uint8_t)RD8(a0++) + 0x8520);
+        if (!dry) {
+            if (place[i]) vdp_command(0x01, place[i]);
+            vdp_write_data(d1);
+        }
+    }
+    REG_A[0] = a0;
+    REG_A[1] = 0xC00000u;
+    W(REG_D[1], d1);
+    flags_move(d1, 16);
+    FLAG_X = XFLAG_CLEAR;                                  /* addi.w: no carry */
+    go_on(time_at + 0x40);
+}
+int draw_hud_time_106E4(void) { time_at = 0x106E4; return run(hud_time); }
+int draw_hud_time_10A4A(void) { time_at = 0x10A4A; return run(hud_time); }

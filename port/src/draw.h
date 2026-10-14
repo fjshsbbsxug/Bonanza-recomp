@@ -43,6 +43,8 @@ int  draw_vblank_scroll(void);      /* 0x9C6 */
 int  draw_vblank_sprites(void);     /* 0xA2C */
 int  draw_vblank_palette(void);     /* 0xAD2 */
 int  draw_vblank_hud(void);         /* 0xB58 */
+int  draw_hud_time_106E4(void);
+int  draw_hud_time_10A4A(void);
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);

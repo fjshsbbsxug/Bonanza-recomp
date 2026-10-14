@@ -256,6 +256,8 @@ DRAW = {
     0x00A2C: "draw_vblank_sprites",
     0x00AD2: "draw_vblank_palette",
     0x00B58: "draw_vblank_hud",
+    0x106E4: "draw_hud_time_106E4",
+    0x10A4A: "draw_hud_time_10A4A",
 }
 # the split screen's line effects: interrupt routines (rte)
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (

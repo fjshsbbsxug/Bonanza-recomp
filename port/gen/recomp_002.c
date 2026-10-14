@@ -11379,6 +11379,7 @@ L_0106DE: CHK(0x106DEu)  /* jsr $18736.l */
 	{ uint ea = 0x18736u; m68ki_push_32(0x106E4u); USE_CYCLES(20);
 	  { REG_PC = 0x18736u; return; } }
 L_0106E4: CHK(0x106E4u)  /* addq.l #$1, a0 */
+	{ int r_ = draw_hud_time_106E4(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint* r_dst = &REG_A[0];
 	
@@ -13991,6 +13992,7 @@ L_010A44: CHK(0x10A44u)  /* jsr $11d6a.l */
 	{ uint ea = 0x11D6Au; m68ki_push_32(0x10A4Au); USE_CYCLES(20);
 	  { REG_PC = 0x11D6Au; return; } }
 L_010A4A: CHK(0x10A4Au)  /* addq.l #$1, a0 */
+	{ int r_ = draw_hud_time_10A4A(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint* r_dst = &REG_A[0];
 	
