@@ -519,8 +519,13 @@ const uint32_t *md_framebuffer(void)
     int w = md_screen_width();
     for (int y = 0; y < MD_SCREEN_H; y++)
         for (int x = 0; x < w; x++) {
-            uint16_t c = vdp.fbmd[y][x];
-            fb[y][x] = c < 512 ? md_color_lut[c] : c >= VDP_CHAR_BASE ? char_color_lut[(c - VDP_CHAR_BASE) & 15] : 0xFF000000u;
+            uint16_t c = vdp.fbmd[y][x], k = VDP_COLOR(c);
+            uint32_t rgb = k < 512 ? md_color_lut[k] : k >= VDP_CHAR_BASE ? char_color_lut[(k - VDP_CHAR_BASE) & 15] : 0xFF000000u;
+            if (c & VDP_SHADOW)          /* half as bright */
+                rgb = 0xFF000000u | ((rgb >> 1) & 0x7F7F7F);
+            else if (c & VDP_HIGHLIGHT)  /* half as bright, plus half of white */
+                rgb = 0xFF000000u | (((rgb >> 1) & 0x7F7F7F) + 0x7F7F7F);
+            fb[y][x] = rgb;
         }
     return &fb[0][0];
 }

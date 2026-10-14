@@ -579,7 +579,7 @@ static void present(void)
             /* flash the colour being recoloured */
             const uint16_t *fm = md_framebuffer_md();
             for (int i = 0; i < MD_SCREEN_H * MD_FB_W; i++)
-                if (fm[i] == hl)
+                if (VDP_COLOR(fm[i]) == hl)
                     fb[i] = 0xFFFFFFFFu ^ (fb[i] & 0x00FFFFFF);
         }
         SDL_UpdateTexture(texture, NULL, fb, MD_FB_W * 4);

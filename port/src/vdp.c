@@ -265,7 +265,7 @@ static inline int tile_pixel(uint16_t entry, int px, int py)
     uint8_t b = vdp.vram[a & 0xFFFF];
     int c = (px & 1) ? (b & 0x0F) : (b >> 4);
     if (!c)
-        return 0;
+        return (entry >> 8) & 0x80;    /* transparent; the priority still counts for shadows */
     return c | ((entry >> 9) & 0x30) | ((entry >> 8) & 0x80);
 }
 
@@ -907,6 +907,39 @@ static int line_hscroll(int y, int plane_b)
     return ((vdp.vram[hsa & 0xFFFF] << 8) | vdp.vram[(hsa + 1) & 0xFFFF]) & 0x3FF;
 }
 
+/* Shadow / highlight (register 12 bit 3), used for the spotlights of the story and
+ * targets screens. Where neither plane's tile has priority, the picture is shadowed
+ * (half bright). Sprite colours 62 and 63 are not drawn: they light up (shadowed to
+ * normal, normal to highlighted) or shadow what is beneath them. Other sprite pixels
+ * are normal when the sprite has priority or uses colour 14 of its palette, otherwise
+ * they take the shading beneath them. */
+static void shade_line(uint16_t *fb, const uint8_t *s, const uint8_t *a, const uint8_t *b,
+                       const uint8_t *part, const uint16_t *pal, uint16_t bg, int ow)
+{
+    for (int x = 0; x < ow; x++) {
+        int sp = s[x], ap = a[x], bp = b[x];
+        int shade = (ap & 0x80) || (bp & 0x80) ? 0 : VDP_SHADOW;
+        uint16_t under;                  /* the planes' pixel */
+        int plane_prio = 0;
+        if ((ap & 0x80) && (ap & 0x0F)) { under = pal[ap & 0x3F]; plane_prio = 1; }
+        else if ((bp & 0x80) && (bp & 0x0F)) { under = pal[bp & 0x3F]; plane_prio = 1; }
+        else if (ap & 0x0F) under = pal[ap & 0x3F];
+        else if (bp & 0x0F) under = pal[bp & 0x3F];
+        else under = bg;
+        int c = sp & 0x3F;
+        if ((sp & 0x0F) && (c == 0x3E || c == 0x3F)) {
+            if (c == 0x3F) shade = VDP_SHADOW;
+            else shade = shade ? 0 : VDP_HIGHLIGHT;
+            fb[x] = under | shade;
+        } else if ((sp & 0x0F) && ((sp & 0x80) || !plane_prio)) {
+            uint16_t col = part[x] ? VDP_CHAR_BASE + part[x] - 1 : pal[c];
+            fb[x] = col | ((sp & 0x80) || (sp & 0x0F) == 0x0E ? 0 : shade);
+        } else {
+            fb[x] = under | shade;
+        }
+    }
+}
+
 void vdp_render_line(int y)
 {
     int width = vdp_width();
@@ -1131,7 +1164,9 @@ void vdp_render_line(int y)
     } else {
         draw_sprites(s, part, y, width, m);
     }
-    for (int x = 0; x < ow; x++) {
+    if (vdp.reg[12] & 0x08) {
+        shade_line(fb, s, a, b, part, pal, bg, ow);
+    } else for (int x = 0; x < ow; x++) {
         int p;
         int sp = s[x], ap = a[x], bp = b[x];
         if ((sp & 0x80) && (sp & 0x0F)) { if (part[x]) { fb[x] = VDP_CHAR_BASE + part[x] - 1; continue; } p = sp; }

@@ -3,6 +3,7 @@
 #include <string.h>
 #include "menu.h"
 #include "md.h"
+#include "vdp.h"
 #include "settings.h"
 #include "font8x8_basic.h"
 #include "net.h"
@@ -130,7 +131,7 @@ static void collect_colors(void)
     int w = md_screen_width();
     for (int y = 0; y < MD_SCREEN_H; y++)
         for (int x = 0; x < w; x++) {
-            uint16_t c = fb[y * MD_FB_W + x];
+            uint16_t c = VDP_COLOR(fb[y * MD_FB_W + x]);
             if (c < 512) count[c]++;
         }
     /* already recoloured colours first so they can be found again, then by use */
