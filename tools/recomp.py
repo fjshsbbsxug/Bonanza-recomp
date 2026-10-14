@@ -239,6 +239,8 @@ DRAW = {
     0x28200: "draw_vram_copy",
     0x1044A: "draw_hud_frame",
     0x1050C: "draw_hud_stage_name",
+    0x11EDC: "draw_hud_number_p1",
+    0x11FB8: "draw_hud_number_p2",
 }
 # the split screen's line effects: interrupt routines (rte)
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (

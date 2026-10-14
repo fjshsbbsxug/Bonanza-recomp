@@ -20538,6 +20538,7 @@ L_011ED6: CHK(0x11ED6u)  /* dbra d5, $11eb2 */
 L_011EDA: CHK(0x11EDAu)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_011EDC: CHK(0x11EDCu)  /* moveq #$0, d4 */
+	if (draw_hud_number_p1()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		uint res = REG_D[4] = MAKE_INT_8(MASK_OUT_ABOVE_8(0x7800u));
 	
@@ -21331,6 +21332,7 @@ L_011FB0: CHK(0x11FB0u)  /* clr.w $ff6c30.l */
 L_011FB6: CHK(0x11FB6u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_011FB8: CHK(0x11FB8u)  /* moveq #$0, d4 */
+	if (draw_hud_number_p2()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		uint res = REG_D[4] = MAKE_INT_8(MASK_OUT_ABOVE_8(0x7800u));
 	

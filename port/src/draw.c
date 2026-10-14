@@ -937,3 +937,126 @@ static void hud_frame(void)
     hud_stage_name();
 }
 int draw_hud_frame(void) { return run(hud_frame); }
+
+/* ---------------------------------------------------------------- the HUD's numbers */
+
+/* abcd: the decimal (BCD) bytes added with X, as the 68000 does it; sets X */
+static uint8_t abcd(uint8_t src, uint8_t dst, int *x)
+{
+    uint32_t res = (src & 0x0F) + (dst & 0x0F) + (uint32_t)*x;
+    if (res > 9) res += 6;
+    res += (src & 0xF0) + (dst & 0xF0);
+    *x = res > 0x99;
+    if (*x) res -= 0xA0;
+    return (uint8_t)res;
+}
+
+typedef struct {
+    uint32_t start, bmi, loop, dbra, after, bne1, l_hi1, l_lo1, l_hi2, bne2, bne3, rts_short, rts;
+    uint32_t count_at, store_at, done_flag, table, blank_at;
+    uint16_t blank;
+    uint16_t digit_at[4];   /* each digit's own place (0: they follow each other from blank_at) */
+} number_layout;
+
+static const number_layout *num;
+
+#define W(r, v) ((r) = ((r) & 0xFFFF0000u) | (uint16_t)(v))
+#define B(r, v) ((r) = ((r) & 0xFFFFFF00u) | (uint8_t)(v))
+
+/* sub_11EDC / sub_11FB8: a player's count (0xFFC054 / 0xFFC056) - 1 in decimal (kept
+ * at 0xFF6C26 / 0xFF6C3C), drawn as up to 4 digits without leading zeros after 4 blank
+ * tiles: player 1's from the left, player 2's each at its own place */
+static void hud_number(void)
+{
+    const number_layout *L = num;
+    uint32_t d6 = 0, d7 = 0, a6 = L->store_at;
+    int x = 0;
+    int16_t n = (int16_t)(RD16(L->count_at) - 2);
+    COST(span(L->start, L->bmi));
+    if (n < 0) {
+        COST(10);
+    } else {
+        COST(10 + CYC_BCC_NOTAKE_W);
+        COST(loop_cost(L->loop, L->dbra, n + 1));
+        for (int i = 0; i <= n; i++) {                    /* neg.w d4 (0: X clear); abcd x2 */
+            x = 0;
+            B(d7, abcd(1, (uint8_t)d7, &x));
+            B(d6, abcd(0, (uint8_t)d6, &x));
+        }
+    }
+    W(d6, (uint16_t)d6 << 8);
+    W(d7, (uint16_t)d7 + (uint16_t)d6);
+    COST(span(L->after, L->bne1));
+    if (!dry) {
+        WR16(L->store_at, (uint16_t)d7);
+        vdp_command(0x01, L->blank_at);
+        for (int i = 0; i < 4; i++) vdp_write_data(L->blank);
+        if (!L->digit_at[0]) vdp_command(0x01, L->blank_at);
+    }
+    uint32_t sum = 0;
+    int k;                                                /* the next digit's place */
+#define DIGIT(r, place) do { sum = (uint32_t)(uint16_t)RD16(L->table + (uint32_t)(int16_t)(uint16_t)(r)) + 0x500; \
+        W(r, sum); if (!dry) { if (L->digit_at[place]) vdp_command(0x01, L->digit_at[place]); \
+        vdp_write_data((uint16_t)sum); } } while (0)
+#define NEXT_BYTE() do { B(d7, RD8(a6)); a6++; B(d6, d7); W(d7, ((uint16_t)d7 & 0xF0) >> 3); } while (0)
+    NEXT_BYTE();
+    if ((uint16_t)d7) {                                   /* hundreds and thousands */
+        COST(10 + span(L->l_hi1, L->l_lo1) + span(L->l_lo1, L->l_hi2) + span(L->l_hi2, L->rts));
+        DIGIT(d7, 0);
+        W(d6, ((uint16_t)d6 & 0x0F) << 1);
+        k = 1;
+        goto lo1;
+    }
+    COST(10 + CYC_BCC_NOTAKE_W);
+    W(d6, ((uint16_t)d6 & 0x0F) << 1);
+    if ((uint16_t)d6) {
+        COST(span(L->bne1 + 4, L->bne2) + 10 + span(L->l_lo1, L->l_hi2) + span(L->l_hi2, L->rts));
+        k = 1;
+        goto lo1;
+    }
+    COST(span(L->bne1 + 4, L->bne2) + 10 + CYC_BCC_NOTAKE_W);
+    NEXT_BYTE();
+    if ((uint16_t)d7) {
+        COST(span(L->bne2 + 4, L->bne3) + 10 + span(L->l_hi2, L->rts));
+        goto hi2;
+    }
+    COST(span(L->bne2 + 4, L->bne3) + 10 + CYC_BCC_NOTAKE_W + span(L->bne3 + 4, L->rts_short));
+    W(d6, ((uint16_t)d6 & 0x0F) << 1);
+    DIGIT(d6, 3);
+    goto done;
+lo1:
+    (void)k;
+    DIGIT(d6, 1);
+    NEXT_BYTE();
+hi2:
+    DIGIT(d7, 2);
+    W(d6, ((uint16_t)d6 & 0x0F) << 1);
+    DIGIT(d6, 3);
+done:
+#undef DIGIT
+#undef NEXT_BYTE
+    if (dry) return;
+    WR16(L->done_flag, 0);
+    REG_D[4] = 0;
+    REG_D[5] = 1;
+    REG_D[6] = d6;
+    REG_D[7] = d7;
+    W(REG_D[0], L->blank);
+    REG_A[4] = 0xC00000u;
+    REG_A[5] = L->table;
+    REG_A[6] = a6;
+    FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+    FLAG_X = sum > 0xFFFF ? XFLAG_SET : XFLAG_CLEAR;
+}
+
+static const number_layout number_p1 = {
+    0x11EDC, 0x11EEC, 0x11EF0, 0x11EF6, 0x11EFA, 0x11F3E, 0x11F72, 0x11F82, 0x11F96,
+    0x11F48, 0x11F56, 0x11F70, 0x11FB6,
+    0xFFC054, 0xFF6C26, 0xFF6C30, 0x120BC, 0xFF0A, 0x8501, {0, 0, 0, 0}};
+static const number_layout number_p2 = {
+    0x11FB8, 0x11FC8, 0x11FCC, 0x11FD2, 0x11FD6, 0x12010, 0x1204E, 0x12068, 0x12086,
+    0x1201A, 0x12028, 0x1204C, 0x120BA,
+    0xFFC056, 0xFF6C3C, 0xFF6C46, 0x120D0, 0xFDAE, 0x8502, {0xFDAE, 0xFDB0, 0xFDB2, 0xFDB4}};
+
+int draw_hud_number_p1(void) { num = &number_p1; return run(hud_number); }
+int draw_hud_number_p2(void) { num = &number_p2; return run(hud_number); }

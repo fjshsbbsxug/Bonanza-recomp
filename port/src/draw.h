@@ -26,6 +26,8 @@ int  draw_hex_digits(void);     /* sub_11EA8 */
 int  draw_vram_copy(void);      /* sub_28200 */
 int  draw_hud_frame(void);      /* sub_1044A */
 int  draw_hud_stage_name(void); /* sub_1050C */
+int  draw_hud_number_p1(void);  /* sub_11EDC */
+int  draw_hud_number_p2(void);  /* sub_11FB8 */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);
