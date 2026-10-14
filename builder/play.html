@@ -33,8 +33,8 @@
         parent.postMessage({ type: 'bbro-play-error' }, '*');
         return;
       }
-      /* the game's sounds, recorded from the ROM the first time it runs: kept in this
-       * browser (IndexedDB) and put back for the next start */
+      /* the game's sounds: made by the build (sounds.bbs next to the game), or recorded
+       * from the ROM the first time it runs and kept in this browser (IndexedDB) */
       const SOUNDS = {
         db: () => new Promise((ok, bad) => {
           const r = indexedDB.open('bonanza-recomp', 1);
@@ -46,8 +46,12 @@
             const db = await SOUNDS.db();
             const data = await new Promise(ok => { const q = db.transaction('files').objectStore('files').get('sounds.bbs');
               q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); });
-            if (data) FS.writeFile('/sounds.bbs', new Uint8Array(data));
-          } catch (e) { /* no storage: recorded again */ }
+            if (data) { FS.writeFile('/sounds.bbs', new Uint8Array(data)); return; }
+          } catch (e) { /* no storage */ }
+          try {                      /* made by the build, next to the game */
+            const r = await fetch(src.replace(/[^/]*$/, '') + 'sounds.bbs');
+            if (r.ok) { FS.writeFile('/sounds.bbs', new Uint8Array(await r.arrayBuffer())); SOUNDS.save(FS, '/sounds.bbs'); }
+          } catch (e) { /* not there: recorded */ }
         },
         async save(FS, path) {
           try {

@@ -134,3 +134,25 @@ if(BONANZA_HEADLESS)
   add_executable(bonanza-headless src/main_headless.c)
   target_link_libraries(bonanza-headless bonanza_core)
 endif()
+
+# The game's sounds, recorded from the ROM by the build (sounds.bbs next to the game), so
+# the game does not record them on its first start. The file depends only on the ROM:
+# a cross build (Windows, web) can take the one a native build made (BONANZA_SOUNDS).
+# Without either the game records them itself the first time.
+set(BONANZA_ROM "${CMAKE_CURRENT_SOURCE_DIR}/../baserom.md" CACHE FILEPATH "ROM the build records the sounds from")
+set(BONANZA_SOUNDS "" CACHE FILEPATH "sounds.bbs made already (used as it is)")
+set(SOUNDS_OUT "${CMAKE_CURRENT_BINARY_DIR}/sounds.bbs")
+if(BONANZA_SOUNDS)
+  add_custom_command(OUTPUT ${SOUNDS_OUT}
+    COMMAND ${CMAKE_COMMAND} -E copy ${BONANZA_SOUNDS} ${SOUNDS_OUT}
+    DEPENDS ${BONANZA_SOUNDS}
+    COMMENT "Copying the game's sounds")
+  add_custom_target(sounds ALL DEPENDS ${SOUNDS_OUT})
+elseif(BONANZA_HEADLESS AND NOT CMAKE_CROSSCOMPILING AND EXISTS ${BONANZA_ROM})
+  add_custom_command(OUTPUT ${SOUNDS_OUT}
+    COMMAND bonanza-headless ${BONANZA_ROM} --make-sounds ${SOUNDS_OUT}
+    DEPENDS ${BONANZA_ROM} src/sndrec.c src/sndbank.c ext/nuked-opn2/ym3438.c src/psg.c gen/z80_driver.c
+    COMMENT "Recording the game's sounds from the ROM (a minute or two)")
+  add_custom_target(sounds ALL DEPENDS ${SOUNDS_OUT})
+  add_dependencies(sounds bonanza-headless)
+endif()

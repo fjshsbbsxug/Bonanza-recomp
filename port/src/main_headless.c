@@ -4,6 +4,8 @@
  *                        [--hash] [--picture-hash] [--wav file.wav] [--sounds bank]
  * --sounds: play the recorded sounds from that file (recorded there first if it is not
  * there yet) instead of running the sound hardware.
+ *   bonanza-headless ROM --make-sounds FILE: only record the sounds into FILE (the build
+ *   does this: see CMakeLists.txt).
  *
  * buttons: any of U D L R A B C S (S = Start). An input entry stays active until the next one
  * for the same pad.
@@ -107,6 +109,23 @@ int main(int argc, char **argv)
     const char *err = md_rom_check(buf, n);
     if (err) { fprintf(stderr, "%s\n", err); return 1; }
     md_load_rom(buf, n);
+
+    /* --make-sounds FILE: only record the game's sounds (the build does this, so the
+     * game does not have to on its first start) */
+    if (argc >= 4 && !strcmp(argv[2], "--make-sounds")) {
+        md_reset();
+        sndrec *r = snd_record_start(argv[3]);
+        if (!r) { fprintf(stderr, "could not write %s\n", argv[3]); return 1; }
+        int res, last = -1, done, total;
+        while ((res = snd_record_step(r, 600)) == 0) {
+            snd_record_progress(r, &done, &total);
+            if (done != last) { fprintf(stderr, "\rrecording the sounds: %d / %d", done, total); last = done; }
+        }
+        snd_record_free(r);
+        fprintf(stderr, "\n");
+        if (res < 0) { fprintf(stderr, "could not write %s\n", argv[3]); remove(argv[3]); return 1; }
+        return 0;
+    }
 
     int frames = 600, hash = 0, picture_hash = 0;
     const char *dumpvdp = NULL;

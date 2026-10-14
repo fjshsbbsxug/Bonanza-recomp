@@ -212,9 +212,10 @@ static void save_rom_copy(const uint8_t *data, size_t size)
     }
 }
 
-/* The game's sounds, recorded from the ROM the first time (sndrec.c) and played back
- * (sndmix.c): no sound hardware runs while the game plays. On the web the page keeps the
- * file (IndexedDB) and puts it back before the game starts. */
+/* The game's sounds, recorded from the ROM (sndrec.c) by the build (sounds.bbs next to
+ * the program) or else the first time the game starts, and played back (sndmix.c): no
+ * sound hardware runs while the game plays. On the web the page fetches the build's
+ * file or keeps the recorded one (IndexedDB) and puts it there before the game starts. */
 static void start_sounds(void)
 {
     if (snd_ready() || recording)
@@ -223,10 +224,23 @@ static void start_sounds(void)
 #ifdef __EMSCRIPTEN__
         snprintf(sounds_path, sizeof(sounds_path), "/sounds.bbs");
 #else
-        char *pref = SDL_GetPrefPath(APP_ORG, APP_NAME);
-        snprintf(sounds_path, sizeof(sounds_path), "%ssounds.bbs", pref ? pref : "");
-        SDL_free(pref);
+        /* made by the build, next to the program; else recorded once into the user
+         * data folder */
+        char *base = SDL_GetBasePath();
+        if (base) {
+            snprintf(sounds_path, sizeof(sounds_path), "%ssounds.bbs", base);
+            SDL_free(base);
+        }
+        if (!sounds_path[0] || !file_exists(sounds_path) || !snd_open(sounds_path)) {
+            char *pref = SDL_GetPrefPath(APP_ORG, APP_NAME);
+            snprintf(sounds_path, sizeof(sounds_path), "%ssounds.bbs", pref ? pref : "");
+            SDL_free(pref);
+        }
 #endif
+    }
+    if (snd_ready()) {
+        SDL_Log("sounds: %s", sounds_path);
+        return;
     }
     if (snd_open(sounds_path)) {
         SDL_Log("sounds: %s", sounds_path);

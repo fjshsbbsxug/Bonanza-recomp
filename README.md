@@ -318,6 +318,17 @@ cmake -S port -B build-win -DBONANZA_FETCH_SDL=ON \
       -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake           # Windows (cross)
 emcmake cmake -S port -B build-web -DBONANZA_FETCH_SDL=ON           # Web
 (cd port/android && ./gradlew assembleRelease)                      # Android APK
+```
+
+A native build also records the game's sounds from `baserom.md` (`-DBONANZA_ROM=...`
+for another place) into `sounds.bbs` next to the program, about two minutes, again only
+when the ROM or the sound code changes; ship it with the game and the game does not
+record them on its first start. The file depends only on the ROM, so the cross builds
+take the native build's: `-DBONANZA_SOUNDS=build/sounds.bbs` (the web page fetches
+`sounds.bbs` from next to `bonanza.js`). Without one the game records them itself the
+first time. `bonanza-headless ROM --make-sounds FILE` does the recording alone.
+
+```sh
 
 # regression check: state hashes (and --wav audio) must stay as recorded before a change
 build/bonanza-headless baserom.md --frames 1500 --hash > a.txt
