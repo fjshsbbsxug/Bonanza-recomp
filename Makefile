@@ -43,6 +43,7 @@ disasm:
 # Regenerate the recompiled C code of the native port (port/gen/).
 recomp:
 	$(PYTHON) tools/recomp.py
+	$(PYTHON) tools/z80recomp.py
 
 # Build the native port for this machine (needs CMake and SDL2).
 port:

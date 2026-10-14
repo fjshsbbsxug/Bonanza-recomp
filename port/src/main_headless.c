@@ -18,6 +18,8 @@
 #include "extrastages.h"
 #include "md.h"
 #include "cheats.h"
+#include "z80recomp.h"
+extern unsigned long z80_stat_interp;
 #include "vdp.h"
 #include "settings.h"
 #include "net.h"
@@ -266,5 +268,6 @@ int main(int argc, char **argv)
     if (wf) { wav_header(wf, 48000, wav_frames); fclose(wf); }
     fprintf(stderr, "instructions: recompiled %llu, interpreted %llu\n",
             (unsigned long long)cpu_stat_recomp_insns, (unsigned long long)cpu_stat_interp_insns);
+    fprintf(stderr, "z80 instructions: recompiled %lu, interpreted %lu\n", z80r_insns, z80_stat_interp);
     return 0;
 }

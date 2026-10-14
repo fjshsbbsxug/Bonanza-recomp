@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "extrastages.h"
+#include "z80recomp.h"
 #include "cheats.h"
 #include "md.h"
 #include "vdp.h"
@@ -27,6 +28,9 @@ static uint64_t ym_time;             /* master clock the YM has been run up to *
 static int      ym_phase;            /* 0..23 clock within the current sample */
 static int32_t  ym_acc[2];
 static int      z80_line_cyc;        /* Z80 cycles executed in this line */
+static int      zram_dirty = 1;      /* the programs' part of Z80 RAM may have changed */
+static int      z80_prog = -1;       /* the Z80 program in RAM (z80recomp.h), -1: none known */
+unsigned long   z80_stat_interp;     /* Z80 instructions run by the interpreter */
 
 /* audio output */
 static int      out_rate = 48000;
@@ -129,6 +133,7 @@ static void z80_bus_write(uint32_t a, uint8_t v, uint64_t t)
     a &= 0xFFFF;
     if (a < 0x4000) {
         md.zram[a & 0x1FFF] = v;
+        if ((a & 0x1FFF) < Z80R_LEN) zram_dirty = z80r_code_changed = 1;
     } else if (a < 0x6000) {
         ym_write(t, a & 3, v);
     } else if (a < 0x6100) {
@@ -147,6 +152,17 @@ static uint8_t zin(z80 *z, uint8_t p) { (void)z; (void)p; return 0xFF; }
 static void zout(z80 *z, uint8_t p, uint8_t v) { (void)z; (void)p; (void)v; }
 
 static int z80_running(void) { return !md.z80_busreq && !md.z80_reset; }
+
+/* the Z80's programs (the sound driver the 68000 copies at boot and never changes, the
+ * boot stub before it) run as recompiled code (tools/z80recomp.py) */
+static int z80_program(void)
+{
+    if (zram_dirty) {
+        z80_prog = z80r_program(md.zram);
+        zram_dirty = 0;
+    }
+    return z80_prog;
+}
 
 static void z80_do_reset(void)
 {
@@ -352,6 +368,7 @@ void md_reset(void)
 {
     memset(md.ram, 0, sizeof(md.ram));
     memset(md.zram, 0, sizeof(md.zram));
+    zram_dirty = 1;
     memset(md.io_data, 0, sizeof(md.io_data));
     memset(md.io_ctrl, 0, sizeof(md.io_ctrl));
     md.z80_busreq = 0;
@@ -383,9 +400,21 @@ void md_run_frame(void)
         cpu_run(MD_CYC68K_LINE);
         if (z80_running()) {
             while (z80_line_cyc < MD_CYCZ80_LINE) {
-                unsigned long c0 = zcpu.cyc;
+                if (md.use_recomp && z80_program() >= 0) {
+                    int r = z80r_run(z80_prog, &zcpu, &z80_line_cyc, MD_CYCZ80_LINE);
+                    if (r == 1) break;
+                    if (r == 2) continue;         /* its code was written: look again */
+                }
+                if (z80_line_cyc >= MD_CYCZ80_LINE)
+                    break;
+#ifdef Z80_INTERP_TRACE
+                { static unsigned char seen[0x10000]; if (!seen[zcpu.pc]) { seen[zcpu.pc] = 1;
+                  fprintf(stderr, "z80 interp %04x program=%d halted=%d frame=%u\n", zcpu.pc, z80_program(), zcpu.halted, md.frame); } }
+#endif
+                unsigned long c0 = zcpu.cyc;      /* not the driver's code: the interpreter */
                 z80_step(&zcpu);
                 z80_line_cyc += (int)(zcpu.cyc - c0);
+                z80_stat_interp++;
             }
             z80_line_cyc -= MD_CYCZ80_LINE;
         }

@@ -56,13 +56,34 @@ builder/      the HTML builder page
   each instruction into C. It does this by partially evaluating the reference
   interpreter's (Musashi) handler for that opcode, so the opcode, registers, extension
   words and cycle counts become constants. Branches, calls and returns become C control
-  flow. Of the 19,580 traced instructions, 99.7% are translated. The rest (`rte`, status
-  register writes, `stop`) call the interpreter, which also runs any code that isn't
-  traced (such as the HBlank stub the game copies to RAM).
+  flow. All 19,580 traced instructions are translated: `rte`, the status register
+  writes, `stop` and `move usp` are written out with the interpreter handler's steps
+  and cycles. The HBlank vector's `jmp` that the game keeps in RAM (0xFFC0B0) runs
+  natively too. Code that the port changes while running is not interpreted either:
+  only bytes of traced instructions switch recompiled code off (data changes don't),
+  operands that the port changes (a level mod's frame table, the stage select code's
+  menu) are read from the ROM buffer (`LIVE` in recomp.py), and a level mod's own
+  routines past the cartridge's end (Bonanza Maker's tile loaders and start routines)
+  are filled into instruction forms recomp.py generates with open operands
+  (`port/gen/recomp_slot.c`, `port/src/slotcode.c`). Only code in other shapes (a
+  hand-made mod) would still go to the interpreter.
+* `tools/z80recomp.py` does the same for the Z80: the sound driver the 68000 copies at
+  boot (0x118B bytes from ROM 0x33000, traced from the reset and interrupt entries,
+  its RST vectors and three jump tables: 1,803 instructions) and the boot stub before
+  it become C (`port/gen/z80_driver.c`). Each instruction is its opcode's case from the
+  Z80 core (port/ext/z80/z80.c) with its operand bytes built in; calls and returns use
+  the real stack in Z80 RAM and a dispatch switch; after each instruction the core's
+  interrupt check runs and the line's cycle count is updated as in md.c's step loop.
+  md.c runs the program it finds in Z80 RAM (`z80r_program`); writing over its code
+  bytes makes it look again. The sound chips (YM2612, PSG) and the graphics chip are
+  still simulated: the game's code drives them.
 * The recompiled code yields to the scheduler at exactly the points the interpreter
   does. A recompiled run is therefore **bit-identical** to an interpreted one; this was
   checked frame by frame over the attract mode, menus, and gameplay on x86-64, Windows
-  (MinGW build under Wine), ARM64 and ARMv7.
+  (MinGW build under Wine), ARM64 and ARMv7, and for the Z80 also by comparing the
+  audio output byte for byte (music, effects, the DAC voice samples). The headless
+  runner prints how many instructions ran recompiled and interpreted on each CPU
+  (0 interpreted for the game, its mods made with Bonanza Maker and the Lost Levels).
 * **Widescreen and custom colours.** An in-game menu (Esc, gamepad Back, or MENU on
   touch screens) and the builder's *Screen & colors* step offer:
   * 4:3, 16:9, 16:10 and 21:9 output. Widescreen draws more of the room from video
