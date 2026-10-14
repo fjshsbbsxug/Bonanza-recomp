@@ -9,6 +9,10 @@ ENTRY_POINTS = [
     # sub_24536 (coffee breaks): tile loaders picked from tbl_246A6 by the stage number
     # (lea tbl(pc),a0 / movea.l (a0,d0.w),a0 / jsr (a0)); its first entry is 0
     0x246B6, 0x24720, 0x2478A,
+    # the ending (stage entry 14): reached only through the stage table at 0x1133A
+    # (sub_11106: movea.l #tbl,a0 / movea.l (a0,d0.w),a0 / jmp (a0)), whose last entry
+    # the table scan does not reach
+    0x23948,
 ]
 
 # Extra jump tables: (address, kind) where kind is
