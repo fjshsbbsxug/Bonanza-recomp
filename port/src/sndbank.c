@@ -1,15 +1,20 @@
-/* The recorded sounds: file format and codec.
+/* The recorded sounds: file format and codecs.
  *
  * File (all little-endian):
- *   "BBSND001", u32 rate, u32 directory offset, then the coded blocks; the directory:
- *   u32 count, per sound: u8 id, u8 kind, u8 channels, u8 0, u32 len, i32 loop, and per
- *   part: u32 len, u32 blocks, u32 offset of its block table (u32 offsets of its blocks
- *   from the file start).
- * Blocks hold SB_BLOCK stereo samples, coded losslessly (below), so any block can be
- * decoded on its own (looping, starting anywhere). */
+ *   "BBSND001" (lossless) or "BBSND002" (Opus), u32 rate, u32 directory offset, then the
+ *   coded blocks; the directory: u32 count (BBSND002: then u32 the Opus delay), per
+ *   sound: u8 id, u8 kind, u8 channels, u8 0, u32 len, i32 loop, and per part: u32 len,
+ *   u32 blocks, u32 offset of its block table (u32 offsets of its blocks from the file
+ *   start).
+ * Lossless blocks hold SB_BLOCK stereo samples (codec below), so any block can be decoded
+ * on its own (looping, starting anywhere). Opus blocks are packets of SB_FRAME samples
+ * (u16 length, the packet) at 48 kHz: the player decodes them in order, and from a few
+ * packets before when it jumps. A part's Opus output lags it by the delay. Opus keeps
+ * the file small enough to ship with the game (about a sixth of the lossless size). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <opus.h>
 #include "sndbank.h"
 
 /* ---------------------------------------------------------------- codec
@@ -206,10 +211,15 @@ int sb_load(sb_bank *b, const char *path)
     if (!b->file || fread(b->file, 1, (size_t)size, f) != (size_t)size) { fclose(f); sb_free(b); return -1; }
     fclose(f);
     const uint8_t *p = b->file;
-    if (memcmp(p, "BBSND001", 8) || get32(p + 8) != SB_RATE) { sb_free(b); return -1; }
+    if (!memcmp(p, "BBSND001", 8)) b->codec = SB_LOSSLESS;
+    else if (!memcmp(p, "BBSND002", 8)) b->codec = SB_OPUS;
+    else { sb_free(b); return -1; }
+    b->rate = get32(p + 8);
+    if (b->rate < 8000 || b->rate > 96000) { sb_free(b); return -1; }
     uint32_t dir = get32(p + 12);
-    if (dir + 4 > (uint32_t)size) { sb_free(b); return -1; }
+    if (dir + 8 > (uint32_t)size) { sb_free(b); return -1; }
     uint32_t n = get32(p + dir), o = dir + 4;
+    if (b->codec == SB_OPUS) { b->delay = get32(p + o); o += 4; }
     if (n > sizeof(b->sound) / sizeof(b->sound[0])) { sb_free(b); return -1; }
     for (uint32_t i = 0; i < n; i++) {
         if (o + 12 + 12 * SB_STEMS > (uint32_t)size) { sb_free(b); return -1; }
@@ -243,6 +253,23 @@ void sb_free(sb_bank *b)
     memset(b, 0, sizeof(*b));
 }
 
+int sb_decoder_size(void) { return opus_decoder_get_size(2); }
+
+void sb_decoder_reset(void *dec)
+{
+    opus_decoder_init((OpusDecoder *)dec, 48000, 2);
+}
+
+int sb_decode_packet(void *dec, const sb_stem *st, uint32_t k, int16_t *pcm)
+{
+    if (k >= st->nblocks) { memset(pcm, 0, SB_FRAME * 4); return 0; }
+    const uint8_t *q = st->data + st->block_off[k];
+    int len = q[0] | q[1] << 8;
+    int n = opus_decode((OpusDecoder *)dec, q + 2, len, pcm, SB_FRAME, 0);
+    if (n != SB_FRAME) { memset(pcm, 0, SB_FRAME * 4); return -1; }
+    return 0;
+}
+
 /* ---------------------------------------------------------------- writing */
 
 typedef struct { uint8_t id, kind, channels; uint32_t len; int32_t loop; uint32_t slen[SB_STEMS], nb[SB_STEMS], tab[SB_STEMS]; } wsound;
@@ -251,8 +278,17 @@ struct sb_writer {
     FILE *f;
     uint32_t pos;
     int n;
+    int opus;
+    uint32_t delay;
     wsound s[96];
 };
+
+int sb_write_lossless;
+uint32_t sb_write_rate(void) { return sb_write_lossless ? 44100 : 48000; }
+
+/* per stereo part: songs 96 kbit/s; effects and voices (short, sharp) 160 */
+#define OPUS_BITRATE_SONG  96000
+#define OPUS_BITRATE_OTHER 160000
 
 static void wbytes(sb_writer *w, const void *p, size_t n) { fwrite(p, 1, n, w->f); w->pos += (uint32_t)n; }
 
@@ -262,9 +298,10 @@ sb_writer *sb_write_begin(const char *path)
     if (!w) return 0;
     w->f = fopen(path, "wb");
     if (!w->f) { free(w); return 0; }
+    w->opus = !sb_write_lossless;
     uint8_t h[16];
-    memcpy(h, "BBSND001", 8);
-    put32(h + 8, SB_RATE);
+    memcpy(h, w->opus ? "BBSND002" : "BBSND001", 8);
+    put32(h + 8, sb_write_rate());
     put32(h + 12, 0);
     wbytes(w, h, 16);
     return w;
@@ -281,6 +318,39 @@ void sb_write_sound(sb_writer *w, uint8_t id, uint8_t kind, uint8_t channels, ui
         int any = 0;
         for (uint32_t i = 0; stems[k] && i < len * 2 && !any; i++) any = stems[k][i] != 0;
         if (!any) continue;                      /* a silent part is not stored */
+        if (w->opus) {
+            int err;
+            OpusEncoder *enc = opus_encoder_create(48000, 2, OPUS_APPLICATION_AUDIO, &err);
+            if (!enc) continue;
+            opus_encoder_ctl(enc, OPUS_SET_BITRATE(kind == SB_SONG ? OPUS_BITRATE_SONG : OPUS_BITRATE_OTHER));
+            opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(10));
+            opus_encoder_ctl(enc, OPUS_SET_SIGNAL(OPUS_SIGNAL_MUSIC));
+            opus_int32 la = 0;
+            opus_encoder_ctl(enc, OPUS_GET_LOOKAHEAD(&la));
+            w->delay = (uint32_t)la;
+            /* the decoder's output lags by the delay: frames to cover it, the rest silence */
+            uint32_t nb = (len + (uint32_t)la + SB_FRAME - 1) / SB_FRAME;
+            uint32_t *off = malloc(4 * nb);
+            static int16_t frame[SB_FRAME * 2];
+            static uint8_t pk[4000];
+            for (uint32_t j = 0; j < nb; j++) {
+                uint32_t a = j * SB_FRAME;
+                memset(frame, 0, sizeof(frame));
+                if (a < len) memcpy(frame, stems[k] + a * 2, (size_t)(len - a < SB_FRAME ? len - a : SB_FRAME) * 4);
+                opus_int32 n = opus_encode(enc, frame, SB_FRAME, pk + 2, (opus_int32)sizeof(pk) - 2);
+                if (n < 0) n = 0;
+                pk[0] = (uint8_t)n; pk[1] = (uint8_t)(n >> 8);
+                off[j] = w->pos;
+                wbytes(w, pk, (size_t)n + 2);
+            }
+            opus_encoder_destroy(enc);
+            s->slen[k] = len;
+            s->nb[k] = nb;
+            s->tab[k] = w->pos;
+            for (uint32_t j = 0; j < nb; j++) { uint8_t q[4]; put32(q, off[j]); wbytes(w, q, 4); }
+            free(off);
+            continue;
+        }
         uint32_t nb = (len + SB_BLOCK - 1) / SB_BLOCK;
         uint32_t *off = malloc(4 * nb);
         for (uint32_t j = 0; j < nb; j++) {
@@ -302,6 +372,7 @@ int sb_write_end(sb_writer *w)
     uint8_t q[16];
     put32(q, (uint32_t)w->n);
     wbytes(w, q, 4);
+    if (w->opus) { put32(q, w->delay); wbytes(w, q, 4); }
     for (int i = 0; i < w->n; i++) {
         wsound *s = &w->s[i];
         q[0] = s->id; q[1] = s->kind; q[2] = s->channels; q[3] = 0;

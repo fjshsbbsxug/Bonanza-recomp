@@ -115,7 +115,8 @@ builder/      the HTML builder page
   port plays every sound the game can ask for (songs 0x81-0x8C, effects 0x98-0xBD,
   voices E4/E5) alone through the game's own driver and sound chips (`md_snd_*`: the
   driver loaded as sub_02C76 does it) and stores it losslessly (FLAC-style fixed
-  predictors and Rice codes, 44.1 kHz) in four parts: FM5, FM6, PSG3 + noise (the
+  predictors and Rice codes, 44.1 kHz; the build's and new recordings in Opus: 48 kHz,
+  songs 96 kbit/s, effects and voices 160 kbit/s per part, about 22 MB in all) in four parts: FM5, FM6, PSG3 + noise (the
   channels the game's effects take over) and the rest. Where a song repeats is found from
   the driver's state in Z80 RAM (the same tracks, timers and loops as at an earlier
   moment). While the game plays, the 68000's writes to the driver's mailbox (Z80 RAM
@@ -322,11 +323,13 @@ emcmake cmake -S port -B build-web -DBONANZA_FETCH_SDL=ON           # Web
 
 A native build also records the game's sounds from `baserom.md` (`-DBONANZA_ROM=...`
 for another place) into `sounds.bbs` next to the program, about two minutes, again only
-when the ROM or the sound code changes; ship it with the game and the game does not
+when the ROM or the sound code changes (Opus, about 22 MB; the libopus source is fetched
+by CMake, `-DBONANZA_OPUS_URL=` for another place); ship it with the game and the game does not
 record them on its first start. The file depends only on the ROM, so the cross builds
 take the native build's: `-DBONANZA_SOUNDS=build/sounds.bbs` (the web page fetches
 `sounds.bbs` from next to `bonanza.js`). Without one the game records them itself the
-first time. `bonanza-headless ROM --make-sounds FILE` does the recording alone.
+first time. `bonanza-headless ROM --make-sounds FILE` does the recording alone (`--lossless`: the
+lossless format, which the reference runs use).
 
 ```sh
 

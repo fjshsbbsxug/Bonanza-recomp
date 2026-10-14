@@ -27,6 +27,22 @@ list(APPEND CORE_SOURCES ${RECOMP_SOURCES} src/slotcode.c src/draw.c)
 
 add_library(bonanza_core STATIC ${CORE_SOURCES})
 target_include_directories(bonanza_core PUBLIC src ext/musashi)
+
+# Opus: the game's recorded sounds are kept in it (sndbank.c)
+set(BONANZA_OPUS_URL "https://github.com/xiph/opus/releases/download/v1.5.2/opus-1.5.2.tar.gz"
+    CACHE STRING "libopus source archive")
+include(FetchContent)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+if(EMSCRIPTEN)
+  set(OPUS_DISABLE_INTRINSICS ON CACHE BOOL "" FORCE)
+endif()
+FetchContent_Declare(opus URL ${BONANZA_OPUS_URL})
+FetchContent_MakeAvailable(opus)
+target_link_libraries(bonanza_core PUBLIC opus)
 if(MSVC)
   target_compile_options(bonanza_core PRIVATE /W0)
 else()
@@ -145,8 +161,8 @@ if(BONANZA_HEADLESS)
   target_link_libraries(bonanza-headless bonanza_core)
 endif()
 
-# The game's sounds, recorded from the ROM by the build (sounds.bbs next to the game), so
-# the game does not record them on its first start. The file depends only on the ROM:
+# The game's sounds, recorded from the ROM by the build (sounds.bbs next to the game, in
+# Opus: about 17 MB), so the game does not record them on its first start. The file depends only on the ROM:
 # a cross build (Windows, web) can take the one a native build made (BONANZA_SOUNDS).
 # Without either the game records them itself the first time.
 set(BONANZA_ROM "${CMAKE_CURRENT_SOURCE_DIR}/../baserom.md" CACHE FILEPATH "ROM the build records the sounds from")

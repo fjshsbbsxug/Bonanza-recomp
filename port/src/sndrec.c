@@ -133,12 +133,12 @@ static int sound_frame(sndrec *r)
     int f = r->f++;
     if (f >= MAX_SECONDS * 60) return 1;
     if (r->kind == SB_VOICE)
-        return f > 20 && silent_tail(&r->out, SB_RATE / 10);
+        return f > 20 && silent_tail(&r->out, sb_write_rate() / 10);
     r->used |= effect_parts();
     if (!r->ended && f > 8 && (r->kind == SB_SONG ? !music_playing() : !effect_parts()))
         r->ended = f;                      /* the last note: let it fade */
     if (r->ended)
-        return silent_tail(&r->out, SB_RATE / 20) || f - r->ended > 120;
+        return silent_tail(&r->out, sb_write_rate() / 20) || f - r->ended > 120;
     if (memcmp(r->prev, md.zram + 0x1C20, sizeof(r->prev))) {
         memcpy(r->prev, md.zram + 0x1C20, sizeof(r->prev));
         r->loop = seen(r, state_hash(), r->out.len);
@@ -158,7 +158,7 @@ sndrec *snd_record_start(const char *path)
     r->ids[r->n++] = 0xE5;
     r->w = sb_write_begin(path);
     if (!r->w) { free(r); return 0; }
-    md_audio_set_rate(SB_RATE);
+    md_audio_set_rate((int)sb_write_rate());
     begin_sound(r);
     return r;
 }

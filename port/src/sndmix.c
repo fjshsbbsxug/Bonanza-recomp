@@ -12,7 +12,8 @@
  *   E0 fade out (40 steps every 6 music ticks, then everything stops), E1 stop all,
  *   E2 PSG off, E3 special effects off, E4/E5 the voices (song and effects wait);
  *   0x1C10: 1 pause (silence, everything waits), 0x80 resume.
- * Positions run at the bank's rate, resampled to the output rate. */
+ * Positions run at the bank's rate, resampled to the output rate. Opus parts are decoded
+ * packet after packet; a jump (a loop, a start) decodes from a few packets before. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,8 +24,9 @@
 
 typedef struct {               /* a recorded part being played */
     const sb_stem *st;
-    int32_t block;             /* block in buf, -1: none */
+    int32_t block;             /* block (Opus: packet) in buf, -1: none */
     int16_t buf[SB_BLOCK * 2];
+    void *dec;                 /* Opus: its decoder */
 } part;
 
 typedef struct {
@@ -45,15 +47,28 @@ static double fade_t;          /* seconds since the fade began, -1: no fade */
  * that far into it */
 static double request_delay(void)
 {
-    return md.line / 262.0 * SB_RATE * (3420.0 * 262) / 53693175.0;
+    return md.line / 262.0 * bank.rate * (3420.0 * 262) / 53693175.0;
 }
 
 static void start(voice *v, const sb_sound *s)
 {
-    memset(v, 0, sizeof(*v));
     v->s = s;
     v->pos = -request_delay();
     for (int k = 0; k < SB_STEMS; k++) { v->p[k].st = &s->stem[k]; v->p[k].block = -1; }
+}
+
+#define PREROLL 4              /* Opus packets decoded before the one wanted, after a jump */
+
+/* the Opus packet holding output sample i of the part (the delay counted in) */
+static void opus_seek(part *p, int32_t k)
+{
+    if (p->block < 0 || k != p->block + 1) {
+        sb_decoder_reset(p->dec);
+        for (int32_t j = k - PREROLL < 0 ? 0 : k - PREROLL; j < k; j++)
+            sb_decode_packet(p->dec, p->st, (uint32_t)j, p->buf);
+    }
+    sb_decode_packet(p->dec, p->st, (uint32_t)k, p->buf);
+    p->block = k;
 }
 static void stop(voice *v) { v->s = 0; }
 
@@ -61,6 +76,15 @@ static void sample(part *p, uint32_t i, int32_t *l, int32_t *r)
 {
     const sb_stem *st = p->st;
     if (!st->nblocks || i >= st->len) return;
+    if (bank.codec == SB_OPUS) {
+        uint32_t o = i + bank.delay;
+        int32_t k = (int32_t)(o / SB_FRAME);
+        if (k != p->block) opus_seek(p, k);
+        uint32_t q = o - (uint32_t)k * SB_FRAME;
+        *l += p->buf[q * 2];
+        *r += p->buf[q * 2 + 1];
+        return;
+    }
     int32_t b = (int32_t)(i / SB_BLOCK);
     if (b != p->block) {
         uint32_t a = (uint32_t)b * SB_BLOCK, n = st->len - a < SB_BLOCK ? st->len - a : SB_BLOCK;
@@ -97,10 +121,27 @@ static int play(voice *v, int mask, double step, int32_t *l, int32_t *r)
     return 1;
 }
 
+static void decoders(void)
+{
+    static void *mem;
+    if (mem) return;
+    int size = sb_decoder_size();
+    voice *all[6] = { &song, &fx[0], &fx[1], &fx[2], &fx[3], &vox };
+    mem = calloc(6 * SB_STEMS, (size_t)size);
+    if (!mem) return;
+    for (int v = 0; v < 6; v++)
+        for (int k = 0; k < SB_STEMS; k++)
+            all[v]->p[k].dec = (char *)mem + (size_t)(v * SB_STEMS + k) * (size_t)size;
+}
+
 int snd_open(const char *path)
 {
     if (have_bank) sb_free(&bank);
     have_bank = sb_load(&bank, path) == 0 && sb_find(&bank, 0x81);
+    if (have_bank && bank.codec == SB_OPUS) {
+        decoders();
+        if (!song.p[0].dec) { sb_free(&bank); have_bank = 0; }
+    }
     snd_reset();
     return have_bank;
 }
@@ -178,7 +219,7 @@ void snd_pause(uint8_t v)
 
 void snd_render(int16_t *out, int n, int rate)
 {
-    double step = (double)SB_RATE / rate;
+    double step = (double)bank.rate / rate;
     for (int i = 0; i < n; i++) {
         int32_t l = 0, r = 0;
         if (have_bank && !paused) {

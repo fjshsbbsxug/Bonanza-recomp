@@ -5,7 +5,7 @@
  * --sounds: play the recorded sounds from that file (recorded there first if it is not
  * there yet) instead of running the sound hardware.
  *   bonanza-headless ROM --make-sounds FILE: only record the sounds into FILE (the build
- *   does this: see CMakeLists.txt).
+ *   does this: see CMakeLists.txt). --lossless: record them losslessly, not in Opus.
  *
  * buttons: any of U D L R A B C S (S = Start). An input entry stays active until the next one
  * for the same pad.
@@ -26,6 +26,7 @@
 #include "z80recomp.h"
 #include "sndmix.h"
 #include "sndrec.h"
+#include "sndbank.h"
 extern unsigned long z80_stat_no_code;
 #include "vdp.h"
 #include "settings.h"
@@ -112,6 +113,8 @@ int main(int argc, char **argv)
 
     /* --make-sounds FILE: only record the game's sounds (the build does this, so the
      * game does not have to on its first start) */
+    for (int i = 2; i < argc; i++)             /* new recordings lossless, not Opus (tests) */
+        if (!strcmp(argv[i], "--lossless")) sb_write_lossless = 1;
     if (argc >= 4 && !strcmp(argv[2], "--make-sounds")) {
         md_reset();
         sndrec *r = snd_record_start(argv[3]);
@@ -141,6 +144,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--hash")) hash = 1;
         else if (!strcmp(argv[i], "--picture-hash")) picture_hash = 1;
+        else if (!strcmp(argv[i], "--lossless")) { /* above */ }
         else if (!strcmp(argv[i], "--dumpvdp") && i + 1 < argc) dumpvdp = argv[++i];
         else if (!strcmp(argv[i], "--ini") && i + 1 < argc) {
             settings_load(argv[++i]);

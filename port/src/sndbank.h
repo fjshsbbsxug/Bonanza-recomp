@@ -4,17 +4,20 @@
 #define SNDBANK_H
 #include <stdint.h>
 
-#define SB_RATE   44100            /* samples per second, stereo */
-#define SB_BLOCK  1024             /* samples per coded block */
+#define SB_RATE   48000            /* samples per second (stereo) of new recordings */
+#define SB_BLOCK  1024             /* samples per block (lossless banks) */
+#define SB_FRAME  960              /* samples per Opus packet (20 ms) */
+
+enum { SB_LOSSLESS, SB_OPUS };     /* how a bank's parts are coded */
 #define SB_STEMS  4                /* parts: other channels, FM5, FM6, PSG3 + noise */
 
 enum { SB_SONG, SB_EFFECT, SB_VOICE };
 
 typedef struct {
     uint32_t len;                  /* samples; 0: the part is silent throughout */
-    uint32_t nblocks;
+    uint32_t nblocks;              /* blocks (lossless) or packets (Opus) */
     const uint8_t *data;           /* coded blocks, one after the other */
-    uint32_t *block_off;           /* offset of each block in data */
+    uint32_t *block_off;           /* offset of each block in data (Opus: u16 length, packet) */
 } sb_stem;
 
 typedef struct {
@@ -29,6 +32,9 @@ typedef struct {
     int nsounds;
     sb_sound sound[96];
     uint8_t *file;                 /* the loaded file (the stems point into it) */
+    uint32_t rate;                 /* samples per second */
+    int codec;                     /* SB_LOSSLESS, SB_OPUS */
+    uint32_t delay;                /* Opus: the decoder's output lags the sound by this */
 } sb_bank;
 
 /* the sound with this id, or 0 */
@@ -43,8 +49,15 @@ void sb_free(sb_bank *b);
 int  sb_encode_block(const int16_t *pcm, int n, uint8_t *out);
 void sb_decode_block(const uint8_t *in, int16_t *pcm, int n);
 
-/* writing a bank: start, add parts, finish */
+/* Opus packets of a part: decoding (dec: an OpusDecoder of sb_decoder_size() bytes) */
+int  sb_decoder_size(void);
+void sb_decoder_reset(void *dec);
+int  sb_decode_packet(void *dec, const sb_stem *st, uint32_t k, int16_t *pcm);   /* SB_FRAME stereo */
+
+/* writing a bank: start (Opus, or lossless), add parts, finish */
 typedef struct sb_writer sb_writer;
+extern int sb_write_lossless;      /* new banks lossless (44.1 kHz) rather than Opus */
+uint32_t sb_write_rate(void);      /* the rate new banks are recorded at */
 sb_writer *sb_write_begin(const char *path);
 void sb_write_sound(sb_writer *w, uint8_t id, uint8_t kind, uint8_t channels, uint32_t len, int32_t loop,
                     int16_t *const stems[SB_STEMS]);
