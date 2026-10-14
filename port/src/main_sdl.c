@@ -16,6 +16,7 @@
 #include "net.h"
 #include "gamemods.h"
 #include "extrastages.h"
+#include "cheats.h"
 #include "vdp.h"
 #include "menu.h"
 #include "mods.h"
@@ -887,6 +888,7 @@ static void run_one(void)
             md.pad[p] = key_pad[p] | ctl_pad[p] | (p == 0 ? touch_pad : 0);
         }
         md_run_frame();
+        cheat_frame();                          /* offline only: title-screen codes */
         int16_t buf[2048 * 2 + 64];
         int n;
         while ((n = md_audio_take(buf, 2048)) > 0)

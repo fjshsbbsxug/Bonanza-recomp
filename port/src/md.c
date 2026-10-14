@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "extrastages.h"
+#include "cheats.h"
 #include "md.h"
 #include "vdp.h"
 #include "psg.h"
@@ -364,6 +365,7 @@ void md_reset(void)
     master_line_start = ym_time = 0;
     ym_phase = 0;
     xs_reset();
+    cheat_reset();
     cpu_init();
     cpu_reset();
 }

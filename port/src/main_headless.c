@@ -17,6 +17,7 @@
 #include <string.h>
 #include "extrastages.h"
 #include "md.h"
+#include "cheats.h"
 #include "vdp.h"
 #include "settings.h"
 #include "net.h"
@@ -225,6 +226,7 @@ int main(int argc, char **argv)
                 md.ram[(pokes[k].addr & 0xFFFE) + 1] = pokes[k].val;
             }
         md_run_frame();
+        cheat_frame();                          /* does nothing in an online game */
         int16_t abuf[4096 * 2];
         int got;
         while ((got = md_audio_take(abuf, 4096)) > 0) {

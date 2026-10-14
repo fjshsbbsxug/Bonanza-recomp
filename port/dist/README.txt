@@ -36,6 +36,13 @@ on-screen pad is shown; it hides while you use a controller and comes back when 
 touch the screen.
 F11 or Alt+Enter: full screen   P: pause   F3: reset   Esc: menu
 
+Stage select (offline only): on the 1 PLAYER / 2 PLAYERS / OPTIONS menu press Left,
+Left, Right, Up, Shoot, Jump (Shoot and Jump as set in Options > CONTROL; at the start
+B and A or C). A chime plays and Options gets a STAGE line under EXIT, the stage select
+the cartridge has but never shows: stages 1-10, the three coffee breaks (COFFEE) and the
+ending. Pick one, go to EXIT and start a game: it starts there. It lasts until the game
+is reset (F3) or closed, and does nothing in an online game.
+
 Menu: screen shape & colours
 ----------------------------
 Open the menu with Esc, F1, Tab or a right click; Back/Guide on a gamepad; the Back

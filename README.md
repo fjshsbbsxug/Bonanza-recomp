@@ -206,6 +206,15 @@ builder/      the HTML builder page
     colours only they use; feet give the lane). `LC.placeDetectedCollision` and
     `LC.placeDetectedPeople` put them into the level through the Trace tab's mapping.
 
+  * *Stage select code* (`port/src/cheats.c`): the Options menu's sixth item STAGE
+    (`sub_03E52` / `sub_03F48`, writes the stage number 0xFFC05A, which a new game keeps)
+    is in the cartridge but unreachable: the cursor wraps after EXIT and the menu never
+    draws it. Left, Left, Right, Up, Shoot, Jump on the title menu (0xFFC068 ==
+    `sub_037C0`, 0xFF6C5C == 0; buttons from the remapped newly-pressed bytes 0xFF17C1/C3)
+    patches the wrap immediates at 0x3C24 and 0x3C44 to 5 and the "draw EXIT" call at
+    0x3B08 to a helper in the unused debug text at 0x121C (`jsr 0x11F2` / `jmp 0x3F48`).
+    Only called from frames the front end runs on its own (not online); undone at
+    `md_reset` (the boot code checksums the ROM).
   * *Extra stages* (`port/src/extrastages.c`, "New stage" in Bonanza Maker): new stages
     between the cartridge's own, e.g. the two arcade stages the Mega Drive left out
     (`tools/lostlevels/make.js ROM` builds `LostLevels.bbro` from your ROM: the arcade's
