@@ -120,10 +120,15 @@ static void interp_step(void)
         }
     }
 #endif
-    if (game_hooks && (REG_PC == GAME_HOOK_VISIBILITY || REG_PC == GAME_HOOK_SPRITES || REG_PC == GAME_HOOK_STAGE) && game_hook(REG_PC)) {
-        REG_PC = m68ki_pull_32();      /* the routine was handled: return from it */
-        USE_CYCLES(16);
-        return;
+    if (game_hooks && (REG_PC == GAME_HOOK_VISIBILITY || REG_PC == GAME_HOOK_SPRITES || REG_PC == GAME_HOOK_STAGE ||
+                       REG_PC == GAME_HOOK_MENU)) {
+        int h = game_hook(REG_PC);
+        if (h == 1) {
+            REG_PC = m68ki_pull_32();  /* the routine was handled: return from it */
+            USE_CYCLES(16);
+            return;
+        }
+        if (h == 2) return;            /* the hook set where to go on */
     }
     REG_PPC = REG_PC;
     REG_IR = m68ki_read_imm_16();

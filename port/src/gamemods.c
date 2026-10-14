@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include "gamemods.h"
 #include "extrastages.h"
+#include "cheats.h"
 #include "md.h"
 #include "settings.h"
 #include "vdp.h"
@@ -53,6 +54,7 @@ static int on_players_floor(int o, int v)
 int game_hook(uint32_t pc)
 {
     if (pc == GAME_HOOK_STAGE) { xs_hook(); return 0; }     /* extra stages (mods) */
+    if (pc == GAME_HOOK_MENU) return cheat_menu_hook();       /* stage select code */
     if (!settings.floor_alert) return 0;
     int o = REG_D[0] & 0xFFFF;
     if (o >= 0x56 * 2 || (o & 1)) return 0;
@@ -86,5 +88,5 @@ int game_hook(uint32_t pc)
 
 void game_mods_apply(void)
 {
-    game_hooks = settings.floor_alert != 0 || xs_count() > 0;
+    game_hooks = settings.floor_alert != 0 || xs_count() > 0 || cheat_stage_select();
 }

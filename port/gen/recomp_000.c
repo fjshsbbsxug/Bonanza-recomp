@@ -440,8 +440,10 @@ L_000202: CHK(0x202u)  /* nop */
 	}
 	USE_CYCLES(4);
 L_000204: CHK(0x204u)  /* stop #$2700 */
-	CALLOP(0x204u, 0x4E72);
-	if (REG_PC != 0x208u) goto dispatch;
+	REG_PPC = 0x204u; REG_PC = 0x208u; REG_IR = 0x4E72;
+	if (FLAG_S) { CPU_STOPPED |= STOP_LEVEL_STOP; m68ki_set_sr(0x2700u); if (m68ki_remaining_cycles >= CYC_INSTRUCTION[0x4E72]) m68ki_remaining_cycles = CYC_INSTRUCTION[0x4E72]; else m68ki_remaining_cycles %= CYC_INSTRUCTION[0x4E72]; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E72]);
+	goto dispatch;
 L_000208: CHK(0x208u)  /* bra.b $200 */
 	USE_CYCLES(10); goto L_000200;
 L_00020A: CHK(0x20Au)  /* nop */
@@ -455,8 +457,10 @@ L_00020C: CHK(0x20Cu)  /* nop */
 	}
 	USE_CYCLES(4);
 L_00020E: CHK(0x20Eu)  /* stop #$2700 */
-	CALLOP(0x20Eu, 0x4E72);
-	if (REG_PC != 0x212u) goto dispatch;
+	REG_PPC = 0x20Eu; REG_PC = 0x212u; REG_IR = 0x4E72;
+	if (FLAG_S) { CPU_STOPPED |= STOP_LEVEL_STOP; m68ki_set_sr(0x2700u); if (m68ki_remaining_cycles >= CYC_INSTRUCTION[0x4E72]) m68ki_remaining_cycles = CYC_INSTRUCTION[0x4E72]; else m68ki_remaining_cycles %= CYC_INSTRUCTION[0x4E72]; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E72]);
+	goto dispatch;
 L_000212: CHK(0x212u)  /* bra.b $20a */
 	USE_CYCLES(10); goto L_00020A;
 L_000214: CHK(0x214u)  /* nop */
@@ -470,8 +474,10 @@ L_000216: CHK(0x216u)  /* nop */
 	}
 	USE_CYCLES(4);
 L_000218: CHK(0x218u)  /* stop #$2700 */
-	CALLOP(0x218u, 0x4E72);
-	if (REG_PC != 0x21Cu) goto dispatch;
+	REG_PPC = 0x218u; REG_PC = 0x21Cu; REG_IR = 0x4E72;
+	if (FLAG_S) { CPU_STOPPED |= STOP_LEVEL_STOP; m68ki_set_sr(0x2700u); if (m68ki_remaining_cycles >= CYC_INSTRUCTION[0x4E72]) m68ki_remaining_cycles = CYC_INSTRUCTION[0x4E72]; else m68ki_remaining_cycles %= CYC_INSTRUCTION[0x4E72]; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E72]);
+	goto dispatch;
 L_00021C: CHK(0x21Cu)  /* bra.b $214 */
 	USE_CYCLES(10); goto L_000214;
 L_00021E: CHK(0x21Eu)  /* tst.l $a10008.l */
@@ -610,7 +616,9 @@ L_000250: CHK(0x250u)  /* movea.l d0, a6 */
 	}
 	USE_CYCLES(4);
 L_000252: CHK(0x252u)  /* move a6, usp */
-	CALLOP(0x252u, 0x4E66);
+	REG_PPC = 0x252u; REG_PC = 0x254u; REG_IR = 0x4E66;
+	if (FLAG_S) REG_USP = REG_A[6]; else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E66]);
 	if (REG_PC != 0x254u) goto dispatch;
 L_000254: CHK(0x254u)  /* moveq #$17, d1 */
 	{
@@ -951,7 +959,9 @@ L_0002A2: CHK(0x2A2u)  /* movem.l (a6), d0-d7/a0-a6 */
 	}
 	USE_CYCLES(12);
 L_0002A6: CHK(0x2A6u)  /* move.w #$2700, sr */
-	CALLOP(0x2A6u, 0x46FC);
+	REG_PPC = 0x2A6u; REG_PC = 0x2AAu; REG_IR = 0x46FC;
+	if (FLAG_S) m68ki_set_sr(0x2700u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46FC]);
 	if (REG_PC != 0x2AAu) goto dispatch;
 L_0002AA: CHK(0x2AAu)  /* bra.b $318 */
 	USE_CYCLES(10); goto L_000318;
@@ -1514,7 +1524,9 @@ L_000450: CHK(0x450u)  /* move.w #$0, $ffc070.l */
 	}
 	USE_CYCLES(20);
 L_000458: CHK(0x458u)  /* move.w #$2300, sr */
-	CALLOP(0x458u, 0x46FC);
+	REG_PPC = 0x458u; REG_PC = 0x45Cu; REG_IR = 0x46FC;
+	if (FLAG_S) m68ki_set_sr(0x2300u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46FC]);
 	if (REG_PC != 0x45Cu) goto dispatch;
 L_00045C: CHK(0x45Cu)  /* nop */
 	{
@@ -4109,10 +4121,13 @@ L_00093C: CHK(0x93Cu)  /* movem.l d1-d2/a5, -(a7) */
 	}
 	USE_CYCLES(8);
 L_000940: CHK(0x940u)  /* move.w sr, -(a7) */
-	CALLOP(0x940u, 0x40E7);
-	if (REG_PC != 0x942u) goto dispatch;
+	REG_PPC = 0x940u; REG_PC = 0x942u; REG_IR = 0x40E7;
+	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
+	USE_CYCLES(CYC_INSTRUCTION[0x40E7]);
 L_000942: CHK(0x942u)  /* ori.w #$700, sr */
-	CALLOP(0x942u, 0x007C);
+	REG_PPC = 0x942u; REG_PC = 0x946u; REG_IR = 0x007C;
+	if (FLAG_S) m68ki_set_sr(m68ki_get_sr() | 0x700u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x007C]);
 	if (REG_PC != 0x946u) goto dispatch;
 L_000946: CHK(0x946u)  /* move.w #$100, $a11100.l */
 	{
@@ -4268,7 +4283,9 @@ L_000976: CHK(0x976u)  /* move.w #$0, $a11100.l */
 	}
 	USE_CYCLES(20);
 L_00097E: CHK(0x97Eu)  /* move.w (a7)+, sr */
-	CALLOP(0x97Eu, 0x46DF);
+	REG_PPC = 0x97Eu; REG_PC = 0x980u; REG_IR = 0x46DF;
+	if (FLAG_S) { uint ea = (REG_A[7] += 2) - 2; m68ki_set_sr(m68ki_read_16(ea)); } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46DF]);
 	if (REG_PC != 0x980u) goto dispatch;
 L_000980: CHK(0x980u)  /* movem.l (a7)+, d1-d2/a5 */
 	{
@@ -4779,7 +4796,9 @@ L_0009B2: CHK(0x9B2u)  /* move.w $ffc07a.l, $c00004.l */
 	}
 	USE_CYCLES(28);
 L_0009BC: CHK(0x9BCu)  /* move.w #$2300, sr */
-	CALLOP(0x9BCu, 0x46FC);
+	REG_PPC = 0x9BCu; REG_PC = 0x9C0u; REG_IR = 0x46FC;
+	if (FLAG_S) m68ki_set_sr(0x2300u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46FC]);
 	if (REG_PC != 0x9C0u) goto dispatch;
 L_0009C0: CHK(0x9C0u)  /* clr.w $ff17b6.l */
 	{
@@ -5702,8 +5721,10 @@ L_000C06: CHK(0xC06u)  /* move.w #$0, $ff17b4.l */
 	}
 	USE_CYCLES(20);
 L_000C0E: CHK(0xC0Eu)  /* rte */
-	CALLOP(0xC0Eu, 0x4E73);
-	if (REG_PC != 0xC10u) goto dispatch;
+	REG_PPC = 0xC0Eu; REG_PC = 0xC10u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000C10: CHK(0xC10u)  /* nop */
 	{
 		
@@ -5725,11 +5746,15 @@ L_000C16: CHK(0xC16u)  /* nop */
 	}
 	USE_CYCLES(4);
 L_000C18: CHK(0xC18u)  /* move.w #$2500, sr */
-	CALLOP(0xC18u, 0x46FC);
+	REG_PPC = 0xC18u; REG_PC = 0xC1Cu; REG_IR = 0x46FC;
+	if (FLAG_S) m68ki_set_sr(0x2500u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46FC]);
 	if (REG_PC != 0xC1Cu) goto dispatch;
 L_000C1C: CHK(0xC1Cu)  /* rte */
-	CALLOP(0xC1Cu, 0x4E73);
-	if (REG_PC != 0xC1Eu) goto dispatch;
+	REG_PPC = 0xC1Cu; REG_PC = 0xC1Eu; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000C1E: CHK(0xC1Eu)  /* move.w #$8a04, $c00004.l */
 	{
 		uint res = 0x8A04u;
@@ -5757,8 +5782,10 @@ L_000C26: CHK(0xC26u)  /* move.l #$c32, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000C30: CHK(0xC30u)  /* rte */
-	CALLOP(0xC30u, 0x4E73);
-	if (REG_PC != 0xC32u) goto dispatch;
+	REG_PPC = 0xC30u; REG_PC = 0xC32u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000C32: CHK(0xC32u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -5907,8 +5934,10 @@ L_000C90: CHK(0xC90u)  /* move.l #$e34, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000C9A: CHK(0xC9Au)  /* rte */
-	CALLOP(0xC9Au, 0x4E73);
-	if (REG_PC != 0xC9Cu) goto dispatch;
+	REG_PPC = 0xC9Au; REG_PC = 0xC9Cu; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000C9C: CHK(0xC9Cu)  /* move.w #$8a17, $c00004.l */
 	{
 		uint res = 0x8A17u;
@@ -5936,8 +5965,10 @@ L_000CA4: CHK(0xCA4u)  /* move.l #$dec, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000CAE: CHK(0xCAEu)  /* rte */
-	CALLOP(0xCAEu, 0x4E73);
-	if (REG_PC != 0xCB0u) goto dispatch;
+	REG_PPC = 0xCAEu; REG_PC = 0xCB0u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000CB0: CHK(0xCB0u)  /* move.w #$8a17, $c00004.l */
 	{
 		uint res = 0x8A17u;
@@ -5965,8 +5996,10 @@ L_000CB8: CHK(0xCB8u)  /* move.l #$d2c, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000CC2: CHK(0xCC2u)  /* rte */
-	CALLOP(0xCC2u, 0x4E73);
-	if (REG_PC != 0xCC4u) goto dispatch;
+	REG_PPC = 0xCC2u; REG_PC = 0xCC4u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000CC4: CHK(0xCC4u)  /* move.w #$8a4f, $c00004.l */
 	{
 		uint res = 0x8A4Fu;
@@ -5994,8 +6027,10 @@ L_000CCC: CHK(0xCCCu)  /* move.l #$cd8, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000CD6: CHK(0xCD6u)  /* rte */
-	CALLOP(0xCD6u, 0x4E73);
-	if (REG_PC != 0xCD8u) goto dispatch;
+	REG_PPC = 0xCD6u; REG_PC = 0xCD8u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000CD8: CHK(0xCD8u)  /* move.l #$70000002, $c00004.l */
 	{
 		uint res = 0x70000002u;
@@ -6114,8 +6149,10 @@ L_000D20: CHK(0xD20u)  /* move.l #$e7c, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000D2A: CHK(0xD2Au)  /* rte */
-	CALLOP(0xD2Au, 0x4E73);
-	if (REG_PC != 0xD2Cu) goto dispatch;
+	REG_PPC = 0xD2Au; REG_PC = 0xD2Cu; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000D2C: CHK(0xD2Cu)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -6221,8 +6258,10 @@ L_000D68: CHK(0xD68u)  /* move.l #$d74, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000D72: CHK(0xD72u)  /* rte */
-	CALLOP(0xD72u, 0x4E73);
-	if (REG_PC != 0xD74u) goto dispatch;
+	REG_PPC = 0xD72u; REG_PC = 0xD74u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000D74: CHK(0xD74u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -6302,8 +6341,10 @@ L_000DA0: CHK(0xDA0u)  /* move.l #$dac, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000DAA: CHK(0xDAAu)  /* rte */
-	CALLOP(0xDAAu, 0x4E73);
-	if (REG_PC != 0xDACu) goto dispatch;
+	REG_PPC = 0xDAAu; REG_PC = 0xDACu; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000DAC: CHK(0xDACu)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -6396,8 +6437,10 @@ L_000DE0: CHK(0xDE0u)  /* move.l #$e7c, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000DEA: CHK(0xDEAu)  /* rte */
-	CALLOP(0xDEAu, 0x4E73);
-	if (REG_PC != 0xDECu) goto dispatch;
+	REG_PPC = 0xDEAu; REG_PC = 0xDECu; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000DEC: CHK(0xDECu)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -6503,8 +6546,10 @@ L_000E28: CHK(0xE28u)  /* move.l #$d74, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000E32: CHK(0xE32u)  /* rte */
-	CALLOP(0xE32u, 0x4E73);
-	if (REG_PC != 0xE34u) goto dispatch;
+	REG_PPC = 0xE32u; REG_PC = 0xE34u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000E34: CHK(0xE34u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -6610,8 +6655,10 @@ L_000E70: CHK(0xE70u)  /* move.l #$d74, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000E7A: CHK(0xE7Au)  /* rte */
-	CALLOP(0xE7Au, 0x4E73);
-	if (REG_PC != 0xE7Cu) goto dispatch;
+	REG_PPC = 0xE7Au; REG_PC = 0xE7Cu; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000E7C: CHK(0xE7Cu)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -6717,8 +6764,10 @@ L_000EB8: CHK(0xEB8u)  /* move.l #$ec4, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000EC2: CHK(0xEC2u)  /* rte */
-	CALLOP(0xEC2u, 0x4E73);
-	if (REG_PC != 0xEC4u) goto dispatch;
+	REG_PPC = 0xEC2u; REG_PC = 0xEC4u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000EC4: CHK(0xEC4u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -6841,8 +6890,10 @@ L_000F12: CHK(0xF12u)  /* move.l #$10a0, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000F1C: CHK(0xF1Cu)  /* rte */
-	CALLOP(0xF1Cu, 0x4E73);
-	if (REG_PC != 0xF1Eu) goto dispatch;
+	REG_PPC = 0xF1Cu; REG_PC = 0xF1Eu; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000F1E: CHK(0xF1Eu)  /* move.w #$8a17, $c00004.l */
 	{
 		uint res = 0x8A17u;
@@ -6870,8 +6921,10 @@ L_000F26: CHK(0xF26u)  /* move.l #$1058, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000F30: CHK(0xF30u)  /* rte */
-	CALLOP(0xF30u, 0x4E73);
-	if (REG_PC != 0xF32u) goto dispatch;
+	REG_PPC = 0xF30u; REG_PC = 0xF32u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000F32: CHK(0xF32u)  /* move.w #$8a17, $c00004.l */
 	{
 		uint res = 0x8A17u;
@@ -6899,8 +6952,10 @@ L_000F3A: CHK(0xF3Au)  /* move.l #$fa0, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000F44: CHK(0xF44u)  /* rte */
-	CALLOP(0xF44u, 0x4E73);
-	if (REG_PC != 0xF46u) goto dispatch;
+	REG_PPC = 0xF44u; REG_PC = 0xF46u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000F46: CHK(0xF46u)  /* move.w #$8a4f, $c00004.l */
 	{
 		uint res = 0x8A4Fu;
@@ -6928,8 +6983,10 @@ L_000F4E: CHK(0xF4Eu)  /* move.l #$f5a, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000F58: CHK(0xF58u)  /* rte */
-	CALLOP(0xF58u, 0x4E73);
-	if (REG_PC != 0xF5Au) goto dispatch;
+	REG_PPC = 0xF58u; REG_PC = 0xF5Au; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000F5A: CHK(0xF5Au)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -7022,8 +7079,10 @@ L_000F94: CHK(0xF94u)  /* move.l #$10e8, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000F9E: CHK(0xF9Eu)  /* rte */
-	CALLOP(0xF9Eu, 0x4E73);
-	if (REG_PC != 0xFA0u) goto dispatch;
+	REG_PPC = 0xF9Eu; REG_PC = 0xFA0u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000FA0: CHK(0xFA0u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -7129,8 +7188,10 @@ L_000FDC: CHK(0xFDCu)  /* move.l #$fe8, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_000FE6: CHK(0xFE6u)  /* rte */
-	CALLOP(0xFE6u, 0x4E73);
-	if (REG_PC != 0xFE8u) goto dispatch;
+	REG_PPC = 0xFE6u; REG_PC = 0xFE8u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_000FE8: CHK(0xFE8u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -7210,8 +7271,10 @@ L_001014: CHK(0x1014u)  /* move.l #$1020, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_00101E: CHK(0x101Eu)  /* rte */
-	CALLOP(0x101Eu, 0x4E73);
-	if (REG_PC != 0x1020u) goto dispatch;
+	REG_PPC = 0x101Eu; REG_PC = 0x1020u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_001020: CHK(0x1020u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -7291,8 +7354,10 @@ L_00104C: CHK(0x104Cu)  /* move.l #$10e8, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_001056: CHK(0x1056u)  /* rte */
-	CALLOP(0x1056u, 0x4E73);
-	if (REG_PC != 0x1058u) goto dispatch;
+	REG_PPC = 0x1056u; REG_PC = 0x1058u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_001058: CHK(0x1058u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -7398,8 +7463,10 @@ L_001094: CHK(0x1094u)  /* move.l #$fe8, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_00109E: CHK(0x109Eu)  /* rte */
-	CALLOP(0x109Eu, 0x4E73);
-	if (REG_PC != 0x10A0u) goto dispatch;
+	REG_PPC = 0x109Eu; REG_PC = 0x10A0u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_0010A0: CHK(0x10A0u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -7505,8 +7572,10 @@ L_0010DC: CHK(0x10DCu)  /* move.l #$fe8, $ffc0b2.l */
 	}
 	USE_CYCLES(28);
 L_0010E6: CHK(0x10E6u)  /* rte */
-	CALLOP(0x10E6u, 0x4E73);
-	if (REG_PC != 0x10E8u) goto dispatch;
+	REG_PPC = 0x10E6u; REG_PC = 0x10E8u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_0010E8: CHK(0x10E8u)  /* move.l #$40000010, $c00004.l */
 	{
 		uint res = 0x40000010u;
@@ -7639,11 +7708,15 @@ L_001136: CHK(0x1136u)  /* move.w $ffc07a.l, $c00004.l */
 	}
 	USE_CYCLES(28);
 L_001140: CHK(0x1140u)  /* andi.w #$fdff, sr */
-	CALLOP(0x1140u, 0x027C);
+	REG_PPC = 0x1140u; REG_PC = 0x1144u; REG_IR = 0x027C;
+	if (FLAG_S) m68ki_set_sr(m68ki_get_sr() & 0xFDFFu); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x027C]);
 	if (REG_PC != 0x1144u) goto dispatch;
 L_001144: CHK(0x1144u)  /* rte */
-	CALLOP(0x1144u, 0x4E73);
-	if (REG_PC != 0x1146u) goto dispatch;
+	REG_PPC = 0x1144u; REG_PC = 0x1146u; REG_IR = 0x4E73;
+	if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x4E73]);
+	goto dispatch;
 L_001146: CHK(0x1146u)  /* movem.l d1-d4/a1-a2, -(a7) */
 	{
 		uint i = 0;
@@ -12446,7 +12519,9 @@ L_001864: CHK(0x1864u)  /* movea.l $6(a0), a5 */
 	}
 	USE_CYCLES(16);
 L_001868: CHK(0x1868u)  /* move.w #$2700, sr */
-	CALLOP(0x1868u, 0x46FC);
+	REG_PPC = 0x1868u; REG_PC = 0x186Cu; REG_IR = 0x46FC;
+	if (FLAG_S) m68ki_set_sr(0x2700u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46FC]);
 	if (REG_PC != 0x186Cu) goto dispatch;
 L_00186C: CHK(0x186Cu)  /* move.w (a6)+, d7 */
 	{
@@ -12508,7 +12583,9 @@ L_001878: CHK(0x1878u)  /* move.w $2(a5, d7.w), $c00000.l */
 L_001880: CHK(0x1880u)  /* dbra d1, $186c */
 	{ uint res = MASK_OUT_ABOVE_16(REG_D[1] - 1); REG_D[1] = MASK_OUT_BELOW_16(REG_D[1]) | res; if (res != 0xffff) { USE_CYCLES(12 + CYC_DBCC_F_NOEXP); goto L_00186C; } USE_CYCLES(12 + CYC_DBCC_F_EXP); }
 L_001884: CHK(0x1884u)  /* move.w #$2300, sr */
-	CALLOP(0x1884u, 0x46FC);
+	REG_PPC = 0x1884u; REG_PC = 0x1888u; REG_IR = 0x46FC;
+	if (FLAG_S) m68ki_set_sr(0x2300u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46FC]);
 	if (REG_PC != 0x1888u) goto dispatch;
 L_001888: CHK(0x1888u)  /* move.w $a(a0), d7 */
 	{
@@ -12708,7 +12785,9 @@ L_0018BA: CHK(0x18BAu)  /* movea.l $6(a0), a5 */
 	}
 	USE_CYCLES(16);
 L_0018BE: CHK(0x18BEu)  /* move.w #$2700, sr */
-	CALLOP(0x18BEu, 0x46FC);
+	REG_PPC = 0x18BEu; REG_PC = 0x18C2u; REG_IR = 0x46FC;
+	if (FLAG_S) m68ki_set_sr(0x2700u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46FC]);
 	if (REG_PC != 0x18C2u) goto dispatch;
 L_0018C2: CHK(0x18C2u)  /* move.w (a6)+, d7 */
 	{
@@ -12770,7 +12849,9 @@ L_0018CE: CHK(0x18CEu)  /* move.w $6(a5, d7.w), $c00000.l */
 L_0018D6: CHK(0x18D6u)  /* dbra d1, $18c2 */
 	{ uint res = MASK_OUT_ABOVE_16(REG_D[1] - 1); REG_D[1] = MASK_OUT_BELOW_16(REG_D[1]) | res; if (res != 0xffff) { USE_CYCLES(12 + CYC_DBCC_F_NOEXP); goto L_0018C2; } USE_CYCLES(12 + CYC_DBCC_F_EXP); }
 L_0018DA: CHK(0x18DAu)  /* move.w #$2300, sr */
-	CALLOP(0x18DAu, 0x46FC);
+	REG_PPC = 0x18DAu; REG_PC = 0x18DEu; REG_IR = 0x46FC;
+	if (FLAG_S) m68ki_set_sr(0x2300u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46FC]);
 	if (REG_PC != 0x18DEu) goto dispatch;
 L_0018DE: CHK(0x18DEu)  /* move.w $a(a0), d7 */
 	{
@@ -15467,10 +15548,13 @@ L_002DD2: CHK(0x2DD2u)  /* beq.w $2e04 */
 	if (COND_EQ()) { USE_CYCLES(10); goto L_002E04; }
 	USE_CYCLES(10 + CYC_BCC_NOTAKE_W);
 L_002DD6: CHK(0x2DD6u)  /* move.w sr, -(a7) */
-	CALLOP(0x2DD6u, 0x40E7);
-	if (REG_PC != 0x2DD8u) goto dispatch;
+	REG_PPC = 0x2DD6u; REG_PC = 0x2DD8u; REG_IR = 0x40E7;
+	{ uint ea = (REG_A[7] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }
+	USE_CYCLES(CYC_INSTRUCTION[0x40E7]);
 L_002DD8: CHK(0x2DD8u)  /* ori.w #$700, sr */
-	CALLOP(0x2DD8u, 0x007C);
+	REG_PPC = 0x2DD8u; REG_PC = 0x2DDCu; REG_IR = 0x007C;
+	if (FLAG_S) m68ki_set_sr(m68ki_get_sr() | 0x700u); else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x007C]);
 	if (REG_PC != 0x2DDCu) goto dispatch;
 L_002DDC: CHK(0x2DDCu)  /* move.w #$100, $a11100.l */
 	{
@@ -15522,7 +15606,9 @@ L_002DF4: CHK(0x2DF4u)  /* move.w #$0, $a11100.l */
 	}
 	USE_CYCLES(20);
 L_002DFC: CHK(0x2DFCu)  /* move.w (a7)+, sr */
-	CALLOP(0x2DFCu, 0x46DF);
+	REG_PPC = 0x2DFCu; REG_PC = 0x2DFEu; REG_IR = 0x46DF;
+	if (FLAG_S) { uint ea = (REG_A[7] += 2) - 2; m68ki_set_sr(m68ki_read_16(ea)); } else m68ki_exception_privilege_violation();
+	USE_CYCLES(CYC_INSTRUCTION[0x46DF]);
 	if (REG_PC != 0x2DFEu) goto dispatch;
 L_002DFE: CHK(0x2DFEu)  /* clr.w $ff5668.l */
 	{
@@ -20424,6 +20510,7 @@ L_003B02: CHK(0x3B02u)  /* jsr $11f2.l */
 	{ uint ea = 0x11F2u; m68ki_push_32(0x3B08u); USE_CYCLES(20);
 	  { REG_PC = 0x11F2u; return; } }
 L_003B08: CHK(0x3B08u)  /* jsr $11f2.l */
+	if (game_hooks) { int h = game_hook(0x3B08u); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (h == 2) goto dispatch; }
 	{ uint ea = 0x11F2u; m68ki_push_32(0x3B0Eu); USE_CYCLES(20);
 	  { REG_PC = 0x11F2u; return; } }
 L_003B0E: CHK(0x3B0Eu)  /* move.w $ffc04e.l, d0 */
@@ -20978,7 +21065,7 @@ L_003C1E: CHK(0x3C1Eu)  /* bne.w $3c2e */
 	USE_CYCLES(10 + CYC_BCC_NOTAKE_W);
 L_003C22: CHK(0x3C22u)  /* move.w #$4, $ff554a.l */
 	{
-		uint res = 0x4u;
+		uint res = ROM16(0x3C24u);
 		uint ea = 0xFF554Au;
 	
 		m68ki_write_16(ea, res);
@@ -21035,7 +21122,7 @@ L_003C3E: CHK(0x3C3Eu)  /* beq.w $3c66 */
 	USE_CYCLES(10 + CYC_BCC_NOTAKE_W);
 L_003C42: CHK(0x3C42u)  /* move.w #$4, d1 */
 	{
-		uint res = 0x4u;
+		uint res = ROM16(0x3C44u);
 		uint* r_dst = &REG_D[1];
 	
 		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
@@ -31476,7 +31563,7 @@ L_0058AC: CHK(0x58ACu)  /* jsr $5c98.l */
 L_0058B2: CHK(0x58B2u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0058B4: CHK(0x58B4u)  /* moveq #$0, d5 */
-	if (game_hooks && game_hook(0x58B4u)) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
+	if (game_hooks) { int h = game_hook(0x58B4u); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (h == 2) goto dispatch; }
 	{
 		uint res = REG_D[5] = MAKE_INT_8(MASK_OUT_ABOVE_8(0x7A00u));
 	
@@ -32103,7 +32190,7 @@ L_0059C0: CHK(0x59C0u)  /* or.w d5, (a6, d0.w) */
 L_0059C4: CHK(0x59C4u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0059C6: CHK(0x59C6u)  /* lea.l $ff32fe.l, a6 */
-	if (game_hooks && game_hook(0x59C6u)) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
+	if (game_hooks) { int h = game_hook(0x59C6u); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (h == 2) goto dispatch; }
 	{
 		REG_A[6] = 0xFF32FEu;
 	}
@@ -32162,7 +32249,7 @@ L_0059E2: CHK(0x59E2u)  /* lsl.w #$2, d7 */
 	USE_CYCLES(6);
 L_0059E4: CHK(0x59E4u)  /* lea.l $24b80.l, a6 */
 	{
-		REG_A[6] = 0x24B80u;
+		REG_A[6] = ROM32(0x59E6u);
 	}
 	USE_CYCLES(12);
 L_0059EA: CHK(0x59EAu)  /* movea.l (a6, d7.w), a6 */
@@ -33087,7 +33174,7 @@ L_005B30: CHK(0x5B30u)  /* lsl.w #$2, d7 */
 	USE_CYCLES(6);
 L_005B32: CHK(0x5B32u)  /* lea.l $24b80.l, a6 */
 	{
-		REG_A[6] = 0x24B80u;
+		REG_A[6] = ROM32(0x5B34u);
 	}
 	USE_CYCLES(12);
 L_005B38: CHK(0x5B38u)  /* movea.l (a6, d7.w), a6 */
@@ -35006,7 +35093,7 @@ L_005DB0: CHK(0x5DB0u)  /* lsl.w #$2, d7 */
 	USE_CYCLES(6);
 L_005DB2: CHK(0x5DB2u)  /* lea.l $24b80.l, a6 */
 	{
-		REG_A[6] = 0x24B80u;
+		REG_A[6] = ROM32(0x5DB4u);
 	}
 	USE_CYCLES(12);
 L_005DB8: CHK(0x5DB8u)  /* movea.l (a6, d7.w), a6 */

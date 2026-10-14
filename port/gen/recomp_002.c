@@ -15637,7 +15637,7 @@ dispatch:
 	default: return;
 	}
 L_011106: CHK(0x11106u)  /* clr.w $ff17a4.l */
-	if (game_hooks && game_hook(0x11106u)) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
+	if (game_hooks) { int h = game_hook(0x11106u); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (h == 2) goto dispatch; }
 	{
 		m68ki_write_16(0xFF17A4u, 0);
 	

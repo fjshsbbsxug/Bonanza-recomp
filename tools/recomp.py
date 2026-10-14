@@ -45,8 +45,18 @@ FORBIDDEN = re.compile(r"\b(REG_PC|REG_PPC|m68ki_jump\w*|m68ki_branch_\w+|m68ki_
 # Musashi tables
 # --------------------------------------------------------------------------
 
-# routines that port/src/gamemods.c can take over (subroutine entries reached by jsr)
-HOOKS = {0x58B4, 0x59C6, 0x11106}    # gamemods.c, extrastages.c
+# places where port/src/gamemods.c may step in: routine entries it can take over, and
+# 0x3B08 (the Options menu drawing EXIT, where the stage select code adds STAGE)
+HOOKS = {0x58B4, 0x59C6, 0x11106, 0x3B08}    # gamemods.c, extrastages.c, cheats.c
+
+# operands that the port changes in the ROM buffer while running: read from it at run
+# time instead of being built in, so changing them needs no interpreter.
+#   instruction -> (offset of the operand, size)
+LIVE = {
+    0x59E4: (2, 4), 0x5B32: (2, 4), 0x5DB2: (2, 4),   # lea (frame table).l,a6: level mods' own frame table
+    0x3C22: (2, 2), 0x3C42: (2, 2),                   # Options cursor wrap (stage select code)
+}
+MARK = {2: 0x7A5B, 4: 0x5A5A1234}
 
 
 class Musashi:
@@ -220,7 +230,7 @@ class Gen:
         self.rom = rom
         self.tr = tr
         self.mu = Musashi()
-        self.stats = {"native": 0, "flow": 0, "call": 0}
+        self.stats = {"native": 0, "flow": 0, "special": 0, "call": 0}
         self.callop_names = {}
 
     # -- chunking --
@@ -326,20 +336,62 @@ class Gen:
             return L
         return None
 
+    def emit_special(self, i, op):
+        """Status register, return from exception, stop, USP: the interpreter handler's
+        steps written out (same order, same cycles), so nothing goes through it."""
+        a, nxt = i.addr, i.addr + i.size
+        imm = struct.unpack(">H", i.raw[2:4])[0] if i.size >= 4 else None
+        pre = "REG_PPC = 0x%Xu; REG_PC = 0x%Xu; REG_IR = 0x%04X;" % (a, nxt, op)
+        cyc = "USE_CYCLES(CYC_INSTRUCTION[0x%04X]);" % op
+        priv = "else m68ki_exception_privilege_violation();"
+        if op == 0x4E73:                                   # rte (68000 frame)
+            return [pre, "if (FLAG_S) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); "
+                    "CPU_INSTR_MODE = INSTRUCTION_YES; CPU_RUN_MODE = RUN_MODE_NORMAL; } " + priv, cyc, "goto dispatch;"]
+        if op == 0x4E72:                                   # stop #imm
+            return [pre, "if (FLAG_S) { CPU_STOPPED |= STOP_LEVEL_STOP; m68ki_set_sr(0x%Xu); "
+                    "if (m68ki_remaining_cycles >= CYC_INSTRUCTION[0x%04X]) m68ki_remaining_cycles = CYC_INSTRUCTION[0x%04X]; "
+                    "else m68ki_remaining_cycles %%= CYC_INSTRUCTION[0x%04X]; } " % (imm, op, op, op) + priv, cyc, "goto dispatch;"]
+        if op == 0x46FC:                                   # move #imm,sr
+            body = "m68ki_set_sr(0x%Xu);" % imm
+        elif (op & 0xFFF8) == 0x46D8:                      # move (an)+,sr
+            body = "{ uint ea = (REG_A[%d] += 2) - 2; m68ki_set_sr(m68ki_read_16(ea)); }" % (op & 7)
+        elif op == 0x007C:                                 # ori #imm,sr
+            body = "m68ki_set_sr(m68ki_get_sr() | 0x%Xu);" % imm
+        elif op == 0x027C:                                 # andi #imm,sr
+            body = "m68ki_set_sr(m68ki_get_sr() & 0x%Xu);" % imm
+        elif (op & 0xFFF8) == 0x40E0:                      # move sr,-(an): allowed in user mode on a 68000
+            return [pre, "{ uint ea = (REG_A[%d] -= 2); m68ki_write_16(ea, m68ki_get_sr()); }" % (op & 7), cyc]
+        elif (op & 0xFFF8) == 0x4E60:                      # move an,usp
+            return [pre, "if (FLAG_S) REG_USP = REG_A[%d]; " % (op & 7) + priv, cyc, "if (REG_PC != 0x%Xu) goto dispatch;" % nxt]
+        else:
+            return None
+        return [pre, "if (FLAG_S) " + body + " " + priv, cyc, "if (REG_PC != 0x%Xu) goto dispatch;" % nxt]
+
     def emit_insn(self, i, inchunk):
         a, nxt = i.addr, i.addr + i.size
         op = struct.unpack(">H", i.raw[:2])[0]
         name, cyc = self.mu.lookup(op)
         L = ["L_%06X: CHK(0x%Xu)  /* %s */" % (a, a, self.fm_text(i))]
         if a in HOOKS:
-            # optional game changes (port/src/gamemods.c): the routine may be replaced
-            L.append("\tif (game_hooks && game_hook(0x%Xu)) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }" % a)
+            # optional game changes (port/src/gamemods.c): 1 = the routine was done (return
+            # from it), 2 = the hook set where to go on
+            L.append("\tif (game_hooks) { int h = game_hook(0x%Xu); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
+                     "if (h == 2) goto dispatch; }" % a)
         flow = self.emit_flow(i, op, cyc, inchunk)
         if flow is not None:
             self.stats["flow"] += 1
             return L + ["\t" + x for x in flow]
         body = self.mu.bodies.get(name)
-        spec = specialise(body, op, a, i.raw) if body is not None else None
+        raw = i.raw
+        if a in LIVE:
+            off, size = LIVE[a]
+            raw = raw[:off] + MARK[size].to_bytes(size, "big") + raw[off + size:]
+        spec = specialise(body, op, a, raw) if body is not None else None
+        if spec is not None and a in LIVE:
+            off, size = LIVE[a]
+            mark = "0x%Xu" % MARK[size]
+            assert mark in spec, "live operand at %X not found" % a
+            spec = spec.replace(mark, "ROM%d(0x%Xu)" % (8 * size, a + off))
         if spec is not None:
             self.stats["native"] += 1
             lines = spec.strip("\n").split("\n")
@@ -353,6 +405,10 @@ class Gen:
                 L.append("D_%06X:" % a)
             L.append("\tUSE_CYCLES(%d);" % cyc)
             return L
+        sp = self.emit_special(i, op)
+        if sp is not None:
+            self.stats["special"] += 1
+            return L + ["\t" + x for x in sp]
         self.stats["call"] += 1
         self.callop_names[name] = self.callop_names.get(name, 0) + 1
         L.append("\tCALLOP(0x%Xu, 0x%04X);" % (a, op))
@@ -406,12 +462,25 @@ class Gen:
             bitmap[a >> 4] |= 1 << ((a >> 1) & 7)
         L = list(hdr)
         L.insert(2, "#include <string.h>")
+        L.insert(3, '#include "slotcode.h"')
         for s, e, name in index:
             L.append("void %s(void);" % name)
         L.append("")
         L.append("static const recomp_chunk chunks[%d] = {" % len(index))
         for s, e, name in index:
             L.append("\t{0x%X, 0x%X, %s}," % (s, e, name))
+        L.append("};")
+        L.append("")
+        code = bytearray(n // 8)       # bytes that are part of traced instructions
+        live = set()
+        for a, (off, size) in LIVE.items():
+            live.update(range(a + off, a + off + size))
+        for b in self.tr.owner:
+            if b < n and b not in live:
+                code[b >> 3] |= 1 << (b & 7)
+        L.append("static const unsigned char code_bitmap[%d] = {" % len(code))
+        for k in range(0, len(code), 32):
+            L.append("\t" + ",".join(str(b) for b in code[k:k + 32]) + ",")
         L.append("};")
         L.append("")
         L.append("static const unsigned char entry_bitmap[%d] = {" % len(bitmap))
@@ -434,16 +503,34 @@ static int chunk_of(uint32_t pc)
     return -1;
 }
 
+/* The HBlank vector points into RAM (0xFFC0B0), where the game keeps a `jmp abs.l`
+ * whose target it changes (src/rom_00200.s: copied from dat_0046A at boot): that
+ * instruction, as the interpreter would run it. */
+static void rc_hblank_jmp(void)
+{
+    CHK(0xFFC0B0u)
+    REG_PPC = 0xFFC0B0u; REG_IR = 0x4EF9;
+    REG_PC = RD32(0xFFC0B2u);
+    USE_CYCLES(CYC_INSTRUCTION[0x4EF9]);
+}
+
 recomp_fn recomp_find(uint32_t pc)
 {
-    if (pc >= %d || !(entry_bitmap[pc >> 4] & (1 << ((pc >> 1) & 7))))
+    if ((pc & 0xFFFFFF) == 0xFFC0B0 && md.ram[0xC0B0] == 0x4E && md.ram[0xC0B1] == 0xF9)
+        return rc_hblank_jmp;
+    if (pc >= %d)
+        return slot_find(pc);           /* a level mod's own routines (slotcode.c) */
+    if (!(entry_bitmap[pc >> 4] & (1 << ((pc >> 1) & 7))))
         return 0;
     int c = chunk_of(pc);
     return c >= 0 && !chunk_off[c] ? chunks[c].fn : 0;
 }
 
+/* a byte of code changed (data, and the operands read at run time, need nothing) */
 int recomp_invalidate(uint32_t addr)
 {
+    if (addr >= %d || !(code_bitmap[addr >> 3] & (1 << (addr & 7))))
+        return 0;
     int c = chunk_of(addr);
     if (c < 0) return 0;
     chunk_off[c] = 1;
@@ -452,16 +539,71 @@ int recomp_invalidate(uint32_t addr)
 
 void recomp_validate_all(void)
 {
+    slot_reset();
     memset(chunk_off, 0, sizeof(chunk_off));
 }
-""" % (len(index), len(index), n))
+""" % (len(index), len(index), n, n))
         with open(os.path.join(OUT, "recomp_index.c"), "w") as fh:
             fh.write("\n".join(L))
         total = sum(self.stats.values())
-        print("recompiled %d instructions in %d regions: %d specialised, %d control flow, %d via interpreter"
-              % (total, len(index), self.stats["native"], self.stats["flow"], self.stats["call"]))
+        print("recompiled %d instructions in %d regions: %d specialised, %d control flow, %d status register/exception, %d via interpreter"
+              % (total, len(index), self.stats["native"], self.stats["flow"], self.stats["special"], self.stats["call"]))
         for k, v in sorted(self.callop_names.items(), key=lambda x: -x[1])[:15]:
             print("   interpreter handler %-28s x%d" % (k, v))
+
+
+# --------------------------------------------------------------------------
+# New code a level mod brings (Bonanza Maker's routines past the cartridge's end:
+# tile loaders, start routines): built from a few instruction forms whose operands
+# are all immediates or absolute long addresses. Each form is generated here like any
+# recompiled instruction, with the operands left open; port/src/slotcode.c fills
+# them in when the mod is loaded and runs the routine natively.
+# --------------------------------------------------------------------------
+
+SLOT_WORDS = [0x1A2B, 0x3C4D, 0x5E6F, 0x7A8B]     # operand words while generating
+
+
+def slot_forms():
+    forms = []
+    for r in range(8):
+        forms.append((0x41F9 | r << 9, 2))   # lea abs.l,An
+        forms.append((0x303C | r << 9, 1))   # move.w #imm,Dn
+        forms.append((0x203C | r << 9, 2))   # move.l #imm,Dn
+        forms.append((0x3039 | r << 9, 2))   # move.w abs.l,Dn
+        forms.append((0x2039 | r << 9, 2))   # move.l abs.l,Dn
+    forms += [(0x33FC, 3), (0x23FC, 4),      # move.w/l #imm,abs.l
+              (0x4279, 2), (0x42B9, 2)]      # clr.w/l abs.l
+    return sorted(forms)
+
+
+def gen_slot(mu):
+    words = SLOT_WORDS
+    L = ["/* Generated by tools/recomp.py - do not edit. */", '#include "recomp_rt.h"', '#include "slotcode.h"', ""]
+    table = []
+    for op, n in slot_forms():
+        name, cyc = mu.lookup(op)
+        raw = struct.pack(">H", op) + b"".join(struct.pack(">H", w) for w in words[:n])
+        body = specialise(mu.bodies[name], op, 0x80000, raw)
+        assert body is not None and "return" not in body, hex(op)
+        for k in range(n - 1):
+            body = body.replace("0x%04X%04Xu" % (words[k], words[k + 1]), "((uint)w[%d] << 16 | w[%d])" % (k, k + 1))
+        for k in range(n):
+            body = body.replace("0x%04Xu" % words[k], "(uint)w[%d]" % k)
+        assert not any(("%04X" % x) in body for x in words), hex(op)
+        L.append("static void so_%04X(const uint16_t *w)  /* %s */" % (op, name))
+        L.append("{")
+        L += [x for x in body.strip("\n").split("\n")]
+        L.append("}")
+        table.append((op, n, cyc))
+    L.append("")
+    L.append("const slot_form slot_forms[%d] = {" % len(table))
+    for op, n, cyc in table:
+        L.append("\t{0x%04X, %d, %d, so_%04X}," % (op, n, cyc, op))
+    L.append("};")
+    L.append("const int slot_nforms = %d;" % len(table))
+    with open(os.path.join(OUT, "recomp_slot.c"), "w") as fh:
+        fh.write("\n".join(L) + "\n")
+    print("slot code: %d instruction forms" % len(table))
 
 
 def main():
@@ -473,7 +615,9 @@ def main():
     tr = disasm.Tracer(rom)
     tr.run()
     fm = disasm.Formatter(rom, tr)
-    Gen(rom, tr).run()
+    g = Gen(rom, tr)
+    g.run()
+    gen_slot(g.mu)
 
 
 if __name__ == "__main__":

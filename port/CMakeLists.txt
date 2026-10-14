@@ -22,7 +22,7 @@ set(CORE_SOURCES
 
 file(GLOB RECOMP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gen/*.c)
 if(BONANZA_RECOMP AND RECOMP_SOURCES)
-  list(APPEND CORE_SOURCES ${RECOMP_SOURCES})
+  list(APPEND CORE_SOURCES ${RECOMP_SOURCES} src/slotcode.c)
   message(STATUS "Using recompiled code (${CMAKE_CURRENT_SOURCE_DIR}/gen)")
 else()
   list(APPEND CORE_SOURCES src/recomp_stub.c)

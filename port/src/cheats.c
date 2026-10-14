@@ -4,13 +4,14 @@
  * The Options menu has a sixth item, STAGE (sub_03E52 / sub_03F48: stages 1-10, the
  * three coffee breaks and the ending, written to the stage number 0xFFC05A, which a new
  * game keeps), but its cursor wraps after EXIT and the menu never draws the line. The
- * code changes three places in the ROM buffer:
+ * code changes two operands in the ROM buffer, which the recompiled code reads from it
+ * as it runs (tools/recomp.py LIVE):
  *   0x3C24  Up on the first item goes to item 5 (STAGE), not 4
  *   0x3C44  Down wraps after item 5, not 4
- *   0x3B08  the menu's "draw EXIT" call goes to a helper that draws EXIT, then STAGE
- *           (helper in the unused debug text at 0x121C: jsr 0x11F2 / jmp 0x3F48)
- * The changed code runs in the interpreter (recomp_invalidate). Everything is put back at
- * a machine reset (the boot code checksums the ROM).
+ * and the menu's "draw EXIT" call at 0x3B08 (a hook, gamemods.c) also draws STAGE:
+ * sub_011F2 (EXIT) returns into sub_03F48 (STAGE and its value), which returns to the
+ * menu. No new 68000 code: everything stays native. The operands are put back at a
+ * machine reset (the boot code checksums the ROM).
  *
  * Only offline: the front ends call cheat_frame() only for frames they run on their own,
  * never in an online game. */
@@ -18,6 +19,9 @@
 #include "cheats.h"
 #include "md.h"
 #include "net.h"
+#include "gamemods.h"
+#include "m68k.h"
+#include "m68kcpu.h"
 #include "recomp.h"
 
 typedef struct { uint32_t addr; uint8_t old; } undo_rec;
@@ -41,11 +45,6 @@ static void put8(uint32_t a, uint8_t v)
     md.rom[a] = v;
     recomp_invalidate(a);
 }
-static void put_bytes(uint32_t a, const uint8_t *b, int n)
-{
-    for (int i = 0; i < n; i++) put8(a + (uint32_t)i, b[i]);
-}
-
 void cheat_reset(void)
 {
     while (nundo) {
@@ -54,25 +53,33 @@ void cheat_reset(void)
     }
     unlocked = 0;
     step = 0;
+    game_mods_apply();
 }
 
 int cheat_stage_select(void) { return unlocked; }
 
 static void unlock_stage_select(void)
 {
-    static const uint8_t helper[] = { 0x4E, 0xB9, 0x00, 0x00, 0x11, 0xF2,     /* jsr (sub_011F2).l: EXIT */
-                                      0x4E, 0xF9, 0x00, 0x00, 0x3F, 0x48 };   /* jmp (sub_03F48).l: STAGE */
-    static const uint8_t call[] = { 0x4E, 0xB9, 0x00, 0x00, 0x12, 0x1C };     /* jsr (helper).l */
-    put_bytes(0x121C, helper, sizeof(helper));
-    put_bytes(0x3B08, call, sizeof(call));
     put8(0x3C25, 5);
     put8(0x3C45, 5);
     unlocked = 1;
+    game_mods_apply();                    /* turns on the menu hook */
     /* the game's sound request word: a chime, unless a music command is waiting */
     if ((ram16(0xFF5668) & 0xFFF0) != 0x00E0) {
         md.ram[0x5668] = 0x00;
         md.ram[0x5669] = 0xB0;
     }
+}
+
+/* at 0x3B08 (jsr sub_011F2, drawing EXIT): call it so that it returns into sub_03F48 */
+int cheat_menu_hook(void)
+{
+    if (!unlocked) return 0;
+    m68ki_push_32(0x3B0E);                /* where the menu goes on */
+    m68ki_push_32(0x3F48);                /* sub_03F48: STAGE and its value */
+    REG_PC = 0x11F2;                      /* sub_011F2: EXIT */
+    USE_CYCLES(52);
+    return 2;
 }
 
 /* what this frame's new press means: one of C_*, 0 for nothing, -1 for anything else */

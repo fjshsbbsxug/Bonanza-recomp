@@ -28,6 +28,10 @@ extern uint64_t cpu_stat_recomp_insns;
 /* Native instructions: base cycle count from the interpreter's table. */
 #define CYC(op) USE_CYCLES(CYC_INSTRUCTION[op])
 
+/* operands the port may change while running (tools/recomp.py LIVE): read from the ROM buffer */
+#define ROM16(a) ((uint)(md.rom[a] << 8 | md.rom[(a) + 1]))
+#define ROM32(a) ((uint)md.rom[a] << 24 | (uint)md.rom[(a) + 1] << 16 | (uint)md.rom[(a) + 2] << 8 | (uint)md.rom[(a) + 3])
+
 /* memory */
 #define RD8(a)  m68ki_read_8(a)
 #define RD16(a) m68ki_read_16(a)
