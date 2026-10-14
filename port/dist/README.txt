@@ -45,6 +45,11 @@ it taking their channels, fades, voices, pause); no sound hardware is simulated 
 play. Delete sounds.bbs to record it again. If it cannot be written, the sound hardware
 is simulated as before.
 
+Graphics: the game's drawing is done by its own drawing routines written in C, and each
+picture is drawn in one go. The light effects of the stage briefing (the projector), the
+attract mode (searchlights on the posters) and the targets screens are shown as on the
+console; earlier versions showed them as plain grey, white or red shapes.
+
 Stage select (offline only): on the 1 PLAYER / 2 PLAYERS / OPTIONS menu press Left,
 Left, Right, Up, Shoot, Jump (Shoot and Jump as set in Options > CONTROL; at the start
 B and A or C). A chime plays and Options gets a STAGE line under EXIT, the stage select

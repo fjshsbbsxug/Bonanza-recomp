@@ -83,8 +83,34 @@ builder/      the HTML builder page
   the real stack in Z80 RAM and a dispatch switch; after each instruction the core's
   interrupt check runs and the line's cycle count is updated as in md.c's step loop.
   md.c runs the program it finds in Z80 RAM (`z80r_program`); writing over its code
-  bytes makes it look again. The sound chips (YM2612, PSG) and the graphics chip are
-  still simulated: the game's code drives them.
+  bytes makes it look again. The sound chips (YM2612, PSG) are simulated only to record
+  the sounds (below).
+* **Drawing** (`port/src/draw.c`, `vdp.c`):
+  * The game's drawing routines are written in C: tile loading (raw and packed), lines
+    of text and the queued text, the HUD (frame, stage name, time, scores, counters),
+    the split screen's line effects (one function per band), the planes' new columns
+    and rows, map columns, blocks and rectangles, the targets screen's picture, clearing
+    video memory and the sprite table, and the video parts of the vertical blank (sprite
+    table and palette copies, scroll). `tools/recomp.py` (`DRAW`) calls them where the
+    routines (or the parts of a routine) start.
+  * Each does what the game's routine does (the same video memory, registers, palette
+    and scroll, the same RAM, stack, registers and flags left behind) and takes the same
+    time: `tools/recomp.py` writes each instruction's time to `port/gen/m68k_costs.c`.
+    Before running, a routine works out its time without doing anything; when an
+    interrupt the game lets in would come within it (the split screen's line effects
+    change where video data goes: on the console a tile copy they cut into is partly
+    sent elsewhere, as happens once in stage 9), the game's routine runs as translated
+    so it is stopped at the same instruction.
+  * Each change a routine makes goes with the line the game's routine would have made it
+    in, so a routine still running while the picture is shown draws the same picture.
+  * The game's other commands to the video chip are decoded when its code is translated
+    (registers and where data goes: direct calls).
+  * The picture is drawn at once at the start of the vertical blank from the state each
+    line had (registers, palette, scroll and the tiles and maps changed while it was
+    shown), with shadow / highlight (the spotlights of the story and targets screens).
+  * Checked against the build with no routines in C: the same game state, sound and
+    picture in every frame of the reference runs (`--picture-hash` in the headless
+    runner).
 * **Recorded sound** (`port/src/sndrec.c`, `sndbank.c`, `sndmix.c`): on first start the
   port plays every sound the game can ask for (songs 0x81-0x8C, effects 0x98-0xBD,
   voices E4/E5) alone through the game's own driver and sound chips (`md_snd_*`: the
