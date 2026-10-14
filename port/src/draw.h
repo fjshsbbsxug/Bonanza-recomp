@@ -52,6 +52,7 @@ int  draw_sprite_list(void);    /* sub_006CA */
 int  draw_sprites_clear(void);  /* sub_0066A */
 int  draw_targets_picture(void); /* 0x114F0 */
 int  draw_map_block(void);      /* sub_282A4 */
+int  draw_map_block_each(void); /* sub_28386 */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);

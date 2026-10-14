@@ -1863,3 +1863,87 @@ static void map_block(void)
     W(REG_D[0], 0xFFFF);
 }
 int draw_map_block(void) { return run(map_block); }
+
+/* sub_28386: the same, each tile at its own address (a command before each) */
+static void map_block_each(void)
+{
+    uint32_t a0 = 0xFF2CD4u;
+    from(0x28386);
+    REG_A[0] = a0;
+    W(REG_D[0], RD16(a0 + 0xC));
+    reach(0x28390);
+    int rows = (int)(uint16_t)REG_D[0] + 1;
+    for (int r = 0; r < rows; r++) {
+        for (int half = 0; half < 2; half++) {
+            uint32_t row_at = half ? 0x283F8 : 0x28390, loop = half ? 0x28416 : 0x283A6;
+            from(row_at);
+            W(REG_D[1], RD16(a0 + 0xA));
+            W(REG_D[2], (uint16_t)REG_D[2] & 0x7E);
+            REG_A[6] = RD32(a0);
+            REG_A[5] = RD32(a0 + 4);
+            W(REG_D[7], RD16(a0 + 8));
+            if (half) {
+                W(REG_D[7], add_w(0x80, (uint16_t)REG_D[7]));
+                if (!dry) WR16(a0 + 8, (uint16_t)REG_D[7]);
+            }
+            W(REG_D[2], REG_D[7]);
+            reach(loop);
+            int n = (int)(uint16_t)REG_D[1] + 1;
+            for (int i = 0; i < n; i++) {
+                from(loop);
+                W(REG_D[4], RD16(REG_A[6]) << 3);
+                REG_A[6] += 2;
+                uint32_t e = REG_A[5] + (uint32_t)(int16_t)(uint16_t)REG_D[4] + (half ? 4 : 0);
+                W(REG_D[5], REG_D[7]);
+                reach(loop + 6);
+                call(vram_at, loop + 0xC, 20);
+                from(loop + 0xC);
+                put((uint16_t)RD16(e));
+                reach(loop + 0x14);
+                W(REG_D[7], REG_D[5]);
+                W(REG_D[7], add_w(2, (uint16_t)REG_D[7]));
+                W(REG_D[5], REG_D[7]);
+                reach(loop + 0x1A);
+                call(vram_at, loop + 0x20, 20);
+                from(loop + 0x20);
+                put((uint16_t)RD16(e + 2));
+                reach(loop + 0x28);
+                W(REG_D[2], add_w(4, (uint16_t)REG_D[2]));
+                reach(loop + 0x2E);
+                if (!(REG_D[2] & 0x80)) {
+                    FLAG_Z = 0;
+                    COST(10);
+                    from(loop + 0x4A);
+                } else {
+                    FLAG_Z = 1;
+                    COST(10 + CYC_BCC_NOTAKE_W);
+                    from(loop + 0x32);
+                    uint16_t v = (uint16_t)RD16(a0 + 8);
+                    W(REG_D[2], v & 0x80);
+                    W(REG_D[7], add_w((uint16_t)REG_D[2], v & 0xFF00));
+                    reach(loop + 0x42);
+                    call(vram_at, loop + 0x48, 20);
+                    from(loop + 0x48);
+                    REG_D[2] = 0;
+                    reach(loop + 0x4A);
+                }
+                W(REG_D[7], REG_D[5]);
+                W(REG_D[7], add_w(2, (uint16_t)REG_D[7]));
+                reach(loop + 0x4E);
+                COST(dbra_cost(i == n - 1));
+            }
+            W(REG_D[1], 0xFFFF);
+        }
+        from(0x28468);
+        W(REG_D[7], add_w(0x80, (uint16_t)RD16(a0 + 8)));
+        if (!dry) WR16(a0 + 8, (uint16_t)REG_D[7]);
+        W(REG_D[7], add_w((uint16_t)RD16(0xFF2CCCu), (uint16_t)RD16(0xFF2CCCu)));
+        REG_A[6] = RD32(a0) + (uint32_t)(int16_t)(uint16_t)REG_D[7];
+        if (!dry) WR32(a0, REG_A[6]);
+        flags_move(REG_A[6], 32);
+        reach(0x28486);
+        COST(dbra_cost(r == rows - 1));
+    }
+    W(REG_D[0], 0xFFFF);
+}
+int draw_map_block_each(void) { return run(map_block_each); }

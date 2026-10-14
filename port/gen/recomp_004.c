@@ -3650,6 +3650,7 @@ L_028380: CHK(0x28380u)  /* dbra d0, $282ae */
 L_028384: CHK(0x28384u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_028386: CHK(0x28386u)  /* lea.l $ff2cd4.l, a0 */
+	{ int r_ = draw_map_block_each(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		REG_A[0] = 0xFF2CD4u;
 	}
