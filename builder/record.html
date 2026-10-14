@@ -18,7 +18,8 @@
 /* The port builder's sound recording: the parent page sends {type: 'bbro-record', rom};
  * this page runs the browser runtime with --make-sounds, which plays every song, effect
  * and voice through the game's own sound driver and chips and keeps them losslessly
- * (sounds.bbs), then sends {type: 'bbro-sounds', ok, data} back. Opened from disk, it uses
+ * (sounds.bbs), then sends {type: 'bbro-sounds', ok, data} back. The single-file builder
+ * also sends the runtime (runtime: the .js with the wasm inside). Opened from disk, it uses
  * the single-file runtime (browsers do not load a separate .wasm file from disk). */
 (() => {
   const canvas = document.getElementById('canvas'), msg = document.getElementById('msg');
@@ -61,7 +62,10 @@
       s.onerror = () => { s.remove(); tryLoad(list); };
       document.body.appendChild(s);
     };
-    tryLoad(location.protocol === 'file:' ? ['web/bonanza-single.js'] : ['web/bonanza.js', 'web/bonanza-single.js']);
+    if (d.runtime)                     /* the single-file builder sends the runtime itself */
+      tryLoad([URL.createObjectURL(new Blob([d.runtime], { type: 'text/javascript' }))]);
+    else
+      tryLoad(location.protocol === 'file:' ? ['web/bonanza-single.js'] : ['web/bonanza.js', 'web/bonanza-single.js']);
   });
   parent.postMessage({ type: 'bbro-record-ready' }, '*');
 })();

@@ -126,10 +126,17 @@ jobs:
           cp artifacts/bonanza-android/*.apk site/packages/
           cp artifacts/bonanza-web/* site/web/
           python3 port/dist/package.py site --out site --version "${GITHUB_SHA::7} ($(date -u +%Y-%m-%d))"
+          python3 port/dist/package.py single --site site --out single/BonanzaBuilder.html
+          cp single/BonanzaBuilder.html site/
       - uses: actions/upload-artifact@v4
         with:
           name: bonanza-site
           path: site
+      # the builder as one HTML file (the runtimes inside): works opened from disk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BonanzaBuilder
+          path: single/BonanzaBuilder.html
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         with:

@@ -40,6 +40,11 @@ build makes), and adds them as `sounds.bbs`. The settings start at the best ones
 widescreen 16:9, the room above Robo, guards walking back to their posts and active
 anywhere on the wide screen, original colors, sharp pixels.
 
+The builder also comes as **one HTML file**, `BonanzaBuilder.html` (the `BonanzaBuilder`
+artifact of the `Port` workflow, and on the Pages site): the Windows, Linux and Android
+runtimes, the browser runtime and the zip library are inside it, so it works opened
+straight from disk, offline (`python3 port/dist/package.py single --site SITE --out FILE`).
+
 The ROM never leaves your device. The page checks its SHA-1 and adds it to the package
 locally. No game data is part of any runtime package.
 

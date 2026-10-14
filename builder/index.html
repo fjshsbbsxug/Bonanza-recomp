@@ -107,7 +107,7 @@
   <header>
     <h1>Bonanza Bros <span>Port Builder</span></h1>
     <p>Turn your own copy of the Mega Drive game into a native Windows, Linux or Android port, or play it right here in the browser. The ROM stays on your device: everything happens in this page and nothing is uploaded.</p>
-    <p style="margin-top:6px"><a href="levelmaker.html">Bonanza Maker</a>: build your own stages Mario Maker style, test-play them, and save them as .bbro mods.</p>
+    <p style="margin-top:6px" id="makerlink"><a href="levelmaker.html">Bonanza Maker</a>: build your own stages Mario Maker style, test-play them, and save them as .bbro mods.</p>
   </header>
 
   <section class="step" id="step-rom">
@@ -278,6 +278,21 @@
   const $ = (id) => document.getElementById(id);
   let rom = null, target = null, manifest = null;
 
+  /* The single-file builder (BonanzaBuilder.html, made by port/dist/package.py single)
+   * carries the runtimes inside it (base64 in #bonanza-embedded): it works opened from
+   * disk, with no web server and no network. */
+  const EMBED = (() => {
+    const e = document.getElementById('bonanza-embedded');
+    try { return e ? JSON.parse(e.textContent) : null; } catch (err) { return null; }
+  })();
+  const fromBase64 = b64 => {
+    const bin = atob(b64), out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+  let embeddedWeb = null;      /* the browser runtime (one .js with the wasm inside) */
+  const webRuntime = () => embeddedWeb || (embeddedWeb = fromBase64(EMBED.web));
+
   /* ---------- SHA-1 (crypto.subtle when available, small JS fallback otherwise) ---------- */
   function sha1js(bytes) {
     const rol = (x, n) => (x << n) | (x >>> (32 - n));
@@ -386,9 +401,16 @@
     el.scrollTop = el.scrollHeight;
   }
 
+  if (EMBED && $('makerlink')) $('makerlink').style.display = 'none';   /* not in the single file */
+
   /* ---------- packages ---------- */
   async function loadManifest() {
     if (manifest !== null) return manifest;
+    if (EMBED) {
+      manifest = { version: EMBED.version, packages: {} };
+      $('version').textContent = ' Runtime ' + EMBED.version + ' (in this file).';
+      return manifest;
+    }
     try {
       const r = await fetch('packages/manifest.json', { cache: 'no-cache' });
       manifest = r.ok ? await r.json() : {};
@@ -397,6 +419,7 @@
     return manifest;
   }
   async function fetchPackage(t) {
+    if (EMBED && EMBED.packages && EMBED.packages[t]) return fromBase64(EMBED.packages[t]);
     const m = await loadManifest();
     const url = (m.packages && m.packages[t]) || DEFAULT_PACKAGES[t];
     try {
@@ -467,14 +490,15 @@
   function recordSounds() {
     return new Promise(resolve => {
       const frame = document.createElement('iframe');
-      frame.src = 'record.html';
+      if (EMBED && EMBED.record) frame.srcdoc = new TextDecoder().decode(fromBase64(EMBED.record));
+      else frame.src = 'record.html';
       frame.title = 'Recording the game\'s sounds';
       frame.style.cssText = 'display:block;width:100%;max-width:640px;aspect-ratio:4/3;border:0;border-radius:8px;margin:10px 0';
       $('log').after(frame);
       const onMsg = e => {
         if (e.source !== frame.contentWindow || !e.data) return;
         if (e.data.type === 'bbro-record-ready') {
-          frame.contentWindow.postMessage({ type: 'bbro-record', rom }, '*');
+          frame.contentWindow.postMessage({ type: 'bbro-record', rom, runtime: EMBED && EMBED.web ? webRuntime() : null }, '*');
         } else if (e.data.type === 'bbro-sounds') {
           window.removeEventListener('message', onMsg);
           frame.remove();
@@ -774,9 +798,10 @@
     $('log').innerHTML = '';
     log('Loading the browser runtime…');
     const m = await loadManifest();
-    const js = (m.packages && m.packages.web) || DEFAULT_PACKAGES.web;
-    const base = js.replace(/[^/]*$/, '');
-    const probe = await fetch(js, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+    const js = EMBED && EMBED.web ? URL.createObjectURL(new Blob([webRuntime()], { type: 'text/javascript' }))
+                                  : (m.packages && m.packages.web) || DEFAULT_PACKAGES.web;
+    const base = EMBED && EMBED.web ? null : js.replace(/[^/]*$/, '');
+    const probe = base === null || await fetch(js, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
     if (!probe) {
       log('The browser runtime is not hosted next to this page. Open the builder from the project\'s GitHub Pages site, or serve the bonanza-site artifact with any web server (e.g. python3 -m http.server).', 'bad');
       return;
@@ -799,6 +824,7 @@
             q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); });
           if (data) { FS.writeFile('/sounds.bbs', new Uint8Array(data)); return; }
         } catch (e) { /* no storage */ }
+        if (base === null) return;   /* the single-file builder: recorded in the browser */
         try {                      /* made by the build, next to the game */
           const r = await fetch(base + 'sounds.bbs');
           if (r.ok) { FS.writeFile('/sounds.bbs', new Uint8Array(await r.arrayBuffer())); SOUNDS.save(FS, '/sounds.bbs'); }
@@ -813,7 +839,7 @@
     };
     window.Module = {
       canvas,
-      locateFile: p => base + p,
+      locateFile: p => (base || '') + p,
       print: t => console.log(t),
       printErr: t => console.warn(t),
       bonanzaSoundsRecorded: path => SOUNDS.save(Module.FS, path),
