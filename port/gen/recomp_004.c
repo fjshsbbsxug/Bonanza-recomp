@@ -8546,6 +8546,7 @@ L_028A88: CHK(0x28A88u)  /* move.w d7, $ff22c6.l */
 L_028A8E: CHK(0x28A8Eu)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_028A90: CHK(0x28A90u)  /* movem.l d0-d7/a0-a6, -(a7) */
+	{ int r_ = draw_map_rect(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint i = 0;
 		uint register_list = 0xFFFEu;
@@ -8752,6 +8753,7 @@ L_028ACA: CHK(0x28ACAu)  /* movem.l (a7)+, d0-d7/a0-a6 */
 L_028ACE: CHK(0x28ACEu)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_028AD0: CHK(0x28AD0u)  /* move.w d6, d5 */
+	{ int r_ = draw_vram_at_d6(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = MASK_OUT_ABOVE_16(REG_D[6]);
 		uint* r_dst = &REG_D[5];

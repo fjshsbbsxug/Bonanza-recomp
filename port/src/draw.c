@@ -1496,3 +1496,58 @@ static void hud_time(void)
 }
 int draw_hud_time_106E4(void) { time_at = 0x106E4; return run(hud_time); }
 int draw_hud_time_10A4A(void) { time_at = 0x10A4A; return run(hud_time); }
+
+/* ---------------------------------------------------------------- map rectangles */
+
+/* sub_28AD0: where data goes: video memory at d6 (written, in two command words) */
+static void vram_at_d6(void)
+{
+    uint16_t a = (uint16_t)REG_D[6];
+    COST(span(0x28AD0, 0x28AF2));
+    REG_D[6] = (uint32_t)((a & 0x3FFF) | 0x4000);
+    REG_D[5] = (uint32_t)((a & 0xC000) >> 14);
+    if (!dry) { vdp_write_ctrl((uint16_t)REG_D[6]); vdp_write_ctrl((uint16_t)REG_D[5]); }
+    flags_move(REG_D[5], 16);
+    FLAG_X = XFLAG_CLEAR;
+}
+int draw_vram_at_d6(void) { return run(vram_at_d6); }
+
+/* sub_28A90: a rectangle of map entries (a6: video address, columns - 1, rows - 1,
+ * added to each entry, the entries), a plane row (0xFF1830 entries) apart */
+static void map_rect(void)
+{
+    static const int all[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+    uint32_t saved[15];
+    for (int i = 0; i < 15; i++) saved[i] = REG_DA[i];
+    push_regs(all, 15);
+    REG_A[7] -= 60;
+    COST(span(0x28A94, 0x28AA8));
+    uint32_t a6 = REG_A[6], a5 = RD32(a6 + 8);
+    uint16_t d7 = (uint16_t)RD16(a6), d1 = (uint16_t)RD16(a6 + 6);
+    int rows = (int)(uint16_t)RD16(a6 + 4) + 1;
+    uint32_t src = 0, dst = 0, res = 0;
+    for (int r = 0; r < rows; r++) {
+        COST(4);                                         /* move.w d7,d6 */
+        W(REG_D[6], d7);
+        call(vram_at_d6, 0x28AAE, 18);
+        int cols = (int)(uint16_t)RD16(a6 + 2) + 1;
+        COST(12 + loop_cost(0x28AB2, 0x28AB8, cols));
+        for (int c = 0; c < cols; c++) {
+            put((uint16_t)(RD16(a5) + d1));
+            a5 += 2;
+        }
+        src = (uint16_t)(RD16(0xFF1830u) * 2);           /* add.w d6,d6; add.w d6,d7 */
+        dst = d7;
+        res = src + dst;
+        d7 = (uint16_t)res;
+        COST(span(0xABC + 0x28000, 0x28AC6) + dbra_cost(r == rows - 1));
+    }
+    REG_A[7] += 60;
+    for (int i = 0; i < 15; i++) REG_DA[i] = saved[i];   /* movem.l (a7)+ */
+    pop_cost(15);
+    FLAG_N = NFLAG_16(res);
+    FLAG_Z = MASK_OUT_ABOVE_16(res);
+    FLAG_V = VFLAG_ADD_16(src, dst, res);
+    FLAG_X = FLAG_C = CFLAG_16(res);
+}
+int draw_map_rect(void) { return run(map_rect); }
