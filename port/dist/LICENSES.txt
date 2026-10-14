@@ -4,11 +4,15 @@ Third-party components
 The port runtime (port/src) and tools are part of the bonanza-recomp project.
 The game code translated into port/gen is derived from the original game, which
 remains the property of SEGA. No game data is distributed; it is read from the
-player's own ROM at run time.
+player's own ROM (the sounds in sounds.bbs were recorded from it when this copy
+was built).
 
 Musashi 68000 emulator - Copyright 1998-2001 Karl Stenerud - MIT License
 Z80 emulator (superzazu/z80) - Copyright (c) 2019 Nicolas Allemand - MIT License
 SDL2 - Copyright (C) 1997-2024 Sam Lantinga - zlib License
+libopus - Copyright 2001-2023 Xiph.Org, Skype Limited, Octasic, Jean-Marc Valin,
+  Timothy B. Terriberry, CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo,
+  Mozilla, Amazon - BSD 3-Clause License
 
 Nuked-OPN2 (YM2612 emulator) - Copyright (C) 2017-2018 Alexey Khokholov (Nuke.YKT)
   GNU Lesser General Public License v2.1.
