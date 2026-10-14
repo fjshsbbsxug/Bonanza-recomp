@@ -63,6 +63,8 @@
   .bubble { flex: 1; background: #fff; border: 3px solid var(--line); border-radius: 16px; padding: 8px 12px; position: relative; }
   .bubble::before { content: ""; position: absolute; left: -12px; top: 14px; border: 8px solid transparent; border-right-color: var(--line); }
   .bubble .counts { color: var(--muted); font-size: 13px; }
+  .bubble .inspect { font-size: 13px; min-height: 1.3em; }
+  .bubble .inspect i { display: inline-block; width: 10px; height: 10px; border: 1px solid var(--line); vertical-align: -1px; margin: 0 3px 0 8px; }
   .bubble ul { margin: 4px 0 0; padding-left: 18px; }
   .bad { color: var(--red-dk); } .ok { color: var(--green-dk); }
   .ctx { display: none; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
@@ -164,12 +166,14 @@
     <button class="tab" role="tab" data-tab="loot" aria-selected="false">Loot</button>
     <button class="tab" role="tab" data-tab="gadgets" aria-selected="false">Gadgets</button>
     <button class="tab" role="tab" data-tab="paint" aria-selected="false">Paint</button>
+    <button class="tab" role="tab" data-tab="coll" aria-selected="false">Collision</button>
     <button class="tab" role="tab" data-tab="mine" aria-selected="false">My stamps</button>
     <button class="tab" role="tab" data-tab="trace" aria-selected="false">Trace</button>
     <div class="tools">
       <button class="chunky" id="handbtn" aria-pressed="false" title="Pick up and move things; drag over the building to select an area">&#9995; Hand</button>
       <button class="chunky" id="flipbtn" title="Mirror the stamp you are placing (F)">&#8644; Flip</button>
       <button class="chunky" id="erasebtn" aria-pressed="false" title="Erase guards and loot; on the building it leaves a plain hallway">&#9003; Eraser</button>
+      <button class="chunky" id="lanebtn" title="Move the picked guard or treasure to the other lane (L)">&#8645; Lane</button>
     </div>
   </div>
   <div class="parts" id="parts"></div>
@@ -190,7 +194,7 @@
 
 <div class="coach">
   <div class="face" aria-hidden="true">R</div>
-  <div class="bubble"><div id="tip"></div><div class="counts" id="counts"></div><ul id="problems"></ul></div>
+  <div class="bubble"><div id="tip"></div><div class="inspect" id="inspect"></div><div class="counts" id="counts"></div><ul id="problems"></ul></div>
 </div>
 
 <!-- save dialog -->
@@ -234,6 +238,8 @@
   const $ = id => document.getElementById(id);
   let rom = null, st = 0, info = null, level = null;
   let tab = 'build', tool = 'place', part = null, zoom = 2, grid = true, walls = false, sound = true;
+  let lane = null;          /* guards and treasures placed in this lane (z), null: as the card shows */
+  const LANE_COLORS = { front: 'rgba(255,40,40,0.75)', back: 'rgba(60,110,255,0.75)', wall: 'rgba(190,60,255,0.8)', open: 'rgba(255,255,255,0.6)' };
   let paintKind = 'picture', stairSet = null, paintSrc = 0, paintMode = 'objects';
   let hover = null, sel = null, selObj = null, drag = null, myStamps = [], stamps = [];
   /* a picture (e.g. a map of the arcade stage) shown over the building to build along */
@@ -472,6 +478,22 @@
   }
 
   /* ---------- tray ---------- */
+  /* which lane new guards / treasures go in */
+  function lanePicker() {
+    const d = document.createElement('div');
+    d.style.cssText = 'flex:none;display:flex;flex-direction:column;gap:4px;justify-content:center;margin:0 6px';
+    d.innerHTML = '<span class="muted" style="font-weight:600">Lane</span>';
+    for (const [v, name] of [[null, 'As shown'], [0, 'Front'], [16, 'Back']]) {
+      const b = document.createElement('button');
+      b.className = 'chunky';
+      b.textContent = name;
+      b.setAttribute('aria-pressed', lane === v);
+      b.title = v === null ? 'Each one in the lane its card shows' : 'Put them in the ' + name.toLowerCase() + ' lane';
+      b.onclick = () => { lane = v; d.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); sfx('pick'); };
+      d.appendChild(b);
+    }
+    return d;
+  }
   function partCard(label, draw, data) {
     const b = document.createElement('button');
     b.className = 'part';
@@ -548,6 +570,25 @@
         const pic = clipCanvas(s.clip);
         box.appendChild(partCard(s.name, cx => fit(cx, pic, pic.width, pic.height), { type: 'stamp', clip: s.clip, name: s.name }));
       }
+    } else if (t === 'coll') {
+      if (!walls) { walls = true; dirty = true; $('wallsbtn').setAttribute('aria-pressed', true); }
+      for (const k of LC.COLLISION_KINDS) {
+        const card = partCard(k.name, cx => {
+          cx.fillStyle = '#d8d4e4'; cx.fillRect(8, 8, 64, 48);
+          if (k.id === 'back' || k.id === 'wall') { cx.fillStyle = 'rgba(60,110,255,0.8)'; cx.fillRect(14, 14, 52, 36); }
+          if (k.id === 'front' || k.id === 'wall') { cx.fillStyle = 'rgba(255,40,40,0.85)'; for (let y = 16; y < 48; y += 8) for (let x = 16; x < 64; x += 8) cx.fillRect(x + 2, y + 2, 4, 4); }
+          if (k.id === 'open') { cx.strokeStyle = '#8a8698'; cx.setLineDash([4, 3]); cx.strokeRect(14.5, 14.5, 51, 35); }
+        }, { type: 'coll', kind: k.id });
+        card.title = k.tip;
+        box.appendChild(card);
+      }
+      const help = document.createElement('p');
+      help.className = 'muted';
+      help.style.cssText = 'margin:8px;max-width:420px';
+      help.innerHTML = 'Pick one, then drag a box over the building: it becomes solid in that lane. ' +
+        '<b style="color:#e33">Red dots</b>: the front lane, <b style="color:#46f">blue</b>: the back lane, both: a wall. ' +
+        'Small squares are 8 pixels; the bottom three are the floor. Point at anything to see what it is.';
+      box.appendChild(help);
     } else if (t === 'mine') {
       if (!myStamps.length) box.innerHTML = '<p class="muted" style="margin:8px">Use the <b>Hand</b> to drag over part of the building, then <b>Make a stamp</b>. Your stamps show up here.</p>';
       myStamps.forEach((s, k) => {
@@ -555,6 +596,7 @@
         box.appendChild(partCard('Stamp ' + (k + 1), cx => fit(cx, pic, pic.width, pic.height), { type: 'stamp', clip: s, name: 'your stamp' }));
       });
     } else if (t === 'guards') {
+      box.appendChild(lanePicker());
       info.guardPresets.forEach(g => {
         const s = sprite(LC.guardFrame(st, g.template), g.attr || 0);
         box.appendChild(partCard('Guard ' + g.template + (g.z ? ' (back)' : ''),
@@ -563,6 +605,7 @@
       });
     } else if (t === 'loot' || t === 'gadgets') {
       /* this stage's own first, then everything from the other stages */
+      if (t === 'loot') box.appendChild(lanePicker());
       const all = LC.allItemPresets(rom).filter(o => (o.kind === LC.KIND.TREASURE) === (t === 'loot'));
       all.sort((a, b) => (a.src === st ? 0 : 1) - (b.src === st ? 0 : 1) || LC.stageNumber(a.src) - LC.stageNumber(b.src));
       let lastHome = null;
@@ -584,9 +627,10 @@
         if (use.mode === 'none') {
           card.disabled = true;
           card.style.opacity = .4;
-          card.title = 'Its pictures would cover this stage\'s own, so it cannot be used here.';
+          card.title = 'This stage shows its frames for its own things, so it cannot be used here.';
         } else if (use.mode !== 'own') {
           card.title = o.kind === LC.KIND.TREASURE ? 'Brought over from stage ' + LC.stageNumber(o.src) + ' (room for about 10 kinds)'
+                     : use.mode === 'moved' ? 'Brought over from stage ' + LC.stageNumber(o.src) + ' (its pictures are moved to free room here; colours matched)'
                      : 'Brought over from stage ' + LC.stageNumber(o.src) + ' (colours matched to this stage)';
         }
         box.appendChild(card);
@@ -770,6 +814,7 @@
     tip(p.stairs ? 'Click a floor: <b>stairs</b> from there up to the floor above. <b>Flip</b> (F) turns them the other way.'
       : p.type === 'stamp' ? `Click to place <b>${p.name}</b>. It brings its own walls and floor${p.clip.floors > 1 ? ' on both floors' : ''}.`
       : p.type === 'object' ? 'Click to place this ' + p.name + ' object (its pictures, what is solid' + (p.obj.stairs ? ', working stairs' : p.obj.door ? ', a working door' : '') + '). <b>Flip</b> (F) mirrors it.'
+      : p.type === 'coll' ? 'Drag a box over the building: it becomes <b>' + LC.COLLISION_KINDS.find(k => k.id === p.kind).name + '</b> (' + LC.COLLISION_KINDS.find(k => k.id === p.kind).tip + ').'
       : p.type === 'paint' ? 'Click or drag to paint this block (<b>' + LC.BLOCK_KINDS.find(k => k.id === paintKind).name + '</b>: pick what it does above). <kbd>Alt</kbd>+click picks a block from the building.'
       : 'Click on a floor to place it. Use the <b>Hand</b> to move things, the <b>Eraser</b> to remove them.');
   }
@@ -838,6 +883,15 @@
     }
     drawObjects();
     drawGhost();
+    if (drag && drag.kind === 'coll') {
+      const x0 = Math.min(drag.c0, drag.c1) * 8, x1 = (Math.max(drag.c0, drag.c1) + 1) * 8;
+      const y0 = drag.f * 80 + Math.min(drag.r0, drag.r1) * 8, y1 = drag.f * 80 + (Math.max(drag.r0, drag.r1) + 1) * 8;
+      ctx.fillStyle = LANE_COLORS[part.kind]; ctx.globalAlpha = 0.5; ctx.fillRect(x0, y0, x1 - x0, y1 - y0); ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#ffd12a'; ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+    } else if (hover && part && part.type === 'coll' && tool === 'place') {
+      const q = cell(hover);
+      ctx.strokeStyle = '#ffd12a'; ctx.lineWidth = 1; ctx.strokeRect(q.c * 8 + 0.5, hover.f * 80 + q.row * 8 + 0.5, 7, 7);
+    }
     if (sel) {
       const r = selRange();
       ctx.strokeStyle = '#ffd12a'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
@@ -971,7 +1025,8 @@
   $('soundbtn').onclick = e => { sound = !sound; e.currentTarget.setAttribute('aria-pressed', sound); };
 
   function newObject(p) {
-    const o = { x: Math.round(p.x) + 32, y: 80 * p.f + part.yoff, z: part.z, frame: part.frame, beh: part.beh, dir: part.dir, attr: part.attr };
+    const z = lane !== null && (part.type === 'guard' || part.kind === LC.KIND.TREASURE) ? lane : part.z;
+    const o = { x: Math.round(p.x) + 32, y: 80 * p.f + part.yoff, z, frame: part.frame, beh: part.beh, dir: part.dir, attr: part.attr };
     if (part.type === 'guard') o.template = part.template;
     else { o.kind = part.kind; if (part.src) o.src = part.src; }
     return o;
@@ -1042,6 +1097,20 @@
     sfx('pick');
   }
   $('flipbtn').onclick = flipPart;
+  function switchLane() {
+    const o = selObj;
+    if (!o || level.players.includes(o) || !(level.guards.includes(o) || o.kind === LC.KIND.TREASURE)) {
+      tip('Pick a guard or a treasure with the <b>Hand</b> first, then <b>Lane</b> (L) moves it to the other lane.');
+      return;
+    }
+    const k = level.guards.indexOf(o), j = level.items.indexOf(o);
+    if (edit(() => { const x = k >= 0 ? level.guards[k] : level.items[j]; x.z = x.z ? 0 : 16; selObj = x; })) {
+      selObj = k >= 0 ? level.guards[k] : level.items[j];
+      sfx('place');
+      tip('Now in the <b>' + (selObj.z ? 'back' : 'front') + '</b> lane.');
+    }
+  }
+  $('lanebtn').onclick = switchLane;
 
   /* paint the picked block at p (a block from another stage is added to the level the
    * first time); throws when the stage has no room left for its pieces */
@@ -1063,6 +1132,30 @@
     const s = Math.max(0, Math.min(level.W - 1, Math.floor(x / 16)));
     return { x, y, s, c: s, f: Math.max(0, Math.min(level.floors - 1, Math.floor(y / 80))),
              r: Math.max(0, Math.min(level.floors * 5 - 1, Math.floor(y / 16))) };
+  }
+  /* the 8 px cell under p (on floor f if given): column across the building, row in the floor */
+  function cell(p, f) {
+    f = f === undefined ? p.f : f;
+    return { c: Math.max(0, Math.min(2 * level.W - 1, Math.floor(p.x / 8))), row: Math.max(0, Math.min(9, Math.floor((p.y - 80 * f) / 8))) };
+  }
+  /* what is under the pointer, in words */
+  let lastInspect = '';
+  function inspect(p) {
+    const q = cell(p), v = level.col[p.f][q.c], inf = v & 0xFFFF, k = LC.collisionAt(level, p.f, q.c, q.row);
+    const names = { front: 'solid in the front lane', back: 'solid in the back lane', wall: 'a wall (both lanes)', open: 'open' };
+    let h = `Floor ${level.floors - p.f}${p.f === 0 && level.floors > 1 ? ' (top)' : ''} &middot; block ${p.s + 1} &middot; ` +
+            `<i style="background:${LANE_COLORS[k]}"></i>${q.row >= 7 ? 'floor: ' : ''}${names[k]}`;
+    if (LC.isExitInfo(inf)) h += ' &middot; <b>exit</b>';
+    else if (LC.isDoorInfo(inf)) h += ' &middot; <b>door</b>';
+    else if (LC.isStairInfo(inf)) h += ' &middot; <b>stairs</b>';
+    const o = hitObject(p);
+    if (o) {
+      const laneName = o.z ? 'back lane' : 'front lane';
+      if (level.players.includes(o)) h += ' &middot; <b>the robbers\' start</b>';
+      else if (level.guards.includes(o)) h += ` &middot; <b>guard</b> (type ${o.template}), ${laneName}`;
+      else h += ` &middot; <b>${LC.KIND_NAMES[o.kind] || 'thing'}</b>${o.src && o.src !== st ? ' from stage ' + LC.stageNumber(o.src) : ''}, ${laneName}`;
+    }
+    if (h !== lastInspect) { $('inspect').innerHTML = h; lastInspect = h; }
   }
   function hitObject(p) {
     for (const o of level.players) {                 /* the robbers (moved together) */
@@ -1113,6 +1206,9 @@
         const room = LC.blockRoom(rom, level);
         if (room.problems.length) throw new Error(room.problems[0]);
       })) sfx('place');
+    } else if (part.type === 'coll') {
+      const q = cell(p);
+      drag = { kind: 'coll', f: p.f, c0: q.c, r0: q.row, c1: q.c, r1: q.row };
     } else if (part.type === 'paint') {
       if (e.altKey || e.button === 2) {
         part = { type: 'paint', meta: level.map[p.r * level.W + p.c] };
@@ -1138,8 +1234,10 @@
     if (!level) return;
     const p = at(e);
     hover = p;
+    inspect(p);
     if (!drag) return;
     if (drag.kind === 'sel') { sel.f1 = p.f; sel.s1 = p.s; }
+    else if (drag.kind === 'coll') { const q = cell(p, drag.f); drag.c1 = q.c; drag.r1 = q.row; }
     else if (drag.kind === 'paint') {
       const k = p.r + ':' + p.c;
       if (k !== drag.last) {
@@ -1172,6 +1270,16 @@
       if (drag.moved) { undo.push(drag.before); redo.length = 0; check(); sfx('place'); }
     }
     if (drag.kind === 'sel') $('areactx').classList.add('show');
+    if (drag.kind === 'coll') {
+      const d = drag;
+      let n = 0;
+      if (edit(() => { n = LC.setCollision(level, d.f, d.c0, d.c1, d.r0, d.r1, part.kind); })) {
+        sfx(n ? 'place' : 'pick');
+        tip(n ? 'Changed ' + n + ' column' + (n > 1 ? 's' : '') + ' (8 px each): now <b>' + LC.COLLISION_KINDS.find(k => k.id === part.kind).name + '</b>.' +
+                (d.r1 >= 7 || d.r0 >= 7 ? ' That includes the floor itself.' : '')
+              : 'That was already ' + LC.COLLISION_KINDS.find(k => k.id === part.kind).name.toLowerCase() + '.');
+      }
+    }
     if (drag.kind === 'paint' || drag.kind === 'stamp') { LC.fixStairs(level); dirty = true; check(); }
     drag = null;
   });
@@ -1184,6 +1292,7 @@
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); restore(redo, undo); }
     else if (k === 'escape') { closeArea(); selObj = null; }
     else if (k === 'f' && !e.ctrlKey && !e.metaKey) flipPart();
+    else if (k === 'l' && !e.ctrlKey && !e.metaKey) switchLane();
     else if ((k === 'delete' || k === 'backspace') && selObj && !level.players.includes(selObj)) {
       e.preventDefault();
       const o = selObj;

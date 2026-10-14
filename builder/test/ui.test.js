@@ -90,6 +90,31 @@ const PAGE = process.argv[3] || 'file://' + path.resolve(__dirname, '../levelmak
     for (const id of ['#flipareabtn', '#widenbtn', '#narrowbtn']) if (await p.isVisible(id)) await p.click(id);
     await drag(36 * 16, 37 * 16, lower * 80 + 20);
     if (await p.isVisible('#clearbtn')) await p.click('#clearbtn');
+    /* collision: every kind dragged over part of a floor, read back by pointing at it */
+    await p.click('[data-tab=coll]');
+    const kinds = await p.$$('#parts .part');
+    check(kinds.length === 4, stage + ': collision kinds');
+    const names = ['front lane', 'back lane', 'wall', 'open'];
+    for (let i = 0; i < kinds.length; i++) {
+      await (await p.$$('#parts .part'))[i].click();
+      await drag(40 * 16 + 32 * i, 40 * 16 + 32 * i + 12, lower * 80 + 20);
+      await p.mouse.move(...await at(40 * 16 + 32 * i + 4, lower * 80 + 20));
+      await p.waitForTimeout(30);
+      const t = await p.textContent('#inspect');
+      check(t.includes(names[i]), stage + ': collision ' + names[i] + ' reads "' + t + '"');
+    }
+    /* lanes: a guard in the back lane, then switched with L */
+    await p.click('[data-tab=guards]');
+    await p.click('#parts button.chunky:has-text("Back")');
+    const gc = await p.$$('#parts .part');
+    if (gc.length) {
+      await gc[0].click();
+      await click(44 * 16, lower * 80 + 60);
+      await p.click('#handbtn');
+      await click(44 * 16, lower * 80 + 60);
+      await p.keyboard.press('l');
+      check(/lane/.test(await p.textContent('#tip')), stage + ': lane switch');
+    }
     await p.click('[data-tab=mine]');
     const mine = await p.$$('#parts .part');
     if (mine.length) { await mine[0].click(); await click(50 * 16, lower * 80 + 40); }

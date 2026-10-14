@@ -190,6 +190,13 @@ builder/      the HTML builder page
     places the staircases. The Stairs tool places the stage's staircase going either
     way (the missing direction mirrored, `LC.stairStamps`); cut-off staircases are
     reported.
+    The Collision tab edits the masks directly (`LC.setCollision`: 8 px columns, rows
+    0-6 one bit each, 7-9 the floor bit 0x01; front, back, both or neither, the info
+    word kept). Gadgets whose tiles a stage uses itself are "moved" (`LC.itemUse`): their
+    animation frames' tiles go to free VRAM (what treasures leave of 0x7A0-0x7CF, then
+    the stage's free tiles after borrowed blocks) and the level's own frame table gets
+    new pictures under the same frame numbers, so the game's code and animation
+    scripts are unchanged.
 
   * *Extra stages* (`port/src/extrastages.c`, "New stage" in Bonanza Maker): new stages
     between the cartridge's own, e.g. the two arcade stages the Mega Drive left out

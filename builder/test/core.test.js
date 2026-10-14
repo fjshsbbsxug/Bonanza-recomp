@@ -133,6 +133,32 @@ for (const e of LC.STAGES) {
     const L2 = clone(base);
     if (L2.floors > 3) { LC.removeFloor(L2, 0); if (!LC.startProblem(L2)) tryit(name + ' one floor less', () => LC.exportLevel(rom, clone(L2))); }
   }
+  /* collision areas: each kind, read back, and the level still exports */
+  {
+    const L = clone(base), f = base.floors - 1;
+    const kinds = ['front', 'back', 'wall', 'open'];
+    kinds.forEach((k, i) => LC.setCollision(L, f, 20 + 4 * i, 21 + 4 * i, 1, 5, k));
+    kinds.forEach((k, i) => ok([1, 3, 5].every(r => LC.collisionAt(L, f, 20 + 4 * i, r) === k && LC.collisionAt(L, f, 21 + 4 * i, r) === k),
+                               name + ' collision ' + k));
+    ok(LC.setCollision(L, f, 20, 21, 1, 5, 'front') === 0, name + ' collision unchanged twice');
+    exportOk(L, name + ' collision areas');
+  }
+  /* every gadget of every stage (moved to free tiles where its own are used here) */
+  {
+    const L = clone(base), f = base.floors - 1;
+    const gadgets = LC.allItemPresets(rom).filter(o => o.kind !== LC.KIND.TREASURE && o.kind !== LC.KIND.DOOR && o.kind !== LC.KIND.EXIT);
+    const usable = gadgets.filter(o => LC.itemUse(rom, e, o).mode !== 'none');
+    const none = gadgets.filter(o => LC.itemUse(rom, e, o).mode === 'none');
+    if (none.length) console.log(name, 'gadgets that cannot be used:', none.map(o => LC.KIND_NAMES[o.kind] + ' (stage ' + LC.stageNumber(o.src) + ')').join(', '));
+    const seen = new Set();
+    usable.forEach((o, i) => {
+      if (seen.has(o.kind + ':' + o.src) || LC.resolveItems(L).items.length >= 31) return;
+      seen.add(o.kind + ':' + o.src);
+      L.items.push({ kind: o.kind, x: 32 + 16 * (6 + 4 * seen.size) + 8, y: 80 * f + o.yoff, z: o.z, frame: o.frame, beh: o.beh, dir: o.dir, attr: o.attr, src: o.src });
+    });
+    if (!LC.borrowProblems(rom, L).length) exportOk(L, name + ' every gadget');
+    else console.log(name, 'every gadget:', LC.borrowProblems(rom, L).join(' | '));
+  }
   /* extra stage on a host */
   if (LC.EXTRA_HOSTS.includes(e)) {
     const L = clone(base);

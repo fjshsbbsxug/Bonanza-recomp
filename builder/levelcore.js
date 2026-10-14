@@ -485,6 +485,41 @@
     const fr = has(24), bk = has(16);
     return fr && bk ? 'solid' : fr ? 'front' : bk ? 'back' : 'open';
   };
+  /* the collision of an area of floor f, in 8 px cells: columns c0..c1 (two per block),
+   * rows r0..r1 (0 = the ceiling, 7 to 9 = the floor itself, one bit) made solid in the
+   * front lane, the back lane, both ('wall') or neither ('open'). Doors, stairs and the exit
+   * keep their use; returns the number of columns changed. */
+  LC.COLLISION_KINDS = [
+    { id: 'front', name: 'Front lane', tip: 'solid in the front lane only: robbers and guards walk behind it' },
+    { id: 'back', name: 'Back lane', tip: 'solid in the back lane only: walk in front of it' },
+    { id: 'wall', name: 'Wall', tip: 'solid in both lanes: a wall (low ones can be jumped over)' },
+    { id: 'open', name: 'Open', tip: 'nothing solid: walk through' },
+  ];
+  LC.cellBit = row => row < 8 ? 0x80 >> row : 0x01;
+  LC.setCollision = function (level, f, c0, c1, r0, r1, kind) {
+    const col = level.col[f];
+    if (!col) return 0;
+    let bits = 0;
+    for (let r = Math.max(0, Math.min(r0, r1)); r <= Math.min(9, Math.max(r0, r1)); r++) bits |= LC.cellBit(r);
+    const fr = kind === 'front' || kind === 'wall', bk = kind === 'back' || kind === 'wall';
+    let n = 0;
+    for (let c = Math.max(0, Math.min(c0, c1)); c <= Math.min(col.length - 1, Math.max(c0, c1)); c++) {
+      const v = col[c];
+      let front = v >>> 24, back = (v >>> 16) & 255;
+      front = fr ? front | bits : front & ~bits;
+      back = bk ? back | bits : back & ~bits;
+      const nv = ((front << 24) | (back << 16) | (v & 0xFFFF)) >>> 0;
+      if (nv !== v) { col[c] = nv; n++; }
+    }
+    return n;
+  };
+  /* what is solid in one 8 px cell: 'wall', 'front', 'back' or 'open' */
+  LC.collisionAt = function (level, f, c, row) {
+    const v = (level.col[f] || [])[c];
+    if (v === undefined) return 'open';
+    const b = LC.cellBit(row), fr = (v >>> 24) & b, bk = (v >>> 16) & b;
+    return fr && bk ? 'wall' : fr ? 'front' : bk ? 'back' : 'open';
+  };
   /* paint a block; returns false where the physics could not be changed (stairs, doors) */
   LC.paintBlock = function (level, r, c, meta, kind) {
     level.map[r * level.W + c] = meta;
@@ -1016,7 +1051,10 @@
    *   'treasure' a treasure: its picture gets new frames and free tiles
    *   'block'    a gadget: its graphics block is loaded where it was in its own stage
    *              (those tiles are free here)
-   *   'none'     its graphics would overwrite this stage's own */
+   *   'moved'    a gadget whose tiles are used here: they go to free tiles and its
+   *              animation frames get new pictures (same frame numbers) in the level's
+   *              own frame table
+   *   'none'     it cannot be used here (no picture, or this stage uses its frames) */
   LC.itemUse = function (rom, st, o) {
     if (!o.src || o.src === st || sameLook(rom, o.src, st, o.frame, o.attr || 0)) return { mode: 'own' };
     if (o.kind === LC.KIND.TREASURE) return { mode: 'treasure', tiles: frameTiles(rom, o.frame, o.attr || 0).length };
@@ -1024,17 +1062,25 @@
     if (!first) return { mode: 'none' };
     /* the tiles of all its animation frames go where they were in its own stage, if this
      * stage leaves them free */
-    const tiles = new Map();
-    for (const f of itemFrames(rom, o.frame))
+    const tiles = new Map(), frames = itemFrames(rom, o.frame);
+    for (const f of frames)
       for (const t of frameTiles(rom, f, o.attr || 0)) tiles.set(t.tile, t.pal);
     const mine = loadsOf(rom, st);
     for (const t of tiles.keys())
-      if ((t >= DYNAMIC[0] && t < DYNAMIC[1]) || mine.some(l => t >= l.vram / 32 && t < l.vram / 32 + l.n)) return { mode: 'none' };
+      if ((t >= DYNAMIC[0] && t < DYNAMIC[1]) || mine.some(l => t >= l.vram / 32 && t < l.vram / 32 + l.n)) {
+        /* moved: only if this stage's own things do not show these frames */
+        const own = new Set();
+        for (const p of LC.info(rom, st).itemPresets) for (const f of itemFrames(rom, p.frame)) own.add(f);
+        if (frames.some(f => own.has(f)) || (o.attr || 0) & 0x7FF) return { mode: 'none' };
+        return { mode: 'moved', tiles, frames };
+      }
     return { mode: 'block', tiles };
   };
-  /* what a level needs for its borrowed items: tile loads and new frames */
-  function borrowPlan(rom, st, items) {
-    const r = R(rom), plan = { loads: [], frames: [], frameOf: new Map(), problems: [] };
+  /* what a level needs for its borrowed items: tile loads, new frames and frames drawn
+   * with other tiles (moved gadgets; blockTiles: the stage's free tiles blocks use) */
+  function borrowPlan(rom, st, items, blockTiles) {
+    const r = R(rom), plan = { loads: [], frames: [], frameOf: new Map(), override: new Map(), problems: [] };
+    const moved = new Map();
     const tinfo = LC.info(rom, st);
     let nextTile = BORROW_TILE0;
     const doneT = new Map(), doneB = new Set();
@@ -1093,9 +1139,53 @@
           doneB.add(t);
           plan.loads.push({ tile: t, bytes: tileBytes(sinfo, t, pal) });
         }
+      } else if (use.mode === 'moved') {
+        if (!moved.has(key)) moved.set(key, { o, use, sinfo });
       } else {
         plan.problems.push((LC.KIND_NAMES[o.kind] || 'An item') + ' from stage ' + LC.stageNumber(o.src) +
-                           ' cannot be used here (its pictures would cover this stage\'s own).');
+                           ' cannot be used here (this stage shows its frames for its own things).');
+      }
+    }
+    if (!moved.size) return plan;
+    /* moved gadgets: free tiles in runs (what the treasures left of the borrow area, then
+     * the stage's free tiles after the blocks'); each run of its tiles stays in one piece */
+    const runs = [[nextTile, BORROW_TILE0 + BORROW_TILES - 1]];
+    let skip = blockTiles || 0;
+    for (const [a, b] of LC.FREE_TILES[st] || []) {
+      const n = b - a + 1;
+      if (skip >= n) { skip -= n; continue; }
+      runs.push([a + skip, b]);
+      skip = 0;
+    }
+    const newTile = new Map();
+    for (const { o, use, sinfo } of moved.values()) {
+      const ts = [...use.tiles.keys()].sort((a, b) => a - b);
+      for (let i = 0; i < ts.length;) {
+        if (newTile.has(ts[i])) { i++; continue; }
+        let j = i;
+        while (j + 1 < ts.length && ts[j + 1] === ts[j] + 1 && !newTile.has(ts[j + 1])) j++;
+        const n = j - i + 1, run = runs.find(([a, b]) => b - a + 1 >= n);
+        if (!run) {
+          plan.problems.push('No room for the pictures of the ' + (LC.KIND_NAMES[o.kind] || 'gadget').toLowerCase() +
+                             ' from stage ' + LC.stageNumber(o.src) + ' (too many things from other stages).');
+          return plan;
+        }
+        const bytes = [];
+        for (let k = 0; k < n; k++) { newTile.set(ts[i + k], run[0] + k); bytes.push(...tileBytes(sinfo, ts[i + k], use.tiles.get(ts[i + k]))); }
+        plan.loads.push({ tile: run[0], bytes });
+        run[0] += n;
+        i = j + 1;
+      }
+      for (const f of use.frames) {
+        if (plan.override.has(f)) continue;
+        let p = r.u32(FRAMES_TBL + f * 4) & 0xFFFFFF;
+        const n = (r.u16(p) >> 8) + 1, def = [rom[p], rom[p + 1]];
+        p += 2;
+        for (let i = 0; i < n; i++, p += 6) {
+          const a = r.u16(p + 4), na = (a & 0xF800) | (newTile.get(a & 0x7FF) & 0x7FF);
+          def.push(rom[p], rom[p + 1], rom[p + 2], rom[p + 3], (na >> 8) & 255, na & 255);
+        }
+        plan.override.set(f, def);
       }
     }
     return plan;
@@ -1104,7 +1194,9 @@
   /* problems with the borrowed items of a level (for the editor's checks) */
   LC.borrowProblems = (rom, level) => {
     const items = level.items.filter(o => o.src && o.src !== level.stage);
-    return items.length ? borrowPlan(rom, level.stage, items).problems : [];
+    if (!items.length) return [];
+    const blk = blockPlan(rom, level, LC.info(rom, level.stage).nmeta);
+    return borrowPlan(rom, level.stage, items, blk.tiles).problems;
   };
 
   LC.exportLevel = function (rom, level) {
@@ -1164,7 +1256,7 @@
     }
     const colAddr = emit(cb);
     /* items from other stages: their pictures come along */
-    const bp = borrowPlan(rom, st, res.items);
+    const bp = borrowPlan(rom, st, res.items, blk.tiles);
     if (bp.problems.length) throw new Error(bp.problems.join('\n'));
     bp.loads.push(...blk.loads);
     let ntbl = 0, lowest = 0xFFFFFFFF;          /* entries: the table ends where the frames start */
@@ -1187,10 +1279,10 @@
     const guardAddr = emit(words(gl));
     /* new frames: a copy of the frame table with them at its end */
     let tblAddr = 0;
-    if (bp.frames.length) {
-      const defs = bp.frames.map(d => emit(d));
+    if (bp.frames.length || bp.override.size) {
+      const defs = bp.frames.map(d => emit(d)), over = new Map([...bp.override].map(([f, d]) => [f, emit(d)]));
       const t = [];
-      for (let i = 0; i < ntbl; i++) t.push(r.u32(FRAMES_TBL + 4 * i));
+      for (let i = 0; i < ntbl; i++) t.push(over.has(i) ? over.get(i) : r.u32(FRAMES_TBL + 4 * i));
       tblAddr = emit(longs(t.concat(defs)));
     }
     /* the stage's tile loader, then the borrowed tiles (raw copies with sub_0119C) */

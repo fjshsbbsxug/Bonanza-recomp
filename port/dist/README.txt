@@ -147,6 +147,14 @@ of the stage, say) under the building so you can build over it. With a map of an
 stage loaded, "Detect layout" finds its floors and staircases, "Match floor count" gives
 your building as many floors (up to 5), and "Place the stairs" builds every staircase
 where the map has it, going the same way.
+The Collision tab shows and changes what is solid: pick Front lane, Back lane, Wall (both
+lanes) or Open and drag a box over the building (8-pixel squares; red dots are the front
+lane, blue the back lane). Point at anything to see what it is (the floor, what is solid
+there, doors, stairs, the exit, each guard, treasure or gadget, its lane and the stage it
+comes from). Guards and treasures go in the lane you pick in their tab ("Lane": as shown,
+front, back); Lane (L) moves the one you picked with the hand to the other lane. Every
+gadget of every stage can be used anywhere (its pictures are moved to free room where the
+stage needs its own).
 
 New stages: the arcade had two stages the Mega Drive left out, the Department Store
 (after Mint) and the Antique Shop (after Deluxe Liner). "Or make a new stage" on Bonanza
