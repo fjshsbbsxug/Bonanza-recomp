@@ -1105,12 +1105,14 @@ int draw_hud_number_p2(void) { num = &number_p2; return run(hud_number); }
 /* jsr / bsr (taking jsr_cost) to one of the routines here, and its rts */
 static void call(void (*body)(void), uint32_t ret, int jsr_cost)
 {
+    uint32_t pc = pc_now;
     COST(jsr_cost);
     REG_A[7] -= 4;
     if (!dry) WR32(REG_A[7], ret);
     body();
     REG_A[7] += 4;
     COST(16);
+    pc_now = pc;
 }
 
 /* sub_11DF8 / sub_11E88: a score (0xFFC0F4 / 0xFFC100) as 8 digits in the HUD */
@@ -1768,3 +1770,96 @@ static void targets_picture(void)
     go_on(0x1154C);
 }
 int draw_targets_picture(void) { return run(targets_picture); }
+
+/* ---------------------------------------------------------------- blocks of the map
+ *
+ * sub_282A4: rows of the level map's 2x2-tile cells (the work area at 0xFF2CD4: cells,
+ * their tiles, video address, cells - 1, rows - 1) into a plane, the top tiles of a row
+ * of cells then the bottom ones; a row that runs off the plane's right edge goes on at
+ * its left edge (the address back to the row's start) */
+
+/* add.w: the result's flags (X too) */
+static uint16_t add_w(uint16_t src, uint16_t dst)
+{
+    uint32_t res = (uint32_t)src + dst;
+    FLAG_N = NFLAG_16(res);
+    FLAG_Z = MASK_OUT_ABOVE_16(res);
+    FLAG_V = VFLAG_ADD_16(src, dst, res);
+    FLAG_X = FLAG_C = CFLAG_16(res);
+    return (uint16_t)res;
+}
+
+static void map_block(void)
+{
+    uint32_t a0 = 0xFF2CD4u;
+    from(0x282A4);
+    REG_A[0] = a0;
+    W(REG_D[0], RD16(a0 + 0xC));
+    reach(0x282AE);
+    int rows = (int)(uint16_t)REG_D[0] + 1;
+    for (int r = 0; r < rows; r++) {
+        for (int half = 0; half < 2; half++) {
+            uint32_t row_at = half ? 0x28304 : 0x282AE, loop = half ? 0x28328 : 0x282CA;
+            from(row_at);
+            W(REG_D[7], RD16(a0 + 8));
+            if (half) {
+                W(REG_D[7], add_w(0x80, (uint16_t)REG_D[7]));
+                if (!dry) WR16(a0 + 8, (uint16_t)REG_D[7]);
+            }
+            W(REG_D[2], REG_D[7]);
+            reach(row_at + (half ? 0x0E : 0x06));        /* the jsr */
+            call(vram_at, row_at + (half ? 0x14 : 0x0C), 20);
+            from(row_at + (half ? 0x14 : 0x0C));
+            W(REG_D[1], RD16(a0 + 0xA));
+            W(REG_D[2], (uint16_t)REG_D[2] & 0x7E);
+            REG_A[6] = RD32(a0);
+            REG_A[5] = RD32(a0 + 4);
+            reach(loop);
+            int n = (int)(uint16_t)REG_D[1] + 1;
+            for (int i = 0; i < n; i++) {
+                from(loop);
+                W(REG_D[7], RD16(REG_A[6]));
+                REG_A[6] += 2;
+                W(REG_D[7], (uint16_t)REG_D[7] << 3);
+                uint32_t e = REG_A[5] + (uint32_t)(int16_t)(uint16_t)REG_D[7] + (half ? 4 : 0);
+                reach(loop + 4);
+                put((uint16_t)RD16(e));
+                reach(loop + 0xC);
+                put((uint16_t)RD16(e + 2));
+                reach(loop + 0x14);
+                W(REG_D[2], add_w(4, (uint16_t)REG_D[2]));     /* addq.w #4,d2 */
+                reach(loop + 0x1A);                              /* btst #7,d2 */
+                if (!(REG_D[2] & 0x80)) {
+                    FLAG_Z = 0;
+                    COST(10);
+                } else {
+                    FLAG_Z = 1;
+                    COST(10 + CYC_BCC_NOTAKE_W);
+                    from(loop + 0x1E);
+                    uint16_t v = (uint16_t)RD16(a0 + 8);
+                    W(REG_D[2], v & 0x80);
+                    W(REG_D[7], add_w((uint16_t)REG_D[2], v & 0xFF00));
+                    reach(loop + 0x2E);
+                    call(vram_at, loop + 0x34, 20);
+                    from(loop + 0x34);
+                    REG_D[2] = 0;
+                    FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+                    reach(loop + 0x36);
+                }
+                COST(dbra_cost(i == n - 1));
+            }
+            W(REG_D[1], 0xFFFF);
+        }
+        from(0x28362);
+        W(REG_D[7], add_w(0x80, (uint16_t)RD16(a0 + 8)));
+        if (!dry) WR16(a0 + 8, (uint16_t)REG_D[7]);
+        W(REG_D[7], add_w((uint16_t)RD16(0xFF2CCCu), (uint16_t)RD16(0xFF2CCCu)));
+        REG_A[6] = RD32(a0) + (uint32_t)(int16_t)(uint16_t)REG_D[7];
+        if (!dry) WR32(a0, REG_A[6]);
+        flags_move(REG_A[6], 32);
+        reach(0x28380);
+        COST(dbra_cost(r == rows - 1));
+    }
+    W(REG_D[0], 0xFFFF);
+}
+int draw_map_block(void) { return run(map_block); }

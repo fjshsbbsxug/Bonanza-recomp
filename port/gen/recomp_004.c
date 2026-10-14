@@ -3075,6 +3075,7 @@ L_0282A0: CHK(0x282A0u)  /* move.w (a7)+, sr */
 L_0282A2: CHK(0x282A2u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_0282A4: CHK(0x282A4u)  /* lea.l $ff2cd4.l, a0 */
+	{ int r_ = draw_map_block(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		REG_A[0] = 0xFF2CD4u;
 	}
