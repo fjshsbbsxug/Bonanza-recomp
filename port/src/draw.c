@@ -226,11 +226,14 @@ static void text_d7(void)
 }
 int draw_text_d7(void) { return run(text_d7); }
 
-/* sub_13318: the first of the 4 lines of text waiting at 0xFF6C82 (pointers; 0: none),
- * as sub_011B8 draws them but + 0xF4; one a frame */
+/* sub_13318 / sub_1376A: the first of the 4 lines of text waiting at 0xFF6C82 / 0xFF6C92
+ * (pointers; 0: none), as sub_011B8 draws them but + 0xF4 / + 0x174; one a frame */
+static uint32_t queue_at;
+static uint16_t queue_offset;
+
 static void text_queue(void)
 {
-    uint32_t slot = 0xFF6C82u;
+    uint32_t slot = queue_at;
     COST(12 + 4);                                        /* lea, moveq */
     for (int i = 0; i < 4; i++, slot += 4) {
         uint32_t p = RD32(slot);
@@ -241,7 +244,7 @@ static void text_queue(void)
             uint16_t base = (uint16_t)RD16(src); src += 2;
             uint16_t n = (uint16_t)RD16(src); src += 2;
             COST(12 + 28 + 12 + 8 + 4 + 8);              /* movea, move.l, lea, move.w x3 */
-            text_chars(&src, base, n + 1, 0xF4);
+            text_chars(&src, base, n + 1, queue_offset);
             COST(20);                                    /* clr.l (a0) */
             if (dry) return;
             REG_A[0] = slot;
@@ -262,7 +265,50 @@ static void text_queue(void)
     REG_D[0] |= 0xFFFF;
     FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
 }
-int draw_text_queue(void) { return run(text_queue); }
+int draw_text_queue(void) { queue_at = 0xFF6C82u; queue_offset = 0xF4; return run(text_queue); }
+int draw_text_queue2(void) { queue_at = 0xFF6C92u; queue_offset = 0x174; return run(text_queue); }
+
+/* ---------------------------------------------------------------- registers */
+
+/* sub_0070A: the video registers the game changed (bits of 0xFFC0A0; their values at
+ * 0xFFC07A, as the command words) sent to the chip */
+static void registers(void)
+{
+    uint32_t mask = RD32(0xFFC0A0u);
+    COST(12 + 12 + 20);                                  /* lea, lea, move.l */
+    if (!mask) {
+        COST(10);                                        /* beq taken */
+    } else {
+        COST(10 + CYC_BCC_NOTAKE_W + 8);                 /* beq, move.w #$12,d1 */
+        uint32_t d0 = mask;
+        int x = 0;
+        for (int r = 0; r < 19; r++) {
+            x = d0 & 1;
+            d0 >>= 1;
+            COST(8 + (1 << CYC_SHIFT));                  /* lsr.l #1,d0 */
+            if (x) {
+                if (!dry) vdp_write_ctrl((uint16_t)RD16(0xFFC07Au + 2u * r));
+                COST(10 + CYC_BCC_NOTAKE_W + 12);        /* bcc, move.w (a0),(a1) */
+            } else {
+                COST(10);
+            }
+            COST(4 + dbra_cost(r == 18));                /* addq.w #2,a0; dbra */
+        }
+        if (!dry) {
+            REG_D[0] = d0;
+            REG_D[1] |= 0xFFFF;
+            FLAG_X = x ? XFLAG_SET : XFLAG_CLEAR;
+        }
+    }
+    COST(28);                                            /* clr.l */
+    if (dry) return;
+    if (!mask) REG_D[0] = 0;
+    REG_A[0] = mask ? 0xFFC0A0u : 0xFFC07Au;
+    REG_A[1] = 0xC00004u;
+    WR32(0xFFC0A0u, 0);
+    FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+}
+int draw_registers(void) { return run(registers); }
 
 /* ---------------------------------------------------------------- the split screen's bands
  *

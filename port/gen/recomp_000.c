@@ -3077,6 +3077,7 @@ L_000704: CHK(0x704u)  /* move.w #$9200, (a0) */
 L_000708: CHK(0x708u)  /* rts */
 	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_00070A: CHK(0x70Au)  /* lea.l $ffc07a.l, a0 */
+	if (draw_registers()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }
 	{
 		REG_A[0] = 0xFFC07Au;
 	}

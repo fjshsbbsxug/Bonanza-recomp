@@ -11,6 +11,8 @@ int  draw_tiles_raw(void);      /* sub_0119C */
 int  draw_text(void);           /* sub_011B8 */
 int  draw_text_d7(void);        /* sub_011F2 */
 int  draw_text_queue(void);     /* sub_13318 */
+int  draw_text_queue2(void);    /* sub_1376A */
+int  draw_registers(void);      /* sub_0070A */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);
