@@ -85,9 +85,9 @@ _start:
 	.ascii "JUE             "	| regions
 
 	.include "src/rom_00200.s"
-	.include "src/rom_05C98.s"
-	.include "src/rom_0B23A.s"
-	.include "src/rom_0FDE8.s"
-	.include "src/rom_147FA.s"
-	.include "src/rom_18916.s"
-	.include "src/rom_23AB6.s"
+	.include "src/rom_059C6.s"
+	.include "src/rom_0AF58.s"
+	.include "src/rom_0FBFE.s"
+	.include "src/rom_141F8.s"
+	.include "src/rom_18736.s"
+	.include "src/rom_23948.s"

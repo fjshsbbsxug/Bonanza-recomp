@@ -33535,6 +33535,16 @@ dispatch:
 	case 0x13E3E: goto L_013E3E;
 	case 0x13E42: goto L_013E42;
 	case 0x13E46: goto L_013E46;
+	case 0x13E54: goto L_013E54;
+	case 0x13E5A: goto L_013E5A;
+	case 0x13E5E: goto L_013E5E;
+	case 0x13E64: goto L_013E64;
+	case 0x13E6E: goto L_013E6E;
+	case 0x13E70: goto L_013E70;
+	case 0x13E76: goto L_013E76;
+	case 0x13E7A: goto L_013E7A;
+	case 0x13E80: goto L_013E80;
+	case 0x13E8A: goto L_013E8A;
 	case 0x13E8C: goto L_013E8C;
 	case 0x13E90: goto L_013E90;
 	case 0x13E96: goto L_013E96;
@@ -33549,6 +33559,16 @@ dispatch:
 	case 0x13ECA: goto L_013ECA;
 	case 0x13ECE: goto L_013ECE;
 	case 0x13ED2: goto L_013ED2;
+	case 0x13EE0: goto L_013EE0;
+	case 0x13EE6: goto L_013EE6;
+	case 0x13EEA: goto L_013EEA;
+	case 0x13EF0: goto L_013EF0;
+	case 0x13EFA: goto L_013EFA;
+	case 0x13EFC: goto L_013EFC;
+	case 0x13F02: goto L_013F02;
+	case 0x13F06: goto L_013F06;
+	case 0x13F0C: goto L_013F0C;
+	case 0x13F16: goto L_013F16;
 	case 0x13F18: goto L_013F18;
 	case 0x13F1E: goto L_013F1E;
 	case 0x13F22: goto L_013F22;
@@ -35209,6 +35229,118 @@ L_013E42: CHK(0x13E42u)  /* movea.l (a0, d0.w), a0 */
 L_013E46: CHK(0x13E46u)  /* jmp (a0) */
 	{ uint ea = REG_A[0]; USE_CYCLES(8);
 	  REG_PC = ea; goto dispatch; }
+L_013E54: CHK(0x13E54u)  /* move.w $ff304e.l, d0 */
+	{
+		uint res = m68ki_read_16(0xFF304Eu);
+		uint* r_dst = &REG_D[0];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(16);
+L_013E5A: CHK(0x13E5Au)  /* addi.w #$3e, d0 */
+	{
+		uint* r_dst = &REG_D[0];
+		uint src = 0x3Eu;
+		uint dst = MASK_OUT_ABOVE_16(*r_dst);
+		uint res = src + dst;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_V = VFLAG_ADD_16(src, dst, res);
+		FLAG_X = FLAG_C = CFLAG_16(res);
+		FLAG_Z = MASK_OUT_ABOVE_16(res);
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | FLAG_Z;
+	}
+	USE_CYCLES(8);
+L_013E5E: CHK(0x13E5Eu)  /* move.w d0, $ff6ca6.l */
+	{
+		uint res = MASK_OUT_ABOVE_16(REG_D[0]);
+		uint ea = 0xFF6CA6u;
+	
+		m68ki_write_16(ea, res);
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(16);
+L_013E64: CHK(0x13E64u)  /* move.l #$14114, $ff6cb6.l */
+	{
+		uint res = 0x14114u;
+		uint ea = 0xFF6CB6u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_013E6E: CHK(0x13E6Eu)  /* rts */
+	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
+L_013E70: CHK(0x13E70u)  /* move.w $ff304e.l, d0 */
+	{
+		uint res = m68ki_read_16(0xFF304Eu);
+		uint* r_dst = &REG_D[0];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(16);
+L_013E76: CHK(0x13E76u)  /* subi.w #$3e, d0 */
+	{
+		uint* r_dst = &REG_D[0];
+		uint src = 0x3Eu;
+		uint dst = MASK_OUT_ABOVE_16(*r_dst);
+		uint res = dst - src;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = MASK_OUT_ABOVE_16(res);
+		FLAG_X = FLAG_C = CFLAG_16(res);
+		FLAG_V = VFLAG_SUB_16(src, dst, res);
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | FLAG_Z;
+	}
+	USE_CYCLES(8);
+L_013E7A: CHK(0x13E7Au)  /* move.w d0, $ff6ca6.l */
+	{
+		uint res = MASK_OUT_ABOVE_16(REG_D[0]);
+		uint ea = 0xFF6CA6u;
+	
+		m68ki_write_16(ea, res);
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(16);
+L_013E80: CHK(0x13E80u)  /* move.l #$14186, $ff6cb6.l */
+	{
+		uint res = 0x14186u;
+		uint ea = 0xFF6CB6u;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_013E8A: CHK(0x13E8Au)  /* rts */
+	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_013E8C: CHK(0x13E8Cu)  /* move.w #$a8, d0 */
 	{
 		uint res = 0xA8u;
@@ -35358,6 +35490,118 @@ L_013ECE: CHK(0x13ECEu)  /* movea.l (a0, d0.w), a0 */
 L_013ED2: CHK(0x13ED2u)  /* jmp (a0) */
 	{ uint ea = REG_A[0]; USE_CYCLES(8);
 	  REG_PC = ea; goto dispatch; }
+L_013EE0: CHK(0x13EE0u)  /* move.w $ff3050.l, d0 */
+	{
+		uint res = m68ki_read_16(0xFF3050u);
+		uint* r_dst = &REG_D[0];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(16);
+L_013EE6: CHK(0x13EE6u)  /* addi.w #$42, d0 */
+	{
+		uint* r_dst = &REG_D[0];
+		uint src = 0x42u;
+		uint dst = MASK_OUT_ABOVE_16(*r_dst);
+		uint res = src + dst;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_V = VFLAG_ADD_16(src, dst, res);
+		FLAG_X = FLAG_C = CFLAG_16(res);
+		FLAG_Z = MASK_OUT_ABOVE_16(res);
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | FLAG_Z;
+	}
+	USE_CYCLES(8);
+L_013EEA: CHK(0x13EEAu)  /* move.w d0, $ff6ca8.l */
+	{
+		uint res = MASK_OUT_ABOVE_16(REG_D[0]);
+		uint ea = 0xFF6CA8u;
+	
+		m68ki_write_16(ea, res);
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(16);
+L_013EF0: CHK(0x13EF0u)  /* move.l #$14114, $ff6cba.l */
+	{
+		uint res = 0x14114u;
+		uint ea = 0xFF6CBAu;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_013EFA: CHK(0x13EFAu)  /* rts */
+	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
+L_013EFC: CHK(0x13EFCu)  /* move.w $ff3050.l, d0 */
+	{
+		uint res = m68ki_read_16(0xFF3050u);
+		uint* r_dst = &REG_D[0];
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | res;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(16);
+L_013F02: CHK(0x13F02u)  /* subi.w #$42, d0 */
+	{
+		uint* r_dst = &REG_D[0];
+		uint src = 0x42u;
+		uint dst = MASK_OUT_ABOVE_16(*r_dst);
+		uint res = dst - src;
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = MASK_OUT_ABOVE_16(res);
+		FLAG_X = FLAG_C = CFLAG_16(res);
+		FLAG_V = VFLAG_SUB_16(src, dst, res);
+	
+		*r_dst = MASK_OUT_BELOW_16(*r_dst) | FLAG_Z;
+	}
+	USE_CYCLES(8);
+L_013F06: CHK(0x13F06u)  /* move.w d0, $ff6ca8.l */
+	{
+		uint res = MASK_OUT_ABOVE_16(REG_D[0]);
+		uint ea = 0xFF6CA8u;
+	
+		m68ki_write_16(ea, res);
+	
+		FLAG_N = NFLAG_16(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(16);
+L_013F0C: CHK(0x13F0Cu)  /* move.l #$14186, $ff6cba.l */
+	{
+		uint res = 0x14186u;
+		uint ea = 0xFF6CBAu;
+	
+		m68ki_write_32(ea, res);
+	
+		FLAG_N = NFLAG_32(res);
+		FLAG_Z = res;
+		FLAG_V = VFLAG_CLEAR;
+		FLAG_C = CFLAG_CLEAR;
+	}
+	USE_CYCLES(28);
+L_013F16: CHK(0x13F16u)  /* rts */
+	REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch;
 L_013F18: CHK(0x13F18u)  /* tst.w $ff6ca2.l */
 	{
 		uint res = m68ki_read_16(0xFF6CA2u);

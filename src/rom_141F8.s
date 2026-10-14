@@ -1,5 +1,359 @@
-| ROM 0x147FA
+| ROM 0x141F8
 
+sub_141F8:
+	move.w (0xFFC05A).l,d0
+	subq.w #0x1,d0
+	add.w d0,d0
+	lea dat_14216(pc),a0
+	move.w (a0,d0.w),(0xFF6CC2).l
+	jsr (sub_147FA).l
+	rts
+dat_14216:
+	.byte 0x00,0x1F,0x00,0x1F,0x00,0x1F,0x00,0x1F,0x00,0x1F,0x00,0x1F,0x00,0x1F,0x00,0x1F
+	.byte 0x00,0x1F,0x00,0x1F,0x00,0x1F,0x00,0x1F,0x00,0x1F,0x00,0x1F
+sub_14232:
+	moveq #0xC,d0
+	move.w (0xFF6CC2).l,d1
+loc_1423A:
+	lea (0xFF2EF6).l,a0
+	tst.w (a0,d0.w)
+	beq.w loc_14782
+	lea (0xFF2FA2).l,a6
+	tst.w (a6,d0.w)
+	bne.w loc_14386
+	lea (0xFF9238).l,a4
+	tst.w (a4,d0.w)
+	bne.w loc_14782
+	lea (0xFF9108).l,a6
+	lea (0xFF304E).l,a5
+	move.w (a5,d0.w),d7
+	move.w (a6,d0.w),(a5,d0.w)
+	lea (0xFF9154).l,a6
+	lea (0xFF30FA).l,a5
+	move.w (a5,d0.w),d6
+	move.w (a6,d0.w),(a5,d0.w)
+	lea (0xFF91A0).l,a6
+	lea (0xFF31A6).l,a5
+	move.w (a5,d0.w),d5
+	move.w (a6,d0.w),(a5,d0.w)
+	movem.l d5-d7,-(a7)
+	jsr (sub_058B4).l
+	movem.l (a7)+,d5-d7
+	lea (0xFF2FA2).l,a6
+	tst.w (a6,d0.w)
+	beq.w loc_142E8
+	clr.w (a6,d0.w)
+	lea (0xFF304E).l,a6
+	move.w d7,(a6,d0.w)
+	lea (0xFF30FA).l,a6
+	move.w d6,(a6,d0.w)
+	lea (0xFF31A6).l,a6
+	move.w d5,(a6,d0.w)
+	bra.w loc_14782
+loc_142E8:
+	lea (0xFF9108).l,a6
+	lea (0xFF304E).l,a5
+	move.w (a6,d0.w),(a5,d0.w)
+	lea (0xFF9154).l,a6
+	lea (0xFF30FA).l,a5
+	move.w (a6,d0.w),(a5,d0.w)
+	lea (0xFF91A0).l,a6
+	lea (0xFF31A6).l,a5
+	move.w (a6,d0.w),(a5,d0.w)
+	lea (0xFF91EC).l,a6
+	lea (0xFF7644).l,a5
+	move.w (a6,d0.w),(a5,d0.w)
+	move.w d0,d7
+	add.w d7,d7
+	lea (0xFF8FD8).l,a6
+	lea (0xFF7774).l,a5
+	move.l (a6,d7.w),(a5,d7.w)
+	lea (0xFF9070).l,a6
+	lea (0xFF7CB0).l,a5
+	move.l (a6,d7.w),(a5,d7.w)
+	lea (0xFF7858).l,a6
+	clr.w (a6,d0.w)
+	lea (0xFF406E).l,a6
+	clr.w (a6,d0.w)
+	lea (0xFF32FE).l,a6
+	clr.w (a6,d0.w)
+	jsr (sub_179B0).l
+	move.w #0x1,(a4,d0.w)
+	bra.w loc_14782
+loc_14386:
+	lea (0xFF9744).l,a6
+	clr.w (a6,d0.w)
+	lea (0xFF9238).l,a6
+	clr.w (a6,d0.w)
+	lea (0xFF931C).l,a6
+	move.w (a6,d0.w),d7
+	beq.w loc_143D4
+	lea (0xFF2FA2).l,a6
+	move.w (a6,d0.w),d6
+	subq.w #0x2,d7
+	bne.w loc_143CE
+	andi.w #0x1,d6
+	bne.w loc_143D4
+loc_143C0:
+	lea (0xFF931C).l,a6
+	clr.w (a6,d0.w)
+	bra.w loc_143D4
+loc_143CE:
+	andi.w #0x2,d6
+	beq.s loc_143C0
+loc_143D4:
+	lea (0xFF9284).l,a6
+	tst.w (a6,d0.w)
+	beq.w loc_14416
+	jsr (sub_16BE8).l
+	lea (0xFF931C).l,a6
+	move.w (0xFF6CC0).l,(a6,d0.w)
+	beq.w loc_14416
+	move.w #0x3,d7
+	move.w d0,d6
+	jsr (sub_171B6).l
+	bne.w loc_14416
+	move.w #0xC,d7
+	move.w d0,d6
+	jsr (sub_17170).l
+loc_14416:
+	lea (0xFF6D5C).l,a6
+	move.w (a6,d0.w),d7
+	beq.w loc_1445C
+	clr.w (a6,d0.w)
+	lea (0xFF7858).l,a6
+	clr.w (a6,d0.w)
+	subq.w #0x4,d7
+	lea (tbl_1479E).l,a6
+	movea.l (a6,d7.w),a6
+	move.w d0,d7
+	add.w d7,d7
+	movea.l (a6,d7.w),a6
+	lea (0xFF7774).l,a5
+	move.l a6,(a5,d7.w)
+	lea (0xFF6D5C).l,a6
+	clr.w (a6,d0.w)
+	bra.s loc_1449A
+loc_1445C:
+	lea (0xFF6E8C).l,a6
+	move.w d0,d7
+	add.w d7,d7
+	tst.l (a6,d7.w)
+	beq.w loc_1449A
+	lea (0xFF7CB0).l,a5
+	movea.l (a5,d7.w),a4
+	lea (0xFF7774).l,a3
+	move.l (a3,d7.w),-(a4)
+	move.l a4,(a5,d7.w)
+	move.l (a6,d7.w),(a3,d7.w)
+	clr.l (a6,d7.w)
+	lea (0xFF7858).l,a6
+	clr.w (a6,d0.w)
+loc_1449A:
+	lea (0xFF7858).l,a6
+	move.w (a6,d0.w),d7
+	bne.w loc_147E6
+	jmp (loc_147C2).l
+loc_144AE:
+	lea (0xFF365A).l,a6
+	subq.w #0x1,(a6,d0.w)
+	bne.w loc_14502
+	lea (0xFF35AE).l,a6
+	move.w (a6,d0.w),d7
+loc_144C6:
+	move.w d7,d6
+	lea (0xFF3456).l,a6
+	move.w d0,d5
+	add.w d5,d5
+	movea.l (a6,d5.w),a6
+	adda.w d7,a6
+	lea (0xFF3252).l,a5
+	move.w (a6)+,d7
+	bpl.w loc_144E8
+	moveq #0x0,d7
+	bra.s loc_144C6
+loc_144E8:
+	move.w d7,(a5,d0.w)
+	lea (0xFF365A).l,a5
+	move.w (a6),(a5,d0.w)
+	addq.w #0x4,d6
+	lea (0xFF35AE).l,a6
+	move.w d6,(a6,d0.w)
+loc_14502:
+	lea (0xFF99A4).l,a6
+	clr.w (a6,d0.w)
+	lea (0xFF9744).l,a6
+	tst.w (a6,d0.w)
+	bne.w loc_145F0
+	lea (0xFF9790).l,a6
+	tst.w (a6,d0.w)
+	bne.w loc_14586
+	move.w (0xFF17A0).l,d7
+	move.w d0,d6
+	andi.w #0x1,d7
+	lsr.w #0x1,d6
+	andi.w #0x1,d6
+	cmp.w d6,d7
+	bne.w loc_145F0
+	moveq #0x0,d7
+	moveq #0x2,d6
+	jsr (sub_17C54).l
+	bne.w loc_145F0
+	lea (dat_1478A).l,a6
+	lea (0xFF98C0).l,a5
+	move.w (a6)+,(a5,d0.w)
+	lea (0xFF9874).l,a5
+	move.w (a6)+,(a5,d0.w)
+	move.w d0,d7
+	add.w d7,d7
+	lea (0xFF97DC).l,a5
+	move.l a6,(a5,d7.w)
+	lea (0xFF9790).l,a6
+	move.w #0x1,(a6,d0.w)
+	bra.w loc_145F0
+loc_14586:
+	lea (0xFF98C0).l,a6
+	move.w (a6,d0.w),d6
+	moveq #0x0,d7
+	jsr (sub_17C54).l
+	beq.w loc_145AE
+	lea (0xFF9790).l,a6
+	clr.w (a6,d0.w)
+	jsr (sub_1798C).l
+	move.w d7,d6
+loc_145AE:
+	lea (0xFF30FA).l,a6
+	add.w (a6,d0.w),d6
+	move.w d6,(a6,d0.w)
+	lea (0xFF9874).l,a6
+	subq.w #0x1,(a6,d0.w)
+	bne.w loc_145F0
+	move.w d0,d7
+	add.w d7,d7
+	lea (0xFF97DC).l,a6
+	movea.l (a6,d7.w),a5
+	lea (0xFF98C0).l,a4
+	move.w (a5)+,(a4,d0.w)
+	lea (0xFF9874).l,a4
+	move.w (a5)+,(a4,d0.w)
+	move.l a5,(a6,d7.w)
+loc_145F0:
+	lea (0xFF3F16).l,a6
+	clr.w (a6,d0.w)
+	jsr (sub_1A878).l
+	btst #0x0,d6
+	beq.w loc_14696
+	tst.w (0xFF56BE).l
+	bne.w loc_14696
+	lea (0xFF7644).l,a6
+	move.w (a6,d0.w),d7
+	beq.w loc_14628
+	andi.w #0x4,d7
+	bne.w loc_14696
+loc_14628:
+	lea (0xFF3F16).l,a6
+	move.w #0x2,(a6,d0.w)
+	lea (0xFF3FC2).l,a6
+	move.w (0xFFA3BC).l,(a6,d0.w)
+	lea (0xFFA518).l,a6
+	move.w #0x0,(a6,d0.w)
+	move.w #0xFFFF,d7
+	lea (0xFF7644).l,a6
+	cmpi.w #0x1,(a6,d0.w)
+	beq.w loc_14666
+	move.w #0x1,d7
+loc_14666:
+	move.w d7,(0xFF56EE).l
+	tst.w (0xFFA3AE).l
+	bne.w loc_14714
+	cmpi.w #0x8002,(0xFF5688).l
+	beq.w loc_14714
+	move.w #0x1,(0xFFA3AE).l
+	move.w (0xFFA3BC).l,(0xFFA3B2).l
+	bra.s loc_14714
+loc_14696:
+	btst #0x1,d6
+	beq.w loc_14778
+	tst.w (0xFF5768).l
+	bne.w loc_14778
+	lea (0xFF3F16).l,a6
+	move.w #0x4,(a6,d0.w)
+	lea (0xFF3FC2).l,a6
+	move.w (0xFFA3BE).l,(a6,d0.w)
+	lea (0xFFA518).l,a6
+	move.w #0x2,(a6,d0.w)
+	move.w #0xFFFF,d7
+	lea (0xFF7644).l,a6
+	cmpi.w #0x1,(a6,d0.w)
+	beq.w loc_146E6
+	move.w #0x1,d7
+loc_146E6:
+	move.w d7,(0xFF5798).l
+	tst.w (0xFFA3B0).l
+	bne.w loc_14714
+	cmpi.w #0x8002,(0xFF5732).l
+	beq.w loc_14714
+	move.w #0x1,(0xFFA3B0).l
+	move.w (0xFFA3BE).l,(0xFFA3B4).l
+loc_14714:
+	lea (0xFF931C).l,a6
+	tst.w (a6,d0.w)
+	beq.w loc_14754
+	lea (0xFF9790).l,a6
+	tst.w (a6,d0.w)
+	bne.w loc_14778
+	lea (0xFF31A6).l,a6
+	move.w (a6,d0.w),d7
+	beq.w loc_14746
+	cmpi.w #0x10,d7
+	bne.w loc_14778
+loc_14746:
+	move.w d0,d6
+	move.w #0x1C,d7
+	jsr (sub_17170).l
+	bra.s loc_14778
+loc_14754:
+	lea (0xFF7644).l,a6
+	move.w (a6,d0.w),d7
+	add.w d7,d7
+	lea dat_147BA(pc),a6
+	move.w (a6,d7.w),d7
+	lea (0xFF3FC2).l,a6
+	cmp.w (a6,d0.w),d7
+	bne.w loc_14778
+	nop
+loc_14778:
+	lea (0xFF3D12).l,a6
+	clr.w (a6,d0.w)
+loc_14782:
+	addq.w #0x2,d0
+	dbra d1,loc_1423A
+	rts
+dat_1478A:
+	.byte 0x00,0x01,0x00,0x01,0x00,0x02,0x00,0x02,0x00,0x03,0x00,0x01,0x00,0x04,0x00,0x02
+	.byte 0x00,0x08,0xFF,0xFF
+tbl_1479E:
+	.byte 0x00,0xFF,0x6F,0x24,0x00,0xFF,0x6F,0xBC,0x00,0xFF,0x70,0x54,0x00,0xFF,0x70,0xEC
+	.byte 0x00,0xFF,0x71,0x84,0x00,0xFF,0x72,0x1C,0x00,0xFF,0x72,0xB4
+dat_147BA:
+	.byte 0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x02
+loc_147C2:
+	lea (0xFF7774).l,a0
+	move.w d0,d7
+	add.w d7,d7
+	movea.l (a0,d7.w),a0
+	move.w (a0)+,d7
+	lea (0xFF780C).l,a6
+	move.w d7,(a6,d0.w)
+	lea tbl_14D5A(pc),a6
+	movea.l (a6,d7.w),a6
+	jmp (a6)
+loc_147E6:
+	lea (0xFF780C).l,a6
+	move.w (a6,d0.w),d7
+	lea tbl_14E5E(pc),a6
+	movea.l (a6,d7.w),a6
+	jmp (a6)
 sub_147FA:
 	move.w (0xFFC05A).l,d0
 	subq.w #0x1,d0
@@ -3962,129 +4316,3 @@ dat_1872A:
 	.byte 0x03,0x34,0x00,0x00,0xFF,0xFF
 dat_18730:
 	.byte 0x03,0x36,0x00,0x00,0xFF,0xFF
-sub_18736:
-	move.w #0x8C,d2
-	move.w #0xF,d6
-	lea (0xFF2EF6).l,a6
-loc_18744:
-	tst.w (a6,d2.w)
-	beq.w loc_18754
-	addq.w #0x2,d2
-	dbra d6,loc_18744
-	rts
-loc_18754:
-	lea (0xFF99F0).l,a6
-	move.w d7,(a6,d2.w)
-	lea (0xFF9BF4).l,a6
-	move.w d0,(a6,d2.w)
-	lea tbl_18772(pc),a6
-	movea.l (a6,d7.w),a6
-	jmp (a6)
-tbl_18772:
-	.long sub_18880
-	.long sub_18916
-	.long sub_189AC
-	.long sub_18C90
-	.long sub_18F10
-	.long sub_190CC
-	.long sub_19692
-	.long sub_1971E
-	.long sub_197B2
-	.long sub_19906
-	.long sub_19A34
-	.long sub_19BC2
-	.long sub_19C4C
-	.long sub_19EC0
-	.long sub_19BF2
-	.long sub_19F30
-	.long sub_19FA6
-	.long sub_1A00C
-	.long sub_1A0AE
-	.long sub_1A262
-	.long sub_1A464
-	.long sub_1A6D6
-	.long sub_1A71A
-sub_187CE:
-	move.w #0x8C,d0
-	lea (0xFF2EF6).l,a6
-	clr.w (a6,d0.w)
-	clr.w 0x2(a6,d0.w)
-	clr.w 0x4(a6,d0.w)
-	clr.w 0x6(a6,d0.w)
-	rts
-sub_187EA:
-	move.w #0x8C,d0
-	move.w #0xF,d1
-loc_187F2:
-	lea (0xFF2EF6).l,a6
-	tst.w (a6,d0.w)
-	beq.w loc_1881C
-	lea (0xFF99F0).l,a6
-	move.w (a6,d0.w),d7
-	lea tbl_18824(pc),a6
-	movea.l (a6,d7.w),a6
-	movem.l d0-d1,-(a7)
-	jsr (a6)
-	movem.l (a7)+,d0-d1
-loc_1881C:
-	addq.w #0x2,d0
-	dbra d1,loc_187F2
-	rts
-tbl_18824:
-	.long sub_188DE
-	.long sub_18974
-	.long sub_18A6E
-	.long sub_18D52
-	.long sub_18FAC
-	.long sub_1946A
-	.long sub_196BC
-	.long sub_19748
-	.long sub_19854
-	.long sub_1999A
-	.long sub_19ADC
-	.long sub_19C00
-	.long sub_19D5C
-	.long sub_19F04
-	.long sub_19C26
-	.long sub_19F5C
-	.long sub_1A072
-	.long sub_1A072
-	.long sub_1A23A
-	.long sub_1A310
-	.long sub_1A4F2
-	.long sub_1A718
-	.long sub_1A75C
-sub_18880:
-	lea (0xFF304E).l,a6
-	move.w (a6,d0.w),d7
-	move.w d7,(a6,d2.w)
-	lea (0xFF30FA).l,a6
-	move.w (a6,d0.w),d7
-	subi.w #0x16,d7
-	move.w d7,(a6,d2.w)
-	lea (0xFF31A6).l,a6
-	move.w (a6,d0.w),d7
-	move.w d7,(a6,d2.w)
-	lea (0xFF3252).l,a6
-	move.w #0x166,(a6,d2.w)
-	lea (0xFF9B48).l,a6
-	move.w #0x3C,(a6,d2.w)
-	lea (0xFF8D78).l,a6
-	move.w d2,(a6,d0.w)
-	lea (0xFF2EF6).l,a6
-	move.w #0x1,(a6,d2.w)
-	rts
-sub_188DE:
-	lea (0xFF9B48).l,a6
-	subq.w #0x1,(a6,d0.w)
-	bne.w loc_18914
-	lea (0xFF9BF4).l,a6
-	move.w (a6,d0.w),d7
-	lea (0xFF7858).l,a6
-	clr.w (a6,d7.w)
-	lea (0xFF8D78).l,a6
-	clr.w (a6,d7.w)
-	lea (0xFF2EF6).l,a6
-	clr.w (a6,d0.w)
-loc_18914:
-	rts

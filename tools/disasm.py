@@ -104,6 +104,9 @@ class Tracer:
         while a < limit:
             if kind in ("long", "dptr"):
                 v = rd32(rom, a)
+                if v == 0 and not ents and a - t < 16:
+                    a += 4              # a table indexed from 1 (entry 0 unused)
+                    continue
                 if not (0x200 <= v < n) or v & 1:
                     break
                 step = 4

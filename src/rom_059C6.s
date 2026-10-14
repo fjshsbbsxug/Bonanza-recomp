@@ -1,5 +1,216 @@
-| ROM 0x05C98
+| ROM 0x059C6
 
+sub_059C6:
+	lea (0xFF32FE).l,a6
+	tst.w (a6,d0.w)
+	bne.w loc_05B1E
+	lea (0xFF3252).l,a6
+	move.w (a6,d0.w),d7
+	beq.w loc_05B1C
+	lsl.w #0x2,d7
+	lea (tbl_24B80).l,a6
+	movea.l (a6,d7.w),a6
+	move.w (a6)+,d2
+	lsr.w #0x8,d2
+loc_059F2:
+	moveq #0x0,d7
+	move.b (a6),d7
+	ext.w d7
+	lea (0xFF30FA).l,a5
+	add.w (a5,d0.w),d7
+	sub.w (0xFF1850).l,d7
+	addi.w #0x105,d7
+	lea (0xFF31A6).l,a4
+	sub.w (a4,d0.w),d7
+	addi.w #0x14,d7
+	moveq #0x0,d5
+	move.b (a6)+,d5
+	ext.w d5
+	add.w (a5,d0.w),d5
+	sub.w (0xFF2294).l,d5
+	addi.w #0x85,d5
+	sub.w (a4,d0.w),d5
+	addi.w #0x14,d5
+	moveq #0x0,d6
+	move.b (a6),d6
+	ext.w d6
+	lea (0xFF304E).l,a5
+	add.w (a5,d0.w),d6
+	sub.w (0xFF1852).l,d6
+	addi.w #0x80,d6
+	moveq #0x0,d4
+	move.b (a6)+,d4
+	ext.w d4
+	add.w (a5,d0.w),d4
+	sub.w (0xFF2296).l,d4
+	addi.w #0x80,d4
+	move.l (a6)+,d3
+	lea (0xFF3C66).l,a5
+	or.w (a5,d0.w),d3
+	lea (0xFF31A6).l,a5
+	cmpi.w #0xD,(a5,d0.w)
+	bcc.w loc_05A86
+	ori.l #0x8000,d3
+loc_05A86:
+	tst.w (a5,d0.w)
+	bne.w loc_05AA8
+	lea (0xFF07A0).l,a3
+	lea (0xFF17A6).l,a1
+	lea (0xFF0FA0).l,a4
+	lea (0xFF17AA).l,a2
+	bra.s loc_05AC0
+loc_05AA8:
+	lea (0xFF0BA0).l,a3
+	lea (0xFF17A8).l,a1
+	lea (0xFF13A0).l,a4
+	lea (0xFF17AC).l,a2
+loc_05AC0:
+	movem.l d2,-(a7)
+	lea (0xFF2FA2).l,a5
+	move.w (a5,d0.w),d2
+	andi.w #0x1,d2
+	beq.w loc_05AEC
+	move.w (a1),d2
+	cmpi.w #0x40,d2
+	beq.w loc_05B14
+	addq.w #0x1,(a1)
+	lsl.w #0x3,d2
+	adda.w d2,a3
+	move.w d7,(a3)+
+	move.l d3,(a3)+
+	move.w d6,(a3)
+loc_05AEC:
+	lea (0xFF2FA2).l,a5
+	move.w (a5,d0.w),d2
+	andi.w #0x2,d2
+	beq.w loc_05B14
+	move.w (a2),d2
+	cmpi.w #0x40,d2
+	beq.w loc_05B14
+	addq.w #0x1,(a2)
+	lsl.w #0x3,d2
+	adda.w d2,a4
+	move.w d5,(a4)+
+	move.l d3,(a4)+
+	move.w d4,(a4)
+loc_05B14:
+	movem.l (a7)+,d2
+	dbra d2,loc_059F2
+loc_05B1C:
+	rts
+loc_05B1E:
+	movem.l d1,-(a7)
+	lea (0xFF3252).l,a6
+	move.w (a6,d0.w),d7
+	beq.w loc_05C92
+	lsl.w #0x2,d7
+	lea (tbl_24B80).l,a6
+	movea.l (a6,d7.w),a6
+	move.w (a6)+,d2
+	lsr.w #0x8,d2
+loc_05B40:
+	moveq #0x0,d7
+	move.b (a6),d7
+	ext.w d7
+	lea (0xFF30FA).l,a5
+	add.w (a5,d0.w),d7
+	sub.w (0xFF1850).l,d7
+	addi.w #0x105,d7
+	lea (0xFF31A6).l,a4
+	sub.w (a4,d0.w),d7
+	addi.w #0x14,d7
+	moveq #0x0,d5
+	move.b (a6)+,d5
+	ext.w d5
+	add.w (a5,d0.w),d5
+	sub.w (0xFF2294).l,d5
+	addi.w #0x85,d5
+	sub.w (a4,d0.w),d5
+	addi.w #0x14,d5
+	moveq #0x0,d6
+	move.b (a6)+,d6
+	move.w d6,d4
+	move.l (a6)+,d3
+	eori.l #0x800,d3
+	lea (0xFF3C66).l,a5
+	or.w (a5,d0.w),d3
+	move.l d3,d1
+	swap d1
+	lsr.w #0x7,d1
+	andi.w #0x18,d1
+	addq.w #0x8,d1
+	ext.w d6
+	add.w d1,d6
+	lea (0xFF304E).l,a5
+	move.w (a5,d0.w),d1
+	sub.w d6,d1
+	sub.w (0xFF1852).l,d1
+	addi.w #0x80,d1
+	move.w d1,d6
+	move.l d3,d1
+	swap d1
+	lsr.w #0x7,d1
+	andi.w #0x18,d1
+	addq.w #0x8,d1
+	ext.w d4
+	add.w d1,d4
+	move.w (a5,d0.w),d1
+	sub.w d4,d1
+	sub.w (0xFF2296).l,d1
+	addi.w #0x80,d1
+	move.w d1,d4
+	lea (0xFF31A6).l,a5
+	cmpi.w #0xD,(a5,d0.w)
+	bcc.w loc_05BFC
+	ori.l #0x8000,d3
+loc_05BFC:
+	tst.w (a5,d0.w)
+	bne.w loc_05C1E
+	lea (0xFF07A0).l,a3
+	lea (0xFF17A6).l,a1
+	lea (0xFF0FA0).l,a4
+	lea (0xFF17AA).l,a2
+	bra.s loc_05C36
+loc_05C1E:
+	lea (0xFF0BA0).l,a3
+	lea (0xFF17A8).l,a1
+	lea (0xFF13A0).l,a4
+	lea (0xFF17AC).l,a2
+loc_05C36:
+	movem.l d2,-(a7)
+	lea (0xFF2FA2).l,a5
+	move.w (a5,d0.w),d2
+	andi.w #0x1,d2
+	beq.w loc_05C62
+	move.w (a1),d2
+	cmpi.w #0x40,d2
+	beq.w loc_05C8A
+	addq.w #0x1,(a1)
+	lsl.w #0x3,d2
+	adda.w d2,a3
+	move.w d7,(a3)+
+	move.l d3,(a3)+
+	move.w d6,(a3)
+loc_05C62:
+	lea (0xFF2FA2).l,a5
+	move.w (a5,d0.w),d2
+	andi.w #0x2,d2
+	beq.w loc_05C8A
+	move.w (a2),d2
+	cmpi.w #0x40,d2
+	beq.w loc_05C8A
+	addq.w #0x1,(a2)
+	lsl.w #0x3,d2
+	adda.w d2,a4
+	move.w d5,(a4)+
+	move.l d3,(a4)+
+	move.w d4,(a4)
+loc_05C8A:
+	movem.l (a7)+,d2
+	dbra d2,loc_05B40
+loc_05C92:
+	movem.l (a7)+,d1
+	rts
 sub_05C98:
 	lea (0xFF0000).l,a0
 	move.w (0xFF17A4).l,d0
@@ -4239,223 +4450,4 @@ sub_0AF32:
 loc_0AF50:
 	jsr (sub_09846).l
 loc_0AF56:
-	rts
-sub_0AF58:
-	moveq #0x0,d6
-	move.b (0xFF17C2).l,d6
-	andi.b #0xF,d6
-	beq.w loc_0AF7C
-	moveq #0x1,d7
-	andi.b #0xC,d6
-	bne.w loc_0AF76
-	move.w #0x8019,d7
-loc_0AF76:
-	jsr (sub_09894).l
-loc_0AF7C:
-	rts
-sub_0AF7E:
-	lea (0xFF2EF6).l,a0
-	lea (0xFF2FA2).l,a1
-	lea (0xFF931C).l,a2
-	move.w #0xC,d0
-	move.w #0x1F,d1
-	move.w d7,d2
-	lsr.w #0x1,d2
-loc_0AF9C:
-	tst.w (a0,d0.w)
-	beq.w loc_0AFE0
-	move.w (a1,d0.w),d3
-	and.w d2,d3
-	beq.w loc_0AFE0
-	tst.w (a2,d0.w)
-	bne.w loc_0AFE0
-	lea (0xFF31A6).l,a6
-	tst.w (a6,d0.w)
-	beq.w loc_0AFCE
-	cmpi.w #0x10,(a6,d0.w)
-	bne.w loc_0AFE0
-loc_0AFCE:
-	movem.l d2/d7,-(a7)
-	move.w d7,d3
-	move.w d0,d2
-	jsr (sub_17A44).l
-	movem.l (a7)+,d2/d7
-loc_0AFE0:
-	addq.w #0x2,d0
-	dbra d1,loc_0AF9C
-	rts
-sub_0AFE8:
-	tst.w (0xFF56B2).l
-	beq.w loc_0AFF8
-loc_0AFF2:
-	moveq #0x1,d0
-	bra.w loc_0B04C
-loc_0AFF8:
-	tst.w (0xFFA3AE).l
-	beq.w loc_0B020
-	tst.w (0xFF31A6).l
-	bne.w loc_0B020
-	move.w (0xFF3D12).l,d0
-	beq.w loc_0B020
-	jsr (sub_0AB68).l
-	tst.w d7
-	bne.s loc_0AFF2
-loc_0B020:
-	jsr (sub_0D7E4).l
-	bne.s loc_0AFF2
-	move.b (0xFF17C0).l,d7
-	tst.w (0xFF31A6).l
-	bne.w loc_0B044
-	btst #0x1,d7
-	bne.s loc_0AFF2
-	moveq #0x0,d0
-	bra.w loc_0B04C
-loc_0B044:
-	btst #0x0,d7
-	bne.s loc_0AFF2
-	moveq #0x0,d0
-loc_0B04C:
-	tst.w d0
-	rts
-sub_0B050:
-	tst.w (0xFF575C).l
-	beq.w loc_0B060
-loc_0B05A:
-	moveq #0x1,d0
-	bra.w loc_0B0B4
-loc_0B060:
-	tst.w (0xFFA3B0).l
-	beq.w loc_0B088
-	tst.w (0xFF31A8).l
-	bne.w loc_0B088
-	move.w (0xFF3D14).l,d0
-	beq.w loc_0B088
-	jsr (sub_0ABAA).l
-	tst.w d7
-	bne.s loc_0B05A
-loc_0B088:
-	jsr (sub_0FBFE).l
-	bne.s loc_0B05A
-	move.b (0xFF17C2).l,d7
-	tst.w (0xFF31A8).l
-	bne.w loc_0B0AC
-	btst #0x1,d7
-	bne.s loc_0B05A
-	moveq #0x0,d0
-	bra.w loc_0B0B4
-loc_0B0AC:
-	btst #0x0,d7
-	bne.s loc_0B05A
-	moveq #0x0,d0
-loc_0B0B4:
-	tst.w d0
-	rts
-sub_0B0B8:
-	tst.w (0xFFA3AE).l
-	beq.w loc_0B10E
-	move.w (0xFFA3B2).l,d0
-	cmp.b (0xFF3A62).l,d0
-	bne.w loc_0B10E
-	move.w (0xFF3D12).l,d0
-	bne.w loc_0B0E2
-loc_0B0DC:
-	moveq #0x1,d0
-	bra.w loc_0B172
-loc_0B0E2:
-	move.w (0xFF31A6).l,d6
-	cmpi.w #0x10,d6
-	beq.w loc_0B0F6
-	clr.w (0xFF31A6).l
-loc_0B0F6:
-	movem.l d6,-(a7)
-	jsr (sub_0AAE2).l
-	movem.l (a7)+,d6
-	move.w d6,(0xFF31A6).l
-	tst.w d7
-	bne.s loc_0B0DC
-loc_0B10E:
-	moveq #0x0,d7
-	move.b (0xFF17C0).l,d7
-	andi.b #0xC,d7
-	lsr.b #0x2,d7
-	subq.b #0x1,d7
-	lsl.w #0x3,d7
-	lea dat_0B870(pc),a6
-	adda.w d7,a6
-	move.w (0xFF304E).l,d0
-	add.w (a6)+,d0
-	move.w (0xFF30FA).l,d1
-	move.w (a6)+,d3
-	add.w d3,d1
-	movem.l a6,-(a7)
-	jsr (sub_1016A).l
-	jsr (sub_102A6).l
-	movem.l (a7)+,a6
-	bne.s loc_0B0DC
-	move.w (0xFF304E).l,d0
-	add.w (a6)+,d0
-	move.w (0xFF30FA).l,d1
-	move.w (a6),d3
-	add.w d3,d1
-	jsr (sub_1016A).l
-	jsr (sub_102A6).l
-	bne.w loc_0B0DC
-	moveq #0x0,d0
-loc_0B172:
-	tst.w d0
-	rts
-	.byte 0x00,0x00,0xFF,0xFE,0x00,0x02
-sub_0B17C:
-	tst.w (0xFFA3B0).l
-	beq.w loc_0B1D2
-	move.w (0xFFA3B4).l,d0
-	cmp.b (0xFF3A64).l,d0
-	bne.w loc_0B1D2
-	move.w (0xFF3D14).l,d0
-	bne.w loc_0B1A6
-loc_0B1A0:
-	moveq #0x1,d0
-	bra.w loc_0B236
-loc_0B1A6:
-	move.w (0xFF31A8).l,d6
-	cmpi.w #0x10,d6
-	beq.w loc_0B1BA
-	clr.w (0xFF31A8).l
-loc_0B1BA:
-	movem.l d6,-(a7)
-	jsr (sub_0AB24).l
-	movem.l (a7)+,d6
-	move.w d6,(0xFF31A8).l
-	tst.w d7
-	bne.s loc_0B1A0
-loc_0B1D2:
-	moveq #0x0,d7
-	move.b (0xFF17C2).l,d7
-	andi.b #0xC,d7
-	lsr.b #0x2,d7
-	subq.b #0x1,d7
-	lsl.w #0x3,d7
-	lea dat_0DD64(pc),a6
-	adda.w d7,a6
-	move.w (0xFF3050).l,d0
-	add.w (a6)+,d0
-	move.w (0xFF30FC).l,d1
-	move.w (a6)+,d3
-	add.w d3,d1
-	movem.l a6,-(a7)
-	jsr (sub_1016A).l
-	jsr (sub_102E4).l
-	movem.l (a7)+,a6
-	bne.s loc_0B1A0
-	move.w (0xFF3050).l,d0
-	add.w (a6)+,d0
-	move.w (0xFF30FC).l,d1
-	move.w (a6),d3
-	add.w d3,d1
-	jsr (sub_1016A).l
-	jsr (sub_102E4).l
-	bne.w loc_0B1A0
-	moveq #0x0,d0
-loc_0B236:
-	tst.w d0
 	rts

@@ -1,5 +1,224 @@
-| ROM 0x0B23A
+| ROM 0x0AF58
 
+sub_0AF58:
+	moveq #0x0,d6
+	move.b (0xFF17C2).l,d6
+	andi.b #0xF,d6
+	beq.w loc_0AF7C
+	moveq #0x1,d7
+	andi.b #0xC,d6
+	bne.w loc_0AF76
+	move.w #0x8019,d7
+loc_0AF76:
+	jsr (sub_09894).l
+loc_0AF7C:
+	rts
+sub_0AF7E:
+	lea (0xFF2EF6).l,a0
+	lea (0xFF2FA2).l,a1
+	lea (0xFF931C).l,a2
+	move.w #0xC,d0
+	move.w #0x1F,d1
+	move.w d7,d2
+	lsr.w #0x1,d2
+loc_0AF9C:
+	tst.w (a0,d0.w)
+	beq.w loc_0AFE0
+	move.w (a1,d0.w),d3
+	and.w d2,d3
+	beq.w loc_0AFE0
+	tst.w (a2,d0.w)
+	bne.w loc_0AFE0
+	lea (0xFF31A6).l,a6
+	tst.w (a6,d0.w)
+	beq.w loc_0AFCE
+	cmpi.w #0x10,(a6,d0.w)
+	bne.w loc_0AFE0
+loc_0AFCE:
+	movem.l d2/d7,-(a7)
+	move.w d7,d3
+	move.w d0,d2
+	jsr (sub_17A44).l
+	movem.l (a7)+,d2/d7
+loc_0AFE0:
+	addq.w #0x2,d0
+	dbra d1,loc_0AF9C
+	rts
+sub_0AFE8:
+	tst.w (0xFF56B2).l
+	beq.w loc_0AFF8
+loc_0AFF2:
+	moveq #0x1,d0
+	bra.w loc_0B04C
+loc_0AFF8:
+	tst.w (0xFFA3AE).l
+	beq.w loc_0B020
+	tst.w (0xFF31A6).l
+	bne.w loc_0B020
+	move.w (0xFF3D12).l,d0
+	beq.w loc_0B020
+	jsr (sub_0AB68).l
+	tst.w d7
+	bne.s loc_0AFF2
+loc_0B020:
+	jsr (sub_0D7E4).l
+	bne.s loc_0AFF2
+	move.b (0xFF17C0).l,d7
+	tst.w (0xFF31A6).l
+	bne.w loc_0B044
+	btst #0x1,d7
+	bne.s loc_0AFF2
+	moveq #0x0,d0
+	bra.w loc_0B04C
+loc_0B044:
+	btst #0x0,d7
+	bne.s loc_0AFF2
+	moveq #0x0,d0
+loc_0B04C:
+	tst.w d0
+	rts
+sub_0B050:
+	tst.w (0xFF575C).l
+	beq.w loc_0B060
+loc_0B05A:
+	moveq #0x1,d0
+	bra.w loc_0B0B4
+loc_0B060:
+	tst.w (0xFFA3B0).l
+	beq.w loc_0B088
+	tst.w (0xFF31A8).l
+	bne.w loc_0B088
+	move.w (0xFF3D14).l,d0
+	beq.w loc_0B088
+	jsr (sub_0ABAA).l
+	tst.w d7
+	bne.s loc_0B05A
+loc_0B088:
+	jsr (sub_0FBFE).l
+	bne.s loc_0B05A
+	move.b (0xFF17C2).l,d7
+	tst.w (0xFF31A8).l
+	bne.w loc_0B0AC
+	btst #0x1,d7
+	bne.s loc_0B05A
+	moveq #0x0,d0
+	bra.w loc_0B0B4
+loc_0B0AC:
+	btst #0x0,d7
+	bne.s loc_0B05A
+	moveq #0x0,d0
+loc_0B0B4:
+	tst.w d0
+	rts
+sub_0B0B8:
+	tst.w (0xFFA3AE).l
+	beq.w loc_0B10E
+	move.w (0xFFA3B2).l,d0
+	cmp.b (0xFF3A62).l,d0
+	bne.w loc_0B10E
+	move.w (0xFF3D12).l,d0
+	bne.w loc_0B0E2
+loc_0B0DC:
+	moveq #0x1,d0
+	bra.w loc_0B172
+loc_0B0E2:
+	move.w (0xFF31A6).l,d6
+	cmpi.w #0x10,d6
+	beq.w loc_0B0F6
+	clr.w (0xFF31A6).l
+loc_0B0F6:
+	movem.l d6,-(a7)
+	jsr (sub_0AAE2).l
+	movem.l (a7)+,d6
+	move.w d6,(0xFF31A6).l
+	tst.w d7
+	bne.s loc_0B0DC
+loc_0B10E:
+	moveq #0x0,d7
+	move.b (0xFF17C0).l,d7
+	andi.b #0xC,d7
+	lsr.b #0x2,d7
+	subq.b #0x1,d7
+	lsl.w #0x3,d7
+	lea dat_0B870(pc),a6
+	adda.w d7,a6
+	move.w (0xFF304E).l,d0
+	add.w (a6)+,d0
+	move.w (0xFF30FA).l,d1
+	move.w (a6)+,d3
+	add.w d3,d1
+	movem.l a6,-(a7)
+	jsr (sub_1016A).l
+	jsr (sub_102A6).l
+	movem.l (a7)+,a6
+	bne.s loc_0B0DC
+	move.w (0xFF304E).l,d0
+	add.w (a6)+,d0
+	move.w (0xFF30FA).l,d1
+	move.w (a6),d3
+	add.w d3,d1
+	jsr (sub_1016A).l
+	jsr (sub_102A6).l
+	bne.w loc_0B0DC
+	moveq #0x0,d0
+loc_0B172:
+	tst.w d0
+	rts
+	.byte 0x00,0x00,0xFF,0xFE,0x00,0x02
+sub_0B17C:
+	tst.w (0xFFA3B0).l
+	beq.w loc_0B1D2
+	move.w (0xFFA3B4).l,d0
+	cmp.b (0xFF3A64).l,d0
+	bne.w loc_0B1D2
+	move.w (0xFF3D14).l,d0
+	bne.w loc_0B1A6
+loc_0B1A0:
+	moveq #0x1,d0
+	bra.w loc_0B236
+loc_0B1A6:
+	move.w (0xFF31A8).l,d6
+	cmpi.w #0x10,d6
+	beq.w loc_0B1BA
+	clr.w (0xFF31A8).l
+loc_0B1BA:
+	movem.l d6,-(a7)
+	jsr (sub_0AB24).l
+	movem.l (a7)+,d6
+	move.w d6,(0xFF31A8).l
+	tst.w d7
+	bne.s loc_0B1A0
+loc_0B1D2:
+	moveq #0x0,d7
+	move.b (0xFF17C2).l,d7
+	andi.b #0xC,d7
+	lsr.b #0x2,d7
+	subq.b #0x1,d7
+	lsl.w #0x3,d7
+	lea dat_0DD64(pc),a6
+	adda.w d7,a6
+	move.w (0xFF3050).l,d0
+	add.w (a6)+,d0
+	move.w (0xFF30FC).l,d1
+	move.w (a6)+,d3
+	add.w d3,d1
+	movem.l a6,-(a7)
+	jsr (sub_1016A).l
+	jsr (sub_102E4).l
+	movem.l (a7)+,a6
+	bne.s loc_0B1A0
+	move.w (0xFF3050).l,d0
+	add.w (a6)+,d0
+	move.w (0xFF30FC).l,d1
+	move.w (a6),d3
+	add.w d3,d1
+	jsr (sub_1016A).l
+	jsr (sub_102E4).l
+	bne.w loc_0B1A0
+	moveq #0x0,d0
+loc_0B236:
+	tst.w d0
+	rts
 sub_0B23A:
 	move.w #0xFFDA,(0xFF56F2).l
 	move.w #0xFFD1,(0xFF56F4).l
@@ -3789,127 +4008,3 @@ loc_0FBE6:
 dat_0FBE8:
 	.byte 0x00,0x00,0x00,0x06,0x00,0x05,0x00,0x00,0x00,0x00,0x00,0x36,0x00,0x34,0x00,0x00
 	.byte 0x00,0x00,0x00,0x37,0x00,0x35
-sub_0FBFE:
-	move.w #0xFFED,d7
-	cmpi.w #0x8002,(0xFF5732).l
-	beq.w loc_0FC12
-	move.w #0xFFEB,d7
-loc_0FC12:
-	move.w d7,(0xFF49D8).l
-	moveq #0x0,d7
-	move.w (0xFF3050).l,d0
-	addi.w #0xFFE8,d0
-	move.w (0xFF30FC).l,d1
-	move.w (0xFF49D8).l,d3
-	add.w d3,d1
-	movem.l d7,-(a7)
-	jsr (sub_1016A).l
-	jsr (sub_1024C).l
-	movem.l (a7)+,d7
-	beq.w loc_0FC4E
-	bset #0x0,d7
-loc_0FC4E:
-	move.w (0xFF3050).l,d0
-	addi.w #0xFFE8,d0
-	move.w (0xFF30FC).l,d1
-	move.w #0xFFD6,d3
-	add.w d3,d1
-	movem.l d7,-(a7)
-	jsr (sub_1016A).l
-	jsr (sub_1024C).l
-	movem.l (a7)+,d7
-	beq.w loc_0FC80
-	bset #0x0,d7
-loc_0FC80:
-	move.w (0xFF3050).l,d0
-	addi.w #0xFFD8,d0
-	move.w (0xFF30FC).l,d1
-	move.w (0xFF49D8).l,d3
-	add.w d3,d1
-	movem.l d7,-(a7)
-	jsr (sub_1016A).l
-	jsr (sub_1024C).l
-	movem.l (a7)+,d7
-	beq.w loc_0FCB4
-	bset #0x1,d7
-loc_0FCB4:
-	move.w (0xFF3050).l,d0
-	addi.w #0xFFD8,d0
-	move.w (0xFF30FC).l,d1
-	move.w #0xFFD6,d3
-	add.w d3,d1
-	movem.l d7,-(a7)
-	jsr (sub_1016A).l
-	jsr (sub_1024C).l
-	movem.l (a7)+,d7
-	beq.w loc_0FCE6
-	bset #0x1,d7
-loc_0FCE6:
-	cmpi.w #0x3,d7
-	beq.w loc_0FD80
-	move.w (0xFF3050).l,d0
-	addi.w #0xFFE0,d0
-loc_0FCF8:
-	move.w (0xFF30FC).l,d1
-	move.w #0xFFEA,d3
-	add.w d3,d1
-	movem.l d7,-(a7)
-	jsr (sub_1016A).l
-	jsr (sub_1024C).l
-	movem.l (a7)+,d7
-	bne.w loc_0FD80
-	move.w (0xFF3050).l,d0
-	addi.w #0xFFE0,d0
-	move.w (0xFF30FC).l,d1
-	move.w #0xFFD6,d3
-	add.w d3,d1
-	movem.l d7,-(a7)
-	jsr (sub_1016A).l
-	jsr (sub_1024C).l
-	movem.l (a7)+,d7
-	bne.w loc_0FD80
-	tst.w d7
-	beq.w loc_0FD82
-	move.b (0xFF17C2).l,d6
-	andi.b #0xC,d6
-	bne.w loc_0FD82
-	move.b (0xFF17C2).l,d6
-	andi.b #0x3,d6
-	beq.w loc_0FD80
-	move.w #0xFFFF,d6
-	lsr.w #0x1,d7
-	bcs.w loc_0FD7A
-	move.w #0x1,d6
-loc_0FD7A:
-	add.w d6,(0xFF3050).l
-loc_0FD80:
-	moveq #0x1,d7
-loc_0FD82:
-	rts
-dat_0FD84:
-	.byte 0xFF,0xFE,0x00,0x02,0x00,0x02,0x00,0x01,0x00,0x05,0x00,0x06
-sub_0FD90:
-	move.w (0xFFC05A).l,d7
-	subq.w #0x1,d7
-	lsl.w #0x2,d7
-	lea tbl_0FE38(pc),a6
-	movea.l (a6,d7.w),a6
-	move.w (a6)+,d7
-	bmi.w loc_0FDE6
-	lea (0xFF55D6).l,a0
-loc_0FDAE:
-	move.w (a6)+,0x2(a0)
-	move.w (a6)+,0x4(a0)
-	move.l (a6)+,0x8(a0)
-	move.l (a6)+,0xC(a0)
-	move.b (a6)+,0x6(a0)
-	move.b (a6),0x7(a0)
-	move.b (a6)+,0x10(a0)
-	clr.l 0x12(a0)
-	move.b #0x3,0x1(a0)
-	move.b #0x1,(a0)
-	addq.w #0x1,(0xFF55D4).l
-	adda.w #0x20,a0
-	dbra d7,loc_0FDAE
-loc_0FDE6:
-	rts

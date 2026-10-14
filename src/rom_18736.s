@@ -1,5 +1,131 @@
-| ROM 0x18916
+| ROM 0x18736
 
+sub_18736:
+	move.w #0x8C,d2
+	move.w #0xF,d6
+	lea (0xFF2EF6).l,a6
+loc_18744:
+	tst.w (a6,d2.w)
+	beq.w loc_18754
+	addq.w #0x2,d2
+	dbra d6,loc_18744
+	rts
+loc_18754:
+	lea (0xFF99F0).l,a6
+	move.w d7,(a6,d2.w)
+	lea (0xFF9BF4).l,a6
+	move.w d0,(a6,d2.w)
+	lea tbl_18772(pc),a6
+	movea.l (a6,d7.w),a6
+	jmp (a6)
+tbl_18772:
+	.long sub_18880
+	.long sub_18916
+	.long sub_189AC
+	.long sub_18C90
+	.long sub_18F10
+	.long sub_190CC
+	.long sub_19692
+	.long sub_1971E
+	.long sub_197B2
+	.long sub_19906
+	.long sub_19A34
+	.long sub_19BC2
+	.long sub_19C4C
+	.long sub_19EC0
+	.long sub_19BF2
+	.long sub_19F30
+	.long sub_19FA6
+	.long sub_1A00C
+	.long sub_1A0AE
+	.long sub_1A262
+	.long sub_1A464
+	.long sub_1A6D6
+	.long sub_1A71A
+sub_187CE:
+	move.w #0x8C,d0
+	lea (0xFF2EF6).l,a6
+	clr.w (a6,d0.w)
+	clr.w 0x2(a6,d0.w)
+	clr.w 0x4(a6,d0.w)
+	clr.w 0x6(a6,d0.w)
+	rts
+sub_187EA:
+	move.w #0x8C,d0
+	move.w #0xF,d1
+loc_187F2:
+	lea (0xFF2EF6).l,a6
+	tst.w (a6,d0.w)
+	beq.w loc_1881C
+	lea (0xFF99F0).l,a6
+	move.w (a6,d0.w),d7
+	lea tbl_18824(pc),a6
+	movea.l (a6,d7.w),a6
+	movem.l d0-d1,-(a7)
+	jsr (a6)
+	movem.l (a7)+,d0-d1
+loc_1881C:
+	addq.w #0x2,d0
+	dbra d1,loc_187F2
+	rts
+tbl_18824:
+	.long sub_188DE
+	.long sub_18974
+	.long sub_18A6E
+	.long sub_18D52
+	.long sub_18FAC
+	.long sub_1946A
+	.long sub_196BC
+	.long sub_19748
+	.long sub_19854
+	.long sub_1999A
+	.long sub_19ADC
+	.long sub_19C00
+	.long sub_19D5C
+	.long sub_19F04
+	.long sub_19C26
+	.long sub_19F5C
+	.long sub_1A072
+	.long sub_1A072
+	.long sub_1A23A
+	.long sub_1A310
+	.long sub_1A4F2
+	.long sub_1A718
+	.long sub_1A75C
+sub_18880:
+	lea (0xFF304E).l,a6
+	move.w (a6,d0.w),d7
+	move.w d7,(a6,d2.w)
+	lea (0xFF30FA).l,a6
+	move.w (a6,d0.w),d7
+	subi.w #0x16,d7
+	move.w d7,(a6,d2.w)
+	lea (0xFF31A6).l,a6
+	move.w (a6,d0.w),d7
+	move.w d7,(a6,d2.w)
+	lea (0xFF3252).l,a6
+	move.w #0x166,(a6,d2.w)
+	lea (0xFF9B48).l,a6
+	move.w #0x3C,(a6,d2.w)
+	lea (0xFF8D78).l,a6
+	move.w d2,(a6,d0.w)
+	lea (0xFF2EF6).l,a6
+	move.w #0x1,(a6,d2.w)
+	rts
+sub_188DE:
+	lea (0xFF9B48).l,a6
+	subq.w #0x1,(a6,d0.w)
+	bne.w loc_18914
+	lea (0xFF9BF4).l,a6
+	move.w (a6,d0.w),d7
+	lea (0xFF7858).l,a6
+	clr.w (a6,d7.w)
+	lea (0xFF8D78).l,a6
+	clr.w (a6,d7.w)
+	lea (0xFF2EF6).l,a6
+	clr.w (a6,d0.w)
+loc_18914:
+	rts
 sub_18916:
 	lea (0xFF304E).l,a6
 	move.w (a6,d0.w),d7
@@ -4420,60 +4546,3 @@ dat_211AC:
 	.byte 0x04,0x00
 dat_211BE:
 	.incbin "assets/data_211BE.bin"	| 0x278A bytes
-sub_23948:
-	andi.w #0x81BF,(0xFFC07C).l
-	move.w (0xFFC07C).l,(VDP_CTRL).l
-	jsr (sub_00470).l
-	jsr (sub_00522).l
-	jsr (sub_01928).l
-	jsr (sub_006FA).l
-	move.w #0x8C00,(0xFFC092).l
-	move.w (0xFFC092).l,(VDP_CTRL).l
-	move.w #0x9011,(0xFFC09A).l
-	move.l (0xFFC0A0).l,d0
-	bset #0x10,d0
-	move.l d0,(0xFFC0A0).l
-	jsr (sub_0FF22).l
-	jsr (sub_0156C).l
-	jsr (sub_141F8).l
-	move.w #0xE1,d0
-	jsr (sub_02D54).l
-	lea (dat_40020).l,a6
-	move.l #0x64000002,(VDP_CTRL).l
-	move.w #0x5F,d7
-	jsr (sub_01146).l
-	lea dat_23A9E(pc),a6
-	jsr (sub_011B8).l
-	move.w #0xF0,(0xFF5546).l
-	clr.w (0xFF6C5C).l
-	clr.w (0xFF1814).l
-	clr.w (0xFF385E).l
-	clr.w (0xFF6C58).l
-	clr.w (0xFF6C54).l
-	clr.w (0xFF6C56).l
-	clr.w (0xFF17A0).l
-	clr.w (0xFF6C68).l
-	lea (dat_3BB00).l,a0
-	move.w (0.w,a0),(0xFF6C66).l
-	move.l #0x40000010,(VDP_CTRL).l
-	move.w (0xFF6C54).l,(VDP_DATA).l
-	move.l #0x40020010,(VDP_CTRL).l
-	move.w (0xFF6C56).l,(VDP_DATA).l
-	move.l #0x70020002,(VDP_CTRL).l
-	move.w (0xFF6C58).l,(VDP_DATA).l
-	move.w #0x1,d0
-	moveq #0x0,d1
-	lea (0xFF2FA2).l,a0
-loc_23A6A:
-	move.w #0x3,(a0,d1.w)
-	addq.w #0x2,d1
-	dbra d0,loc_23A6A
-	move.l #sub_23AB6,(0xFFC068).l
-	move.w #0x0,d7
-	jsr (sub_018FC).l
-	ori.w #0x8140,(0xFFC07C).l
-	move.w (0xFFC07C).l,(VDP_CTRL).l
-	rts
-dat_23A9E:
-	.byte 0x46,0x10,0x00,0x03,0x00,0x00,0x00,0x0F,0x43,0x4F,0x4E,0x47,0x52,0x41,0x54,0x55
-	.byte 0x4C,0x41,0x54,0x49,0x4F,0x4E,0x53,0x21
