@@ -142,6 +142,33 @@ jobs:
         with:
           path: site
 
+  # BonanzaBuilder.html as a plain download on the Releases page (release "builder",
+  # replaced on every push): open it, give it the ROM, build.
+  release:
+    needs: site
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: BonanzaBuilder
+          path: single
+      - name: Publish BonanzaBuilder.html
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          notes="Download BonanzaBuilder.html, open it in your browser, give it your Bonanza Bros. ROM and press Build (Windows, Linux or Android). Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}."
+          if gh release view builder >/dev/null 2>&1; then
+            gh release upload builder single/BonanzaBuilder.html --clobber
+            gh release edit builder --notes "$notes"
+          else
+            gh release create builder single/BonanzaBuilder.html --target "$GITHUB_SHA" \
+              --title "Bonanza Builder (one HTML file)" --notes "$notes"
+          fi
+
   deploy:
     needs: site
     if: github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)

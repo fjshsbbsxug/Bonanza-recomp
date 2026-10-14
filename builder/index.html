@@ -110,6 +110,11 @@
     <p style="margin-top:6px" id="makerlink"><a href="levelmaker.html">Bonanza Maker</a>: build your own stages Mario Maker style, test-play them, and save them as .bbro mods.</p>
   </header>
 
+  <div class="fallback" id="usesingle">
+    <b>Opened from disk?</b> Open <a href="BonanzaBuilder.html">BonanzaBuilder.html</a> instead (in this folder, or from the
+    project's Releases page). It has the Windows, Linux and Android runtimes inside it, so it only needs your ROM.
+  </div>
+
   <section class="step" id="step-rom">
     <h2><span class="num">1</span> Your ROM</h2>
     <label class="drop" id="drop" tabindex="0">
@@ -238,7 +243,8 @@
     </div>
     <div class="fallback" id="fallback">
       <p style="margin-top:0">The runtime packages are not hosted next to this page (for example when the page is opened from disk).
-      Download the <b id="fb-name">runtime package</b> from the project's GitHub Actions run (artifact <code>bonanza-site</code>) and select it here:</p>
+      The easy way: open <b>BonanzaBuilder.html</b> instead (it carries the runtimes; only your ROM is needed).
+      Or select the <b id="fb-name">runtime package</b> from the <code>bonanza-site</code> download (the whole zip works too):</p>
       <input type="file" id="pkgfile" accept=".zip,.apk">
     </div>
     <div class="log" id="log" aria-live="polite"></div>
@@ -402,6 +408,7 @@
   }
 
   if (EMBED && $('makerlink')) $('makerlink').style.display = 'none';   /* not in the single file */
+  if (!EMBED && location.protocol === 'file:') $('usesingle').classList.add('show');   /* point at the one-file builder */
 
   /* ---------- packages ---------- */
   async function loadManifest() {
