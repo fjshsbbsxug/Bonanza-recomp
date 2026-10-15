@@ -1,0 +1,32 @@
+diff --git a/tccelf.c b/tccelf.c
+index 9e2d136..bc6d808 100644
+--- a/tccelf.c
++++ b/tccelf.c
+@@ -2257,6 +2257,7 @@ struct dyn_inf {
+     int notes;
+     int ehfr;
+     int dyna;
++    int stack;
+ };
+ 
+ /* Decide the layout of sections loaded in memory. This must be done before
+@@ -2434,6 +2435,8 @@ static int layout_sections(TCCState *s1, int *sec_order, struct dyn_inf *d)
+         d->ehfr = phnum++;
+     if (d->relro)
+         d->relro = phnum++;
++    d->stack = phnum++;     /* PT_GNU_STACK: no executable stack (glibc 2.41+ refuses
++                               to load a library that does not say so) */
+     d->phnum = phnum;
+     d->phdr = tcc_mallocz(phnum * sizeof(ElfW(Phdr)));
+ 
+@@ -2550,6 +2553,10 @@ static int layout_sections(TCCState *s1, int *sec_order, struct dyn_inf *d)
+         fill_phdr(&d->phdr[d->ehfr], PT_GNU_EH_FRAME, eh_frame_hdr_section);
+     if (d->interp)
+         fill_phdr(&d->phdr[1], PT_INTERP, d->interp);
++    ph = &d->phdr[d->stack];
++    ph->p_type = PT_GNU_STACK;
++    ph->p_flags = PF_R | PF_W;
++    ph->p_align = 16;
+     if (phfill) {
+         ph = &d->phdr[0];
+         ph->p_offset = sizeof(ElfW(Ehdr));

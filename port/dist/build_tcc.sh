@@ -8,7 +8,10 @@
 #   arm      libbonanza_game.so Android armeabi-v7a (position independent; soft-float calls)
 # and its runtime library for each (made by native cross compilers built first).
 # OUT gets tcc-<kind>.js (the wasm inside), <kind>-libtcc1.a and include/.
+# tcc-gnu-stack.patch: the libraries say they need no executable stack (PT_GNU_STACK);
+# without it glibc 2.41 and later (SteamOS, Arch, Fedora 42, ...) refuse to load them.
 set -e
+HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=$(cd "$1" && pwd)
 TCC_COMMIT=${TCC_COMMIT:-43c7708}
 W=${TCC_WORK:-$OUT/.tcc-src}
@@ -17,7 +20,8 @@ if [ ! -d "$W/.git" ]; then
 fi
 cd "$W"
 git fetch -q --depth 1000 origin mob 2>/dev/null || true
-git checkout -q "$TCC_COMMIT"
+git checkout -q -f "$TCC_COMMIT"
+git apply "$HERE/tcc-gnu-stack.patch"
 ./configure > /dev/null
 make -s cross-x86_64 cross-x86_64-win32 cross-arm64 > /dev/null
 cp x86_64-libtcc1.a "$OUT/linux64-libtcc1.a"
