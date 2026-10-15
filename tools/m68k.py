@@ -1,12 +1,10 @@
-"""Thin 68000 decoding layer on top of capstone.
+"""Thin 68000 decoding layer (on tools/m68kdec.py: capstone's text, in plain Python).
 
 Decodes single instructions, rejects anything that is not plain 68000,
 and reports control flow so the tracer can follow it.
 """
 import re
-from capstone import Cs, CS_ARCH_M68K, CS_MODE_BIG_ENDIAN, CS_MODE_M68K_000
-
-_cs = Cs(CS_ARCH_M68K, CS_MODE_BIG_ENDIAN | CS_MODE_M68K_000)
+import m68kdec
 
 # Mnemonics (without size suffix) that exist on a plain 68000.
 VALID = set("""
@@ -55,21 +53,20 @@ def decode(rom, addr):
     """Return an Insn at addr or None if it is not a valid 68000 instruction."""
     if addr & 1 or addr + 2 > len(rom):
         return None
-    try:
-        it = next(_cs.disasm(rom[addr:addr + 10], addr, 1))
-    except StopIteration:
+    it = m68kdec.decode(rom[addr:addr + 10], addr)
+    if it is None:
         return None
-    mnem = it.mnemonic
+    mnem, op_str, size = it
     base = mnem.split(".")[0]
     if base not in VALID:
         return None
-    s = it.op_str
+    s = op_str
     if any(c in s for c in "[]*{}") or "ccr" in s and base not in ("andi", "ori", "eori", "move"):
         return None
     i = Insn()
     i.addr = addr
-    i.size = it.size
-    i.raw = bytes(it.bytes)
+    i.size = size
+    i.raw = bytes(rom[addr:addr + size])
     i.mnem = mnem
     i.base = base
     i.ops = split_ops(s)
