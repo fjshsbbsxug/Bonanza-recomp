@@ -791,6 +791,56 @@ static uint16_t map_entry(int wx, int wy)
     return (md.rom[e] << 8) | md.rom[e + 1];
 }
 
+/* Above the roof: the map rows above the level's top floor - the floor its exit is on
+ * (the escape table, 0x8FF2: x, y per stage), or the first floor (5 map rows) that is
+ * mostly building, if that is higher. Open air there is sky (levels under an open
+ * sky only: the top two map rows nearly empty). */
+static int roof_row = -1;
+static uint32_t roof_map, roof_meta;
+static int roof_w, roof_stage;
+
+static int above_roof(int wx, int wy)
+{
+    int stage = (md.ram[0xC05A] << 8) | md.ram[0xC05B];
+    if (roof_map != level.map || roof_meta != level.meta || roof_w != level.w || roof_stage != stage) {
+        roof_map = level.map;
+        roof_meta = level.meta;
+        roof_w = level.w;
+        roof_stage = stage;
+        int band = 12;
+        for (int b = 0; b < 12 && band == 12; b++)
+            for (int r = b * 5; r < b * 5 + 5; r++) {
+                int n = 0;
+                for (int c = 0; c < level.w; c++) {
+                    uint32_t a = level.map + (uint32_t)(r * level.w + c) * 2;
+                    if (a + 1 < md.rom_size && ((md.rom[a] << 8) | md.rom[a + 1])) n++;
+                }
+                if (n * 10 >= level.w * 6) { band = b; break; }
+            }
+        uint32_t e = 0x8FF2 + 4 * (uint32_t)(stage - 1) + 2;
+        if (stage >= 1 && stage <= 13 && e + 1 < md.rom_size) {
+            int exit_y = (md.rom[e] << 8) | md.rom[e + 1];
+            if (exit_y > 0 && exit_y / 80 < band) band = exit_y / 80;
+        }
+        /* only under an open sky: the top of the map is (nearly) empty; not in a cave */
+        for (int r = 0; r < 2; r++) {
+            int n = 0;
+            for (int c = 0; c < level.w; c++) {
+                uint32_t a = level.map + (uint32_t)(r * level.w + c) * 2;
+                if (a + 1 < md.rom_size && ((md.rom[a] << 8) | md.rom[a + 1])) n++;
+            }
+            if (n * 5 > level.w) band = 0;
+        }
+        roof_row = band * 5;
+    }
+    if (wy >= roof_row * 16)
+        return 0;
+    if (wy < 0 || wx < 0 || wx >= level.w * 16)
+        return 1;                              /* outside the map */
+    uint32_t m = level.map + (uint32_t)((wy >> 4) * level.w + (wx >> 4)) * 2;
+    return m + 1 >= md.rom_size || !((md.rom[m] << 8) | md.rom[m + 1]);   /* a blank map tile */
+}
+
 /* nearest full value to a 10-bit register value, given the game's full value */
 static int unwrap10(int reg, int full)
 {
@@ -1318,6 +1368,30 @@ void vdp_render_line(int y)
         map_wy = room_above_wy + (y - other_y0);
         draw_plane(a, y, width, m, 0);
         map_on = map_all = 0;
+        /* Open air above the roof (at the top of the level): not a second copy of the
+         * city but the sky - the background lined up with player
+         * 1's own view where the two overlap, above it the colour at the top of his
+         * view's sky. Windows and rooms keep the game's own background. */
+        uint8_t sky[VDP_FB_W];
+        int line = map_wy - view_rec[focus].vsA, above = line < 0;
+        ovr_hs = view_rec[focus].hsB;
+        ovr_vs = (view_rec[focus].vsB + real_y0 + (above ? 0 : line > VIEW_H - 1 ? VIEW_H - 1 : line) - y) & 0x3FF;
+        wrap_margins = m != 0;
+        draw_plane(sky, y, width, m, 1);
+        wrap_margins = 0;
+        ovr_hs = ovr_vs = -1;
+        if (above) {
+            /* the sky's colour: the commonest one on the top line of his view's sky */
+            int count[256] = { 0 }, best = 0;
+            for (int x = 0; x < ow; x++)
+                if (sky[x] & 0x0F) count[sky[x]]++;
+            for (int v = 1; v < 256; v++)
+                if (count[v] > count[best]) best = v;
+            memset(sky, best, (size_t)ow);
+        }
+        for (int x = -m; x < width + m; x++)
+            if (above_roof(map_camx + x, map_wy))
+                b[x + m] = sky[x + m];
     }
     /* a view whose map could not be matched: rather than whatever video memory holds
      * beside the picture, extend its edges */
