@@ -58,7 +58,80 @@ int  draw_tile_stream_p1(void); /* sub_082D2 */
 int  draw_tile_stream_p2(void); /* sub_08510 */
 int  draw_window_regs(void);    /* sub_006EA */
 int  draw_hex_number(void);     /* sub_01268 */
-int  draw_title_clear(void);    /* sub_02E34 at 0x2E7C */
+int  draw_title_clear(void);
+/* the screen set-ups: straight runs of the game's routines from the address named */
+int  draw_seg_00366(void);
+int  draw_seg_0042E(void);
+int  draw_seg_02E34(void);
+int  draw_seg_02E4C(void);
+int  draw_seg_02F0E(void);
+int  draw_seg_02FD4(void);
+int  draw_seg_0318A(void);
+int  draw_seg_031A8(void);
+int  draw_seg_031F4(void);
+int  draw_seg_035BE(void);
+int  draw_seg_0394A(void);
+int  draw_seg_03A78(void);
+int  draw_seg_03B1E(void);
+int  draw_seg_03ECC(void);
+int  draw_seg_03EF0(void);
+int  draw_seg_03F8A(void);
+int  draw_seg_04206(void);
+int  draw_seg_0430A(void);
+int  draw_seg_04434(void);
+int  draw_seg_050C4(void);
+int  draw_seg_05496(void);
+int  draw_seg_0BE1E(void);
+int  draw_seg_11120(void);
+int  draw_seg_11138(void);
+int  draw_seg_1124C(void);
+int  draw_seg_11298(void);
+int  draw_seg_11476(void);
+int  draw_seg_114B2(void);
+int  draw_seg_114DC(void);
+int  draw_seg_1195A(void);
+int  draw_seg_120E4(void);
+int  draw_seg_121D2(void);
+int  draw_seg_12614(void);
+int  draw_seg_12652(void);
+int  draw_seg_12730(void);
+int  draw_seg_12A94(void);
+int  draw_seg_12B5E(void);
+int  draw_seg_12C50(void);
+int  draw_seg_12C72(void);
+int  draw_seg_12C9A(void);
+int  draw_seg_12CE4(void);
+int  draw_seg_12D56(void);
+int  draw_seg_12DD8(void);
+int  draw_seg_12DFE(void);
+int  draw_seg_23948(void);
+int  draw_seg_2396C(void);
+int  draw_seg_239B8(void);
+int  draw_seg_23A22(void);
+int  draw_seg_23A8A(void);
+int  draw_seg_23AC2(void);
+int  draw_seg_23B32(void);
+int  draw_seg_23B50(void);
+int  draw_seg_23BD8(void);
+int  draw_seg_23C8E(void);
+int  draw_seg_23CAC(void);
+int  draw_seg_23D60(void);
+int  draw_seg_23E16(void);
+int  draw_seg_23E2A(void);
+int  draw_seg_23E60(void);
+int  draw_seg_24536(void);
+int  draw_seg_24572(void);
+int  draw_seg_24644(void);
+int  draw_seg_2497C(void);
+int  draw_seg_24990(void);
+int  draw_seg_249A4(void);
+int  draw_seg_3BBFC(void);
+int  draw_seg_3BC28(void);
+int  draw_seg_3BD80(void);
+int  draw_seg_3BE2E(void);
+int  draw_seg_3BE86(void);
+int  draw_seg_3BF32(void);
+int  draw_seg_3C07E(void);    /* sub_02E34 at 0x2E7C */
 
 /* the split screen's line effects (sub_00C1E..sub_010E8); the caller does the rte */
 int  draw_band_00C1E(void);

@@ -291,6 +291,10 @@ int main(int argc, char **argv)
             uint32_t h = 2166136261u;
             for (int k = 0; k < MD_SCREEN_H * MD_FB_W; k++) h = (h ^ p[k]) * 16777619u;
             printf("frame %d picture %08x\n", fr, h);
+            if (getenv("PICDUMP") && atoi(getenv("PICDUMP")) == fr) {   /* the frame's raw picture (tests) */
+                FILE *pd = fopen("picdump.bin", "wb");
+                if (pd) { fwrite(p, 2, MD_SCREEN_H * MD_FB_W, pd); fclose(pd); }
+            }
         }
     }
     if (online) {
@@ -322,6 +326,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "drawing routines: %llu calls in C, %llu as translated (an interrupt came within)\n",
             (unsigned long long)draw_stat_c, (unsigned long long)draw_stat_translated);
     fprintf(stderr, "video control words through the port's latch: %lu\n", vdp_raw_words);
+    fprintf(stderr, "video chip uses: %lu by drawing routines in C, %lu by translated code\n", vdp_uses_c, vdp_uses_translated);
     fprintf(stderr, "z80 instructions: %lu native, %lu lines without native code\n", z80r_insns, z80_stat_no_code);
     return 0;
 }

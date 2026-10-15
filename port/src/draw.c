@@ -69,7 +69,7 @@ static int run(void (*body)(void))
     static int trace = -1;
     if (trace < 0) trace = getenv("DRAWTRACE") ? atoi(getenv("DRAWTRACE")) : 0;
     if (trace && md.frame >= (uint32_t)trace)
-        fprintf(stderr, "run frame %u body %ld sp %06X\n", md.frame, (long)((char *)body - (char *)run), REG_A[7]);
+        fprintf(stderr, "run frame %u body %ld sp %06X line %d left %d\n", md.frame, (long)((char *)body - (char *)run), REG_A[7], md.line, GET_CYCLES());
     m68ki_cpu_core saved = m68ki_cpu;  /* the dry run may change registers: put back */
     dry = 1; cyc = 0; stops_z80 = 0; mask_floor = 7;
     body();
@@ -82,7 +82,9 @@ static int run(void (*body)(void))
     dry = 0; cyc = 0; jumped = 0;
     left0 = GET_CYCLES();
     vdp_ahead = -left0;
+    vdp_in_c = 1;
     body();
+    vdp_in_c = 0;
     if (getenv("DRAWLOG") && md.line < 224 && cyc > left0)
         fprintf(stderr, "draw frame %u line %d body %ld cyc %d left %d\n", md.frame, md.line, (long)((char *)body - (char *)run), cyc, left0);
     vdp_ahead = VDP_AHEAD_NONE;
@@ -124,7 +126,7 @@ static void reach(uint32_t a) { COST(span(pc_now, a)); pc_now = a; }
 static void flags_move(uint32_t v, int bits)
 {
     if (dry) return;
-    FLAG_N = bits == 32 ? NFLAG_32(v) : NFLAG_16(v);
+    FLAG_N = bits == 32 ? NFLAG_32(v) : bits == 16 ? NFLAG_16(v) : NFLAG_8(v);
     FLAG_Z = v;
     FLAG_V = VFLAG_CLEAR;
     FLAG_C = CFLAG_CLEAR;
@@ -2178,3 +2180,1199 @@ static void title_clear(void)
     go_on(0x2EBC);
 }
 int draw_title_clear(void) { return run(title_clear); }
+
+/* ---------------------------------------------------------------- screen set-ups */
+
+/* The parts of the game's routines that set the screen up between scenes (display off,
+ * clear, registers, commands, a few words, display on): straight runs of instructions,
+ * each done at the time its instruction starts. A run ends at the routine's rts, or
+ * where it calls into the game's code (jsr_game: on there) or goes on with something
+ * else (go_on). */
+
+/* andi.w / ori.w #m,(a).l */
+static void ram_op16(uint32_t a, char op, uint16_t m)
+{
+    uint16_t v = (uint16_t)RD16(a);
+    v = op == '&' ? (uint16_t)(v & m) : (uint16_t)(v | m);
+    if (!dry) WR16(a, v);
+    flags_move(v, 16);
+}
+/* move.b / move.w / move.l #v,(a).l and clr */
+static void ram_set8(uint32_t a, uint8_t v) { if (!dry) WR8(a, v); flags_move(v, 8); }
+static void ram_set16(uint32_t a, uint16_t v) { if (!dry) WR16(a, v); flags_move(v, 16); }
+static void ram_set32(uint32_t a, uint32_t v) { if (!dry) WR32(a, v); flags_move(v, 32); }
+/* move.w (s).l,(d).l */
+static void ram_copy16(uint32_t d, uint32_t s)
+{
+    uint16_t v = (uint16_t)RD16(s);
+    if (!dry) WR16(d, v);
+    flags_move(v, 16);
+}
+/* bset #n,dr */
+static void bset_d(int r, int n)
+{
+    if (!dry) FLAG_Z = (REG_D[r] >> n) & 1 ? ZFLAG_CLEAR : ZFLAG_SET;
+    REG_D[r] |= 1u << n;
+}
+/* move.w #v / (a).l to the control port: a register word */
+static void reg_word(uint16_t v) { if (!dry) vdp_reg_word(v); flags_move(v, 16); }
+static void reg_word_ram(uint32_t a) { reg_word((uint16_t)RD16(a)); }
+/* move.l #v to the control port: a command */
+static void command(uint32_t v) { if (!dry) vdp_command_long(v); flags_move(v, 32); }
+/* move.w #v / (a).l to the data port */
+static void data_word(uint16_t v) { put(v); flags_move(v, 16); }
+static void data_word_ram(uint32_t a) { data_word((uint16_t)RD16(a)); }
+/* jsr (target).l into the game's code: the run ends, the game goes on there */
+static void jsr_game(uint32_t target, uint32_t ret)
+{
+    COST(m68k_cost[(ret - 6) >> 1]);
+    REG_A[7] -= 4;
+    if (!dry) WR32(REG_A[7], ret);
+    go_on(target);
+}
+
+/* sub_00522: the planes, video memory 0 and the sprites cleared */
+static void screen_clear(void)
+{
+    call(clear_planes, 0x524, 18);
+    call(clear_vram_00628, 0x528, 18);
+    call(sprites_clear, 0x52C, 18);
+}
+
+static void seg_00366(void)
+{
+    from(0x366);
+    reach(0x366); command(0xC0000000U);    /* move.l #$c0000000, $c00004.l */
+    reach(0x370); REG_D[7] = 0x0000003FU; flags_move(REG_D[7], 32);    /* moveq #$3f, d7 */
+    reach(0x372); data_word(0x000E);    /* move.w #$e, $c00000.l */
+    reach(0x37A); go_on(0x37A);    /* then: dbra d7, $372 */
+}
+int draw_seg_00366(void) { return run(seg_00366); }
+
+static void seg_0042E(void)
+{
+    from(0x42E);
+    reach(0x42E); call(screen_clear, 0x434, m68k_cost[0x42E >> 1]);    /* jsr $522.l */
+    from(0x434);
+    reach(0x434); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x43C); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x446); ram_set32(0xFFC068U, 0x2E06);    /* move.l #$2e06, $ffc068.l */
+    reach(0x450); ram_set16(0xFFC070U, 0x0);    /* move.w #$0, $ffc070.l */
+    reach(0x458); go_on(0x458);    /* then: move.w #$2300, sr */
+}
+int draw_seg_0042E(void) { return run(seg_0042E); }
+
+static void seg_02E34(void)
+{
+    from(0x2E34);
+    reach(0x2E34); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x2E3C); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x2E46); jsr_game(0x470, 0x2E4C);    /* jsr $470.l */
+}
+int draw_seg_02E34(void) { return run(seg_02E34); }
+
+static void seg_02E4C(void)
+{
+    from(0x2E4C);
+    reach(0x2E4C); ram_set16(0xFFC092U, 0x8C81);    /* move.w #$8c81, $ffc092.l */
+    reach(0x2E54); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x2E5E); ram_set16(0xFFC09AU, 0x9001);    /* move.w #$9001, $ffc09a.l */
+    reach(0x2E66); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
+    reach(0x2E6C); bset_d(0, 16);    /* bset.b #$10, d0 */
+    reach(0x2E70); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x2E76); call(no_window, 0x2E7C, m68k_cost[0x2E76 >> 1]);    /* jsr $6fa.l */
+    from(0x2E7C);
+    reach(0x2E7C);
+    go_on(0x2E7C);
+}
+int draw_seg_02E4C(void) { return run(seg_02E4C); }
+
+static void seg_02F0E(void)
+{
+    from(0x2F0E);
+    reach(0x2F0E); ram_set16(0xFF17C6U, 0x28);    /* move.w #$28, $ff17c6.l */
+    reach(0x2F16); ram_set16(0xFF17C8U, 0x3);    /* move.w #$3, $ff17c8.l */
+    reach(0x2F1E); ram_set16(0xFF5546U, 0x12C);    /* move.w #$12c, $ff5546.l */
+    reach(0x2F26); ram_set16(0xFF1814U, 0);    /* clr.w $ff1814.l */
+    reach(0x2F2C); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x2F34); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x2F3E); ram_set32(0xFFC068U, 0x2F4A);    /* move.l #$2f4a, $ffc068.l */
+    reach(0x2F48);    /* rts */
+}
+int draw_seg_02F0E(void) { return run(seg_02F0E); }
+
+static void seg_02FD4(void)
+{
+    from(0x2FD4);
+    reach(0x2FD4); ram_set32(0xFFC068U, 0x2E06);    /* move.l #$2e06, $ffc068.l */
+    reach(0x2FDE); ram_set16(0xFFC070U, 0x4);    /* move.w #$4, $ffc070.l */
+    reach(0x2FE6); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x2FEE); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x2FF8); call(screen_clear, 0x2FFE, m68k_cost[0x2FF8 >> 1]);    /* jsr $522.l */
+    from(0x2FFE);
+    reach(0x2FFE); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x3006); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x3010);    /* rts */
+}
+int draw_seg_02FD4(void) { return run(seg_02FD4); }
+
+static void seg_0318A(void)
+{
+    from(0x318A);
+    reach(0x318A); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x3192); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x319C); call(screen_clear, 0x31A2, m68k_cost[0x319C >> 1]);    /* jsr $522.l */
+    from(0x31A2);
+    reach(0x31A2); jsr_game(0x1928, 0x31A8);    /* jsr $1928.l */
+}
+int draw_seg_0318A(void) { return run(seg_0318A); }
+
+static void seg_031A8(void)
+{
+    from(0x31A8);
+    reach(0x31A8); call(no_window, 0x31AE, m68k_cost[0x31A8 >> 1]);    /* jsr $6fa.l */
+    from(0x31AE);
+    reach(0x31AE); ram_set16(0xFFC092U, 0x8C00);    /* move.w #$8c00, $ffc092.l */
+    reach(0x31B6); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x31C0); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
+    reach(0x31C8); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
+    reach(0x31CE); bset_d(0, 16);    /* bset.b #$10, d0 */
+    reach(0x31D2); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x31D8); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x31E0); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x31EA); W(REG_D[0], 0x85); flags_move(0x85, 16);    /* move.w #$85, d0 */
+    reach(0x31EE); jsr_game(0x2D54, 0x31F4);    /* jsr $2d54.l */
+}
+int draw_seg_031A8(void) { return run(seg_031A8); }
+
+static void seg_031F4(void)
+{
+    from(0x31F4);
+    reach(0x31F4); ram_set16(0xFF5548U, 0x0);    /* move.w #$0, $ff5548.l */
+    reach(0x31FC); ram_set16(0xFF1814U, 0);    /* clr.w $ff1814.l */
+    reach(0x3202); ram_set16(0xFF6C54U, 0x150);    /* move.w #$150, $ff6c54.l */
+    reach(0x320A); ram_set16(0xFF6C5AU, 0);    /* clr.w $ff6c5a.l */
+    reach(0x3210); ram_set16(0xFF6C5CU, 0);    /* clr.w $ff6c5c.l */
+    reach(0x3216); ram_set16(0xFF35AEU, 0);    /* clr.w $ff35ae.l */
+    reach(0x321C); ram_set16(0xFF304EU, 0x160);    /* move.w #$160, $ff304e.l */
+    reach(0x3224); ram_set16(0xFF30FAU, 0x140);    /* move.w #$140, $ff30fa.l */
+    reach(0x322C); ram_set16(0xFF3050U, 0x0);    /* move.w #$0, $ff3050.l */
+    reach(0x3234); ram_set16(0xFF3052U, 0x0);    /* move.w #$0, $ff3052.l */
+    reach(0x323C); command(0x40000010U);    /* move.l #$40000010, $c00004.l */
+    reach(0x3246); data_word_ram(0xFF6C54U);    /* move.w $ff6c54.l, $c00000.l */
+    reach(0x3250); command(0x40020010U);    /* move.l #$40020010, $c00004.l */
+    reach(0x325A); data_word(0x0000);    /* move.w #$0, $c00000.l */
+    reach(0x3262); command(0x70020002U);    /* move.l #$70020002, $c00004.l */
+    reach(0x326C); data_word(0x0000);    /* move.w #$0, $c00000.l */
+    reach(0x3274); ram_set16(0xFFC078U, 0x5);    /* move.w #$5, $ffc078.l */
+    reach(0x327C); REG_A[6] = 0x56336U;    /* lea.l $56336.l, a6 */
+    reach(0x3282); command(0x60000000U);    /* move.l #$60000000, $c00004.l */
+    reach(0x328C); W(REG_D[7], 0x3F); flags_move(0x3F, 16);    /* move.w #$3f, d7 */
+    reach(0x3290); call(tiles_packed, 0x3296, m68k_cost[0x3290 >> 1]);    /* jsr $1146.l */
+    from(0x3296);
+    reach(0x3296); REG_A[6] = 0x55100U;    /* lea.l $55100.l, a6 */
+    reach(0x329C); command(0x40000001U);    /* move.l #$40000001, $c00004.l */
+    reach(0x32A6); W(REG_D[7], 0xBE); flags_move(0xBE, 16);    /* move.w #$be, d7 */
+    reach(0x32AA); call(tiles_packed, 0x32B0, m68k_cost[0x32AA >> 1]);    /* jsr $1146.l */
+    from(0x32B0);
+    reach(0x32B0); REG_A[6] = 0x55F14U;    /* lea.l $55f14.l, a6 */
+    reach(0x32B6); command(0x60000001U);    /* move.l #$60000001, $c00004.l */
+    reach(0x32C0); W(REG_D[7], 0x37); flags_move(0x37, 16);    /* move.w #$37, d7 */
+    reach(0x32C4); call(tiles_packed, 0x32CA, m68k_cost[0x32C4 >> 1]);    /* jsr $1146.l */
+    from(0x32CA);
+    reach(0x32CA); REG_A[6] = 0x40020U;    /* lea.l $40020.l, a6 */
+    reach(0x32D0); command(0x64000002U);    /* move.l #$64000002, $c00004.l */
+    reach(0x32DA); W(REG_D[7], 0x5F); flags_move(0x5F, 16);    /* move.w #$5f, d7 */
+    reach(0x32DE); call(tiles_packed, 0x32E4, m68k_cost[0x32DE >> 1]);    /* jsr $1146.l */
+    from(0x32E4);
+    reach(0x32E4); W(REG_D[7], 0x25); flags_move(0x25, 16);    /* move.w #$25, d7 */
+    reach(0x32E8); jsr_game(0x18FC, 0x32EE);    /* jsr $18fc.l */
+}
+int draw_seg_031F4(void) { return run(seg_031F4); }
+
+static void seg_035BE(void)
+{
+    from(0x35BE);
+    reach(0x35BE); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x35C6); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x35D0); call(screen_clear, 0x35D6, m68k_cost[0x35D0 >> 1]);    /* jsr $522.l */
+    from(0x35D6);
+    reach(0x35D6); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x35DE); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x35E8); go_on(0x35E8);    /* then: tst.w $ff5548.l */
+}
+int draw_seg_035BE(void) { return run(seg_035BE); }
+
+static void seg_0394A(void)
+{
+    from(0x394A);
+    reach(0x394A); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x3952); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x395C); call(screen_clear, 0x3962, m68k_cost[0x395C >> 1]);    /* jsr $522.l */
+    from(0x3962);
+    reach(0x3962); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x396A); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x3974); go_on(0x3974);    /* then: cmpi.w #$2, $ff554a.l */
+}
+int draw_seg_0394A(void) { return run(seg_0394A); }
+
+static void seg_03A78(void)
+{
+    from(0x3A78);
+    reach(0x3A78); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x3A80); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x3A8A); call(screen_clear, 0x3A90, m68k_cost[0x3A8A >> 1]);    /* jsr $522.l */
+    from(0x3A90);
+    reach(0x3A90); ram_set16(0xFFC092U, 0x8C00);    /* move.w #$8c00, $ffc092.l */
+    reach(0x3A98); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x3AA2); ram_set16(0xFFC09AU, 0x9001);    /* move.w #$9001, $ffc09a.l */
+    reach(0x3AAA); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
+    reach(0x3AB0); bset_d(0, 16);    /* bset.b #$10, d0 */
+    reach(0x3AB4); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x3ABA); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x3AC2); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x3ACC); jsr_game(0x1928, 0x3AD2);    /* jsr $1928.l */
+}
+int draw_seg_03A78(void) { return run(seg_03A78); }
+
+static void seg_03B1E(void)
+{
+    from(0x3B1E);
+    reach(0x3B1E); W(REG_D[7], 0xA000); flags_move(0xA000, 16);    /* move.w #$a000, d7 */
+    reach(0x3B22); call(text_d7, 0x3B28, m68k_cost[0x3B22 >> 1]);    /* jsr $11f2.l */
+    from(0x3B28);
+    reach(0x3B28); REG_A[6] = 0xFFC053U;    /* lea.l $ffc053.l, a6 */
+    reach(0x3B2E); command(0x43A00003U);    /* move.l #$43a00003, $c00004.l */
+    reach(0x3B38); W(REG_D[7], 0x8000); flags_move(0x8000, 16);    /* move.w #$8000, d7 */
+    reach(0x3B3C); REG_D[6] = 0x00000000U; flags_move(REG_D[6], 32);    /* moveq #$0, d6 */
+    reach(0x3B3E); call(hex_number, 0x3B44, m68k_cost[0x3B3E >> 1]);    /* jsr $1268.l */
+    from(0x3B44);
+    reach(0x3B44); REG_A[6] = 0xFFC051U;    /* lea.l $ffc051.l, a6 */
+    reach(0x3B4A); command(0x44A00003U);    /* move.l #$44a00003, $c00004.l */
+    reach(0x3B54); W(REG_D[7], 0x8000); flags_move(0x8000, 16);    /* move.w #$8000, d7 */
+    reach(0x3B58); REG_D[6] = 0x00000000U; flags_move(REG_D[6], 32);    /* moveq #$0, d6 */
+    reach(0x3B5A); call(hex_number, 0x3B60, m68k_cost[0x3B5A >> 1]);    /* jsr $1268.l */
+    from(0x3B60);
+    reach(0x3B60); W(REG_D[0], RD16(0xFFC058U)); flags_move((uint16_t)REG_D[0], 16);    /* move.w $ffc058.l, d0 */
+    reach(0x3B66); go_on(0x3B66);    /* then: lsl.w #$2, d0 */
+}
+int draw_seg_03B1E(void) { return run(seg_03B1E); }
+
+static void seg_03ECC(void)
+{
+    from(0x3ECC);
+    reach(0x3ECC); REG_A[6] = 0x3FECU;    /* lea.l $3fec(pc), a6 */
+    reach(0x3ED0); call(text_d7, 0x3ED6, m68k_cost[0x3ED0 >> 1]);    /* jsr $11f2.l */
+    from(0x3ED6);
+    reach(0x3ED6); REG_A[6] = 0xFFC053U;    /* lea.l $ffc053.l, a6 */
+    reach(0x3EDC); command(0x43A00003U);    /* move.l #$43a00003, $c00004.l */
+    reach(0x3EE6); REG_D[6] = 0x00000000U; flags_move(REG_D[6], 32);    /* moveq #$0, d6 */
+    reach(0x3EE8); call(hex_number, 0x3EEE, m68k_cost[0x3EE8 >> 1]);    /* jsr $1268.l */
+    from(0x3EEE);
+    reach(0x3EEE);    /* rts */
+}
+int draw_seg_03ECC(void) { return run(seg_03ECC); }
+
+static void seg_03EF0(void)
+{
+    from(0x3EF0);
+    reach(0x3EF0); REG_A[6] = 0x3FF8U;    /* lea.l $3ff8(pc), a6 */
+    reach(0x3EF4); call(text_d7, 0x3EFA, m68k_cost[0x3EF4 >> 1]);    /* jsr $11f2.l */
+    from(0x3EFA);
+    reach(0x3EFA); REG_A[6] = 0xFFC051U;    /* lea.l $ffc051.l, a6 */
+    reach(0x3F00); command(0x44A00003U);    /* move.l #$44a00003, $c00004.l */
+    reach(0x3F0A); REG_D[6] = 0x00000000U; flags_move(REG_D[6], 32);    /* moveq #$0, d6 */
+    reach(0x3F0C); call(hex_number, 0x3F12, m68k_cost[0x3F0C >> 1]);    /* jsr $1268.l */
+    from(0x3F12);
+    reach(0x3F12);    /* rts */
+}
+int draw_seg_03EF0(void) { return run(seg_03EF0); }
+
+static void seg_03F8A(void)
+{
+    from(0x3F8A);
+    reach(0x3F8A); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x3F92); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x3F9C); call(screen_clear, 0x3FA2, m68k_cost[0x3F9C >> 1]);    /* jsr $522.l */
+    from(0x3FA2);
+    reach(0x3FA2); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x3FAA); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x3FB4); W(REG_D[0], 0xE1); flags_move(0xE1, 16);    /* move.w #$e1, d0 */
+    reach(0x3FB8); jsr_game(0x2D54, 0x3FBE);    /* jsr $2d54.l */
+}
+int draw_seg_03F8A(void) { return run(seg_03F8A); }
+
+static void seg_04206(void)
+{
+    from(0x4206);
+    reach(0x4206); ram_set16(0xFF566CU, 0x1);    /* move.w #$1, $ff566c.l */
+    reach(0x420E); ram_set16(0xFFA5C6U, 0x1);    /* move.w #$1, $ffa5c6.l */
+    reach(0x4216); ram_set16(0xFF566EU, 0x258);    /* move.w #$258, $ff566e.l */
+    reach(0x421E); ram_set16(0xFF5668U, 0);    /* clr.w $ff5668.l */
+    reach(0x4224); ram_set32(0xFFC068U, 0x427E);    /* move.l #$427e, $ffc068.l */
+    reach(0x422E); ram_set16(0xFFC054U, 0);    /* clr.w $ffc054.l */
+    reach(0x4234); ram_set16(0xFFC056U, 0);    /* clr.w $ffc056.l */
+    reach(0x423A); REG_A[6] = 0x59A0AU;    /* lea.l $59a0a.l, a6 */
+    reach(0x4240); command(0x74000003U);    /* move.l #$74000003, $c00004.l */
+    reach(0x424A); W(REG_D[7], 0x3); flags_move(0x3, 16);    /* move.w #$3, d7 */
+    reach(0x424E); call(tiles_packed, 0x4254, m68k_cost[0x424E >> 1]);    /* jsr $1146.l */
+    from(0x4254);
+    reach(0x4254); REG_A[6] = 0x5792U;    /* lea.l $5792(pc), a6 */
+    reach(0x4258); call(text, 0x425E, m68k_cost[0x4258 >> 1]);    /* jsr $11b8.l */
+    from(0x425E);
+    reach(0x425E); call(text, 0x4264, m68k_cost[0x425E >> 1]);    /* jsr $11b8.l */
+    from(0x4264);
+    reach(0x4264); call(text, 0x426A, m68k_cost[0x4264 >> 1]);    /* jsr $11b8.l */
+    from(0x426A);
+    reach(0x426A); call(text, 0x4270, m68k_cost[0x426A >> 1]);    /* jsr $11b8.l */
+    from(0x4270);
+    reach(0x4270); REG_D[0] = 0x00000000U; flags_move(REG_D[0], 32);    /* moveq #$0, d0 */
+    reach(0x4272); W(REG_D[7], 0x58); flags_move(0x58, 16);    /* move.w #$58, d7 */
+    reach(0x4276); jsr_game(0x18736, 0x427C);    /* jsr $18736.l */
+}
+int draw_seg_04206(void) { return run(seg_04206); }
+
+static void seg_0430A(void)
+{
+    from(0x430A);
+    reach(0x430A); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x4312); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x431C); jsr_game(0x470, 0x4322);    /* jsr $470.l */
+}
+int draw_seg_0430A(void) { return run(seg_0430A); }
+
+static void seg_04434(void)
+{
+    from(0x4434);
+    reach(0x4434); ram_set16(0xFF1816U, 0);    /* clr.w $ff1816.l */
+    reach(0x443A); ram_set32(0xFFC068U, 0x5124);    /* move.l #$5124, $ffc068.l */
+    reach(0x4444); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x444C); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x4456); ram_set16(0xFF1814U, 0x1);    /* move.w #$1, $ff1814.l */
+    reach(0x445E);    /* rts */
+}
+int draw_seg_04434(void) { return run(seg_04434); }
+
+static void seg_050C4(void)
+{
+    from(0x50C4);
+    reach(0x50C4); call(no_window, 0x50CA, m68k_cost[0x50C4 >> 1]);    /* jsr $6fa.l */
+    from(0x50CA);
+    reach(0x50CA); ram_set16(0xFFC092U, 0x8C00);    /* move.w #$8c00, $ffc092.l */
+    reach(0x50D2); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x50DC); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
+    reach(0x50E4); reg_word_ram(0xFFC09AU);    /* move.w $ffc09a.l, $c00004.l */
+    reach(0x50EE); ram_set16(0xFF1832U, 0x40);    /* move.w #$40, $ff1832.l */
+    reach(0x50F6); ram_set16(0xFF1830U, 0x40);    /* move.w #$40, $ff1830.l */
+    reach(0x50FE); ram_set16(0xFF1836U, 0x7);    /* move.w #$7, $ff1836.l */
+    reach(0x5106); ram_set16(0xFF1834U, 0x6);    /* move.w #$6, $ff1834.l */
+    reach(0x510E); ram_set16(0xFFC090U, 0x8B00);    /* move.w #$8b00, $ffc090.l */
+    reach(0x5116); reg_word_ram(0xFFC090U);    /* move.w $ffc090.l, $c00004.l */
+    reach(0x5120);    /* rts */
+}
+int draw_seg_050C4(void) { return run(seg_050C4); }
+
+static void seg_05496(void)
+{
+    from(0x5496);
+    reach(0x5496); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x549E); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x54A8); jsr_game(0x181A, 0x54AE);    /* jsr $181a.l */
+}
+int draw_seg_05496(void) { return run(seg_05496); }
+
+static void seg_0BE1E(void)
+{
+    from(0xBE1E);
+    reach(0xBE1E); ram_set8(0xFF56A7U, 0);    /* clr.b $ff56a7.l */
+    reach(0xBE24); ram_set8(0xFF3A63U, 0);    /* clr.b $ff3a63.l */
+    reach(0xBE2A); REG_A[6] = 0x5A480U;    /* lea.l $5a480.l, a6 */
+    reach(0xBE30); command(0x64800000U);    /* move.l #$64800000, $c00004.l */
+    reach(0xBE3A); W(REG_D[7], 0x0); flags_move(0x0, 16);    /* move.w #$0, d7 */
+    reach(0xBE3E); call(tiles_raw, 0xBE44, m68k_cost[0xBE3E >> 1]);    /* jsr $119c.l */
+    from(0xBE44);
+    reach(0xBE44); REG_A[6] = 0x5A4A0U;    /* lea.l $5a4a0.l, a6 */
+    reach(0xBE4A); command(0x64A00000U);    /* move.l #$64a00000, $c00004.l */
+    reach(0xBE54); W(REG_D[7], 0x0); flags_move(0x0, 16);    /* move.w #$0, d7 */
+    reach(0xBE58); call(tiles_raw, 0xBE5E, m68k_cost[0xBE58 >> 1]);    /* jsr $119c.l */
+    from(0xBE5E);
+    reach(0xBE5E); REG_A[6] = 0x5A4C0U;    /* lea.l $5a4c0.l, a6 */
+    reach(0xBE64); command(0x64C00000U);    /* move.l #$64c00000, $c00004.l */
+    reach(0xBE6E); W(REG_D[7], 0x0); flags_move(0x0, 16);    /* move.w #$0, d7 */
+    reach(0xBE72); call(tiles_raw, 0xBE78, m68k_cost[0xBE72 >> 1]);    /* jsr $119c.l */
+    from(0xBE78);
+    reach(0xBE78); REG_A[6] = 0x5A4E0U;    /* lea.l $5a4e0.l, a6 */
+    reach(0xBE7E); command(0x64E00000U);    /* move.l #$64e00000, $c00004.l */
+    reach(0xBE88); W(REG_D[7], 0x0); flags_move(0x0, 16);    /* move.w #$0, d7 */
+    reach(0xBE8C); call(tiles_raw, 0xBE92, m68k_cost[0xBE8C >> 1]);    /* jsr $119c.l */
+    from(0xBE92);
+    reach(0xBE92); go_on(0xBE92);    /* then: movem.l (a7)+, d7 */
+}
+int draw_seg_0BE1E(void) { return run(seg_0BE1E); }
+
+static void seg_11120(void)
+{
+    from(0x11120);
+    reach(0x11120); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x11128); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x11132); jsr_game(0x1928, 0x11138);    /* jsr $1928.l */
+}
+int draw_seg_11120(void) { return run(seg_11120); }
+
+static void seg_11138(void)
+{
+    from(0x11138);
+    reach(0x11138); call(screen_clear, 0x1113E, m68k_cost[0x11138 >> 1]);    /* jsr $522.l */
+    from(0x1113E);
+    reach(0x1113E); REG_A[6] = 0x5447EU;    /* lea.l $5447e.l, a6 */
+    reach(0x11144); command(0x40000000U);    /* move.l #$40000000, $c00004.l */
+    reach(0x1114E); W(REG_D[7], 0xFF); flags_move(0xFF, 16);    /* move.w #$ff, d7 */
+    reach(0x11152); call(tiles_packed, 0x11158, m68k_cost[0x11152 >> 1]);    /* jsr $1146.l */
+    from(0x11158);
+    reach(0x11158); REG_A[6] = 0x296FAU;    /* lea.l $296fa.l, a6 */
+    reach(0x1115E); command(0x60000000U);    /* move.l #$60000000, $c00004.l */
+    reach(0x11168); W(REG_D[7], 0xE8); flags_move(0xE8, 16);    /* move.w #$e8, d7 */
+    reach(0x1116C); call(tiles_packed, 0x11172, m68k_cost[0x1116C >> 1]);    /* jsr $1146.l */
+    from(0x11172);
+    reach(0x11172); REG_A[6] = 0x40020U;    /* lea.l $40020.l, a6 */
+    reach(0x11178); command(0x40000001U);    /* move.l #$40000001, $c00004.l */
+    reach(0x11182); W(REG_D[7], 0xFF); flags_move(0xFF, 16);    /* move.w #$ff, d7 */
+    reach(0x11186); call(tiles_packed, 0x1118C, m68k_cost[0x11186 >> 1]);    /* jsr $1146.l */
+    from(0x1118C);
+    reach(0x1118C); REG_A[0] = 0xFF2CD4U;    /* lea.l $ff2cd4.l, a0 */
+    reach(0x11192); go_on(0x11192);    /* then: move.l #$7dfc0, (a0)+ */
+}
+int draw_seg_11138(void) { return run(seg_11138); }
+
+static void seg_1124C(void)
+{
+    from(0x1124C);
+    reach(0x1124C); ram_op16(0xFFC092U, '|', 0x8C08);    /* ori.w #$8c08, $ffc092.l */
+    reach(0x11254); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x1125E); ram_set16(0xFF6C1AU, 0xF0);    /* move.w #$f0, $ff6c1a.l */
+    reach(0x11266); ram_set16(0xFF6C1CU, 0);    /* clr.w $ff6c1c.l */
+    reach(0x1126C); ram_set32(0xFFC068U, 0x113E6);    /* move.l #$113e6, $ffc068.l */
+    reach(0x11276); W(REG_D[0], 0x87); flags_move(0x87, 16);    /* move.w #$87, d0 */
+    reach(0x1127A); jsr_game(0x2D54, 0x11280);    /* jsr $2d54.l */
+}
+int draw_seg_1124C(void) { return run(seg_1124C); }
+
+static void seg_11298(void)
+{
+    from(0x11298);
+    reach(0x11298); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x112A0); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x112AA);    /* rts */
+}
+int draw_seg_11298(void) { return run(seg_11298); }
+
+static void seg_11476(void)
+{
+    from(0x11476);
+    reach(0x11476); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x1147E); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x11488); call(screen_clear, 0x1148E, m68k_cost[0x11488 >> 1]);    /* jsr $522.l */
+    from(0x1148E);
+    reach(0x1148E); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x11496); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x114A0); REG_A[0] = 0x119B0U;    /* lea.l $119b0(pc), a0 */
+    reach(0x114A4); W(REG_D[0], RD16(0xFFC05AU)); flags_move((uint16_t)REG_D[0], 16);    /* move.w $ffc05a.l, d0 */
+    reach(0x114AA); go_on(0x114AA);    /* then: lsl.w #$2, d0 */
+}
+int draw_seg_11476(void) { return run(seg_11476); }
+
+static void seg_114B2(void)
+{
+    from(0x114B2);
+    reach(0x114B2); REG_A[6] = 0x51CFAU;    /* lea.l $51cfa.l, a6 */
+    reach(0x114B8); command(0x40000002U);    /* move.l #$40000002, $c00004.l */
+    reach(0x114C2); W(REG_D[7], 0x1D); flags_move(0x1D, 16);    /* move.w #$1d, d7 */
+    reach(0x114C6); call(tiles_packed, 0x114CC, m68k_cost[0x114C6 >> 1]);    /* jsr $1146.l */
+    from(0x114CC);
+    reach(0x114CC); REG_A[0] = 0x115D4U;    /* lea.l $115d4(pc), a0 */
+    reach(0x114D0); go_on(0x114D0);    /* then: lsr.w #$1, d0 */
+}
+int draw_seg_114B2(void) { return run(seg_114B2); }
+
+static void seg_114DC(void)
+{
+    from(0x114DC);
+    reach(0x114DC); ram_op16(0xFFC092U, '|', 0x8C08);    /* ori.w #$8c08, $ffc092.l */
+    reach(0x114E4); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x114EE); go_on(0x114EE);    /* then: clr.l d0 */
+}
+int draw_seg_114DC(void) { return run(seg_114DC); }
+
+static void seg_1195A(void)
+{
+    from(0x1195A);
+    reach(0x1195A); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x11962); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x1196C); call(screen_clear, 0x11972, m68k_cost[0x1196C >> 1]);    /* jsr $522.l */
+    from(0x11972);
+    reach(0x11972); ram_op16(0xFFC092U, '&', 0x8CF7);    /* andi.w #$8cf7, $ffc092.l */
+    reach(0x1197A); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x11984); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x1198C); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x11996); jsr_game(0x1928, 0x1199C);    /* jsr $1928.l */
+}
+int draw_seg_1195A(void) { return run(seg_1195A); }
+
+static void seg_120E4(void)
+{
+    from(0x120E4);
+    reach(0x120E4); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x120EC); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x120F6); ram_set16(0xFFC092U, 0x8C00);    /* move.w #$8c00, $ffc092.l */
+    reach(0x120FE); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x12108); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
+    reach(0x12110); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
+    reach(0x12116); bset_d(0, 16);    /* bset.b #$10, d0 */
+    reach(0x1211A); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x12120); call(no_window, 0x12126, m68k_cost[0x12120 >> 1]);    /* jsr $6fa.l */
+    from(0x12126);
+    reach(0x12126); call(screen_clear, 0x1212C, m68k_cost[0x12126 >> 1]);    /* jsr $522.l */
+    from(0x1212C);
+    reach(0x1212C); REG_A[6] = 0x5654CU;    /* lea.l $5654c.l, a6 */
+    reach(0x12132); command(0x40000000U);    /* move.l #$40000000, $c00004.l */
+    reach(0x1213C); W(REG_D[7], 0x7F); flags_move(0x7F, 16);    /* move.w #$7f, d7 */
+    reach(0x12140); call(tiles_packed, 0x12146, m68k_cost[0x12140 >> 1]);    /* jsr $1146.l */
+    from(0x12146);
+    reach(0x12146); REG_A[6] = 0x56BBEU;    /* lea.l $56bbe.l, a6 */
+    reach(0x1214C); command(0x60000000U);    /* move.l #$60000000, $c00004.l */
+    reach(0x12156); W(REG_D[7], 0x1); flags_move(0x1, 16);    /* move.w #$1, d7 */
+    reach(0x1215A); call(tiles_packed, 0x12160, m68k_cost[0x1215A >> 1]);    /* jsr $1146.l */
+    from(0x12160);
+    reach(0x12160); REG_A[6] = 0x56BCAU;    /* lea.l $56bca.l, a6 */
+    reach(0x12166); command(0x68000000U);    /* move.l #$68000000, $c00004.l */
+    reach(0x12170); W(REG_D[7], 0x3); flags_move(0x3, 16);    /* move.w #$3, d7 */
+    reach(0x12174); call(tiles_packed, 0x1217A, m68k_cost[0x12174 >> 1]);    /* jsr $1146.l */
+    from(0x1217A);
+    reach(0x1217A); REG_A[6] = 0x5C740U;    /* lea.l $5c740.l, a6 */
+    reach(0x12180); command(0x70000000U);    /* move.l #$70000000, $c00004.l */
+    reach(0x1218A); W(REG_D[7], 0x7F); flags_move(0x7F, 16);    /* move.w #$7f, d7 */
+    reach(0x1218E); call(tiles_raw, 0x12194, m68k_cost[0x1218E >> 1]);    /* jsr $119c.l */
+    from(0x12194);
+    reach(0x12194); REG_A[6] = 0x63BA0U;    /* lea.l $63ba0.l, a6 */
+    reach(0x1219A); command(0x40000001U);    /* move.l #$40000001, $c00004.l */
+    reach(0x121A4); W(REG_D[7], 0x7F); flags_move(0x7F, 16);    /* move.w #$7f, d7 */
+    reach(0x121A8); call(tiles_raw, 0x121AE, m68k_cost[0x121A8 >> 1]);    /* jsr $119c.l */
+    from(0x121AE);
+    reach(0x121AE); REG_A[6] = 0x58B1AU;    /* lea.l $58b1a.l, a6 */
+    reach(0x121B4); command(0x50000001U);    /* move.l #$50000001, $c00004.l */
+    reach(0x121BE); W(REG_D[7], 0x8); flags_move(0x8, 16);    /* move.w #$8, d7 */
+    reach(0x121C2); call(tiles_packed, 0x121C8, m68k_cost[0x121C2 >> 1]);    /* jsr $1146.l */
+    from(0x121C8);
+    reach(0x121C8); W(REG_D[7], 0x2A); flags_move(0x2A, 16);    /* move.w #$2a, d7 */
+    reach(0x121CC); jsr_game(0x18FC, 0x121D2);    /* jsr $18fc.l */
+}
+int draw_seg_120E4(void) { return run(seg_120E4); }
+
+static void seg_121D2(void)
+{
+    from(0x121D2);
+    reach(0x121D2); REG_A[6] = 0x122F2U;    /* lea.l $122f2.l, a6 */
+    reach(0x121D8); ram_set16(0xFF1830U, 0x40);    /* move.w #$40, $ff1830.l */
+    reach(0x121E0); call(map_rect, 0x121E6, m68k_cost[0x121E0 >> 1]);    /* jsr $28a90.l */
+    from(0x121E6);
+    reach(0x121E6); command(0x5FC00003U);    /* move.l #$5fc00003, $c00004.l */
+    reach(0x121F0); data_word(0xA101);    /* move.w #$a101, $c00000.l */
+    reach(0x121F8); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x12200); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x1220A); ram_set16(0xFF5548U, 0x0);    /* move.w #$0, $ff5548.l */
+    reach(0x12212); ram_set16(0xFF1814U, 0);    /* clr.w $ff1814.l */
+    reach(0x12218); ram_set16(0xFF0680U, 0);    /* clr.w $ff0680.l */
+    reach(0x1221E); ram_set16(0xFF6C5AU, 0);    /* clr.w $ff6c5a.l */
+    reach(0x12224); ram_set16(0xFF6C5CU, 0);    /* clr.w $ff6c5c.l */
+    reach(0x1222A); ram_set16(0xFF6C5EU, 0);    /* clr.w $ff6c5e.l */
+    reach(0x12230); ram_set16(0xFF6C60U, 0);    /* clr.w $ff6c60.l */
+    reach(0x12236); ram_set16(0xFF6C62U, 0);    /* clr.w $ff6c62.l */
+    reach(0x1223C); ram_set16(0xFF6C64U, 0);    /* clr.w $ff6c64.l */
+    reach(0x12242); ram_set32(0xFF3456U, 0x12774);    /* move.l #$12774, $ff3456.l */
+    reach(0x1224C); ram_set32(0xFF345AU, 0x12780);    /* move.l #$12780, $ff345a.l */
+    reach(0x12256); ram_set32(0xFF345EU, 0x127E0);    /* move.l #$127e0, $ff345e.l */
+    reach(0x12260); ram_set32(0xFF3462U, 0x12840);    /* move.l #$12840, $ff3462.l */
+    reach(0x1226A); ram_set32(0xFF35AEU, 0);    /* clr.l $ff35ae.l */
+    reach(0x12270); ram_set32(0xFF35B2U, 0);    /* clr.l $ff35b2.l */
+    reach(0x12276); ram_set16(0xFF35B6U, 0);    /* clr.w $ff35b6.l */
+    reach(0x1227C); ram_set32(0xFF365AU, 0);    /* clr.l $ff365a.l */
+    reach(0x12282); ram_set32(0xFF365EU, 0);    /* clr.l $ff365e.l */
+    reach(0x12288); ram_set16(0xFF3662U, 0);    /* clr.w $ff3662.l */
+    reach(0x1228E); ram_set16(0xFF304EU, 0x180);    /* move.w #$180, $ff304e.l */
+    reach(0x12296); ram_set16(0xFF3050U, 0xDC);    /* move.w #$dc, $ff3050.l */
+    reach(0x1229E); ram_set16(0xFF3052U, 0xDA);    /* move.w #$da, $ff3052.l */
+    reach(0x122A6); ram_set16(0xFF3054U, 0xE0);    /* move.w #$e0, $ff3054.l */
+    reach(0x122AE); ram_set16(0xFF30FAU, 0x128);    /* move.w #$128, $ff30fa.l */
+    reach(0x122B6); ram_set16(0xFF30FCU, 0xD0);    /* move.w #$d0, $ff30fc.l */
+    reach(0x122BE); ram_set16(0xFF30FEU, 0xD0);    /* move.w #$d0, $ff30fe.l */
+    reach(0x122C6); ram_set16(0xFF3100U, 0xD0);    /* move.w #$d0, $ff3100.l */
+    reach(0x122CE); ram_set16(0xFF5546U, 0);    /* clr.w $ff5546.l */
+    reach(0x122D4); ram_op16(0xFFC092U, '|', 0x8C08);    /* ori.w #$8c08, $ffc092.l */
+    reach(0x122DC); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x122E6); ram_set32(0xFFC068U, 0x122FE);    /* move.l #$122fe, $ffc068.l */
+    reach(0x122F0);    /* rts */
+}
+int draw_seg_121D2(void) { return run(seg_121D2); }
+
+static void seg_12614(void)
+{
+    from(0x12614);
+    reach(0x12614); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x1261C); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x12626); call(screen_clear, 0x1262C, m68k_cost[0x12626 >> 1]);    /* jsr $522.l */
+    from(0x1262C);
+    reach(0x1262C); ram_op16(0xFFC092U, '&', 0x8CF7);    /* andi.w #$8cf7, $ffc092.l */
+    reach(0x12634); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x1263E); W(REG_D[7], 0x2B); flags_move(0x2B, 16);    /* move.w #$2b, d7 */
+    reach(0x12642); jsr_game(0x18FC, 0x12648);    /* jsr $18fc.l */
+}
+int draw_seg_12614(void) { return run(seg_12614); }
+
+static void seg_12652(void)
+{
+    from(0x12652);
+    reach(0x12652); REG_A[6] = 0x2A5E0U;    /* lea.l $2a5e0.l, a6 */
+    reach(0x12658); command(0x40000000U);    /* move.l #$40000000, $c00004.l */
+    reach(0x12662); W(REG_D[7], 0xC0); flags_move(0xC0, 16);    /* move.w #$c0, d7 */
+    reach(0x12666); call(tiles_packed, 0x1266C, m68k_cost[0x12666 >> 1]);    /* jsr $1146.l */
+    from(0x1266C);
+    reach(0x1266C); REG_A[6] = 0x40020U;    /* lea.l $40020.l, a6 */
+    reach(0x12672); command(0x60000000U);    /* move.l #$60000000, $c00004.l */
+    reach(0x1267C); W(REG_D[7], 0x41); flags_move(0x41, 16);    /* move.w #$41, d7 */
+    reach(0x12680); call(tiles_packed, 0x12686, m68k_cost[0x12680 >> 1]);    /* jsr $1146.l */
+    from(0x12686);
+    reach(0x12686); REG_A[0] = 0xFF2CD4U;    /* lea.l $ff2cd4.l, a0 */
+    reach(0x1268C); go_on(0x1268C);    /* then: move.l #$2d060, (a0)+ */
+}
+int draw_seg_12652(void) { return run(seg_12652); }
+
+static void seg_12730(void)
+{
+    from(0x12730);
+    reach(0x12730); ram_set16(0xFF6C5EU, 0x100);    /* move.w #$100, $ff6c5e.l */
+    reach(0x12738); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x12740); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x1274A); ram_set16(0xFF6C1AU, 0xC0);    /* move.w #$c0, $ff6c1a.l */
+    reach(0x12752); ram_set16(0xFF6C1CU, 0x58);    /* move.w #$58, $ff6c1c.l */
+    reach(0x1275A); ram_set16(0xFF6C5CU, 0x1);    /* move.w #$1, $ff6c5c.l */
+    reach(0x12762);    /* rts */
+}
+int draw_seg_12730(void) { return run(seg_12730); }
+
+static void seg_12A94(void)
+{
+    from(0x12A94);
+    reach(0x12A94); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x12A9C); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x12AA6); call(screen_clear, 0x12AAC, m68k_cost[0x12AA6 >> 1]);    /* jsr $522.l */
+    from(0x12AAC);
+    reach(0x12AAC); REG_A[6] = 0x5A000U;    /* lea.l $5a000.l, a6 */
+    reach(0x12AB2); command(0x70000000U);    /* move.l #$70000000, $c00004.l */
+    reach(0x12ABC); W(REG_D[7], 0x27); flags_move(0x27, 16);    /* move.w #$27, d7 */
+    reach(0x12AC0); call(tiles_raw, 0x12AC6, m68k_cost[0x12AC0 >> 1]);    /* jsr $119c.l */
+    from(0x12AC6);
+    reach(0x12AC6); REG_A[6] = 0x61040U;    /* lea.l $61040.l, a6 */
+    reach(0x12ACC); command(0x40000001U);    /* move.l #$40000001, $c00004.l */
+    reach(0x12AD6); W(REG_D[7], 0x2C); flags_move(0x2C, 16);    /* move.w #$2c, d7 */
+    reach(0x12ADA); call(tiles_raw, 0x12AE0, m68k_cost[0x12ADA >> 1]);    /* jsr $119c.l */
+    from(0x12AE0);
+    reach(0x12AE0); go_on(0x12AE0);    /* then: move.b $a10001.l, d5 */
+}
+int draw_seg_12A94(void) { return run(seg_12A94); }
+
+static void seg_12B5E(void)
+{
+    from(0x12B5E);
+    reach(0x12B5E); ram_set16(0xFF6C5EU, 0);    /* clr.w $ff6c5e.l */
+    reach(0x12B64); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x12B6C); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x12B76); ram_set16(0xFF304EU, 0x70);    /* move.w #$70, $ff304e.l */
+    reach(0x12B7E); ram_set16(0xFF30FAU, 0xE8);    /* move.w #$e8, $ff30fa.l */
+    reach(0x12B86); ram_set32(0xFF35AEU, 0x0);    /* move.l #$0, $ff35ae.l */
+    reach(0x12B90); ram_set16(0xFF6C1AU, 0x168);    /* move.w #$168, $ff6c1a.l */
+    reach(0x12B98); ram_set16(0xFF6C5CU, 0x3);    /* move.w #$3, $ff6c5c.l */
+    reach(0x12BA0);    /* rts */
+}
+int draw_seg_12B5E(void) { return run(seg_12B5E); }
+
+static void seg_12C50(void)
+{
+    from(0x12C50);
+    reach(0x12C50); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x12C58); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x12C62); call(screen_clear, 0x12C68, m68k_cost[0x12C62 >> 1]);    /* jsr $522.l */
+    from(0x12C68);
+    reach(0x12C68); W(REG_D[7], 0x2F); flags_move(0x2F, 16);    /* move.w #$2f, d7 */
+    reach(0x12C6C); jsr_game(0x18FC, 0x12C72);    /* jsr $18fc.l */
+}
+int draw_seg_12C50(void) { return run(seg_12C50); }
+
+static void seg_12C72(void)
+{
+    from(0x12C72);
+    reach(0x12C72); REG_A[6] = 0x59180U;    /* lea.l $59180.l, a6 */
+    reach(0x12C78); command(0x40000000U);    /* move.l #$40000000, $c00004.l */
+    reach(0x12C82); W(REG_D[7], 0x23); flags_move(0x23, 16);    /* move.w #$23, d7 */
+    reach(0x12C86); call(tiles_packed, 0x12C8C, m68k_cost[0x12C86 >> 1]);    /* jsr $1146.l */
+    from(0x12C8C);
+    reach(0x12C8C); go_on(0x12C8C);    /* then: move.b $a10001.l, d5 */
+}
+int draw_seg_12C72(void) { return run(seg_12C72); }
+
+static void seg_12C9A(void)
+{
+    from(0x12C9A);
+    reach(0x12C9A); REG_A[6] = 0x5981EU;    /* lea.l $5981e.l, a6 */
+    reach(0x12CA0); command(0x60000000U);    /* move.l #$60000000, $c00004.l */
+    reach(0x12CAA); W(REG_D[7], 0xFF); flags_move(0xFF, 16);    /* move.w #$ff, d7 */
+    reach(0x12CAE); call(tiles_packed, 0x12CB4, m68k_cost[0x12CAE >> 1]);    /* jsr $1146.l */
+    from(0x12CB4);
+    reach(0x12CB4); REG_A[0] = 0xFF2CD4U;    /* lea.l $ff2cd4.l, a0 */
+    reach(0x12CBA); go_on(0x12CBA);    /* then: move.l #$305f8, (a0)+ */
+}
+int draw_seg_12C9A(void) { return run(seg_12C9A); }
+
+static void seg_12CE4(void)
+{
+    from(0x12CE4);
+    reach(0x12CE4); REG_A[6] = 0x5935EU;    /* lea.l $5935e.l, a6 */
+    reach(0x12CEA); command(0x60000000U);    /* move.l #$60000000, $c00004.l */
+    reach(0x12CF4); W(REG_D[7], 0xFF); flags_move(0xFF, 16);    /* move.w #$ff, d7 */
+    reach(0x12CF8); call(tiles_packed, 0x12CFE, m68k_cost[0x12CF8 >> 1]);    /* jsr $1146.l */
+    from(0x12CFE);
+    reach(0x12CFE); REG_A[0] = 0xFF2CD4U;    /* lea.l $ff2cd4.l, a0 */
+    reach(0x12D04); go_on(0x12D04);    /* then: move.l #$302a0, (a0)+ */
+}
+int draw_seg_12CE4(void) { return run(seg_12CE4); }
+
+static void seg_12D56(void)
+{
+    from(0x12D56);
+    reach(0x12D56); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x12D5E); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x12D68); ram_set16(0xFF6C60U, 0xDC);    /* move.w #$dc, $ff6c60.l */
+    reach(0x12D70); ram_set16(0xFF6C5EU, 0x10C);    /* move.w #$10c, $ff6c5e.l */
+    reach(0x12D78); ram_set16(0xFF6C1AU, 0x21);    /* move.w #$21, $ff6c1a.l */
+    reach(0x12D80); ram_set16(0xFF6C5CU, 0x4);    /* move.w #$4, $ff6c5c.l */
+    reach(0x12D88);    /* rts */
+}
+int draw_seg_12D56(void) { return run(seg_12D56); }
+
+static void seg_12DD8(void)
+{
+    from(0x12DD8);
+    reach(0x12DD8); ram_set16(0xFF6C5CU, 0x6);    /* move.w #$6, $ff6c5c.l */
+    reach(0x12DE0); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x12DE8); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x12DF2); call(screen_clear, 0x12DF8, m68k_cost[0x12DF2 >> 1]);    /* jsr $522.l */
+    from(0x12DF8);
+    reach(0x12DF8); jsr_game(0x1928, 0x12DFE);    /* jsr $1928.l */
+}
+int draw_seg_12DD8(void) { return run(seg_12DD8); }
+
+static void seg_12DFE(void)
+{
+    from(0x12DFE);
+    reach(0x12DFE); ram_op16(0xFFC092U, '&', 0x8CF7);    /* andi.w #$8cf7, $ffc092.l */
+    reach(0x12E06); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x12E10); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x12E18); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x12E22); go_on(0x12E22);    /* then: tst.w $ff5548.l */
+}
+int draw_seg_12DFE(void) { return run(seg_12DFE); }
+
+static void seg_23948(void)
+{
+    from(0x23948);
+    reach(0x23948); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x23950); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x2395A); jsr_game(0x470, 0x23960);    /* jsr $470.l */
+}
+int draw_seg_23948(void) { return run(seg_23948); }
+
+static void seg_2396C(void)
+{
+    from(0x2396C);
+    reach(0x2396C); call(no_window, 0x23972, m68k_cost[0x2396C >> 1]);    /* jsr $6fa.l */
+    from(0x23972);
+    reach(0x23972); ram_set16(0xFFC092U, 0x8C00);    /* move.w #$8c00, $ffc092.l */
+    reach(0x2397A); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x23984); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
+    reach(0x2398C); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
+    reach(0x23992); bset_d(0, 16);    /* bset.b #$10, d0 */
+    reach(0x23996); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x2399C); jsr_game(0xFF22, 0x239A2);    /* jsr $ff22.l */
+}
+int draw_seg_2396C(void) { return run(seg_2396C); }
+
+static void seg_239B8(void)
+{
+    from(0x239B8);
+    reach(0x239B8); REG_A[6] = 0x40020U;    /* lea.l $40020.l, a6 */
+    reach(0x239BE); command(0x64000002U);    /* move.l #$64000002, $c00004.l */
+    reach(0x239C8); W(REG_D[7], 0x5F); flags_move(0x5F, 16);    /* move.w #$5f, d7 */
+    reach(0x239CC); call(tiles_packed, 0x239D2, m68k_cost[0x239CC >> 1]);    /* jsr $1146.l */
+    from(0x239D2);
+    reach(0x239D2); REG_A[6] = 0x23A9EU;    /* lea.l $23a9e(pc), a6 */
+    reach(0x239D6); call(text, 0x239DC, m68k_cost[0x239D6 >> 1]);    /* jsr $11b8.l */
+    from(0x239DC);
+    reach(0x239DC); ram_set16(0xFF5546U, 0xF0);    /* move.w #$f0, $ff5546.l */
+    reach(0x239E4); ram_set16(0xFF6C5CU, 0);    /* clr.w $ff6c5c.l */
+    reach(0x239EA); ram_set16(0xFF1814U, 0);    /* clr.w $ff1814.l */
+    reach(0x239F0); ram_set16(0xFF385EU, 0);    /* clr.w $ff385e.l */
+    reach(0x239F6); ram_set16(0xFF6C58U, 0);    /* clr.w $ff6c58.l */
+    reach(0x239FC); ram_set16(0xFF6C54U, 0);    /* clr.w $ff6c54.l */
+    reach(0x23A02); ram_set16(0xFF6C56U, 0);    /* clr.w $ff6c56.l */
+    reach(0x23A08); ram_set16(0xFF17A0U, 0);    /* clr.w $ff17a0.l */
+    reach(0x23A0E); ram_set16(0xFF6C68U, 0);    /* clr.w $ff6c68.l */
+    reach(0x23A14); REG_A[0] = 0x3BB00U;    /* lea.l $3bb00.l, a0 */
+    reach(0x23A1A); go_on(0x23A1A);    /* then: move.w $0(a0), $ff6c66.l */
+}
+int draw_seg_239B8(void) { return run(seg_239B8); }
+
+static void seg_23A22(void)
+{
+    from(0x23A22);
+    reach(0x23A22); command(0x40000010U);    /* move.l #$40000010, $c00004.l */
+    reach(0x23A2C); data_word_ram(0xFF6C54U);    /* move.w $ff6c54.l, $c00000.l */
+    reach(0x23A36); command(0x40020010U);    /* move.l #$40020010, $c00004.l */
+    reach(0x23A40); data_word_ram(0xFF6C56U);    /* move.w $ff6c56.l, $c00000.l */
+    reach(0x23A4A); command(0x70020002U);    /* move.l #$70020002, $c00004.l */
+    reach(0x23A54); data_word_ram(0xFF6C58U);    /* move.w $ff6c58.l, $c00000.l */
+    reach(0x23A5E); W(REG_D[0], 0x1); flags_move(0x1, 16);    /* move.w #$1, d0 */
+    reach(0x23A62); REG_D[1] = 0x00000000U; flags_move(REG_D[1], 32);    /* moveq #$0, d1 */
+    reach(0x23A64); REG_A[0] = 0xFF2FA2U;    /* lea.l $ff2fa2.l, a0 */
+    reach(0x23A6A); go_on(0x23A6A);    /* then: move.w #$3, (a0, d1.w) */
+}
+int draw_seg_23A22(void) { return run(seg_23A22); }
+
+static void seg_23A8A(void)
+{
+    from(0x23A8A);
+    reach(0x23A8A); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x23A92); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x23A9C);    /* rts */
+}
+int draw_seg_23A8A(void) { return run(seg_23A8A); }
+
+static void seg_23AC2(void)
+{
+    from(0x23AC2);
+    reach(0x23AC2); command(0x40000010U);    /* move.l #$40000010, $c00004.l */
+    reach(0x23ACC); data_word_ram(0xFF6C54U);    /* move.w $ff6c54.l, $c00000.l */
+    reach(0x23AD6); command(0x40020010U);    /* move.l #$40020010, $c00004.l */
+    reach(0x23AE0); data_word_ram(0xFF6C56U);    /* move.w $ff6c56.l, $c00000.l */
+    reach(0x23AEA); command(0x70020002U);    /* move.l #$70020002, $c00004.l */
+    reach(0x23AF4); data_word_ram(0xFF6C58U);    /* move.w $ff6c58.l, $c00000.l */
+    reach(0x23AFE); W(REG_D[0], RD16(0xFF6C5CU)); flags_move((uint16_t)REG_D[0], 16);    /* move.w $ff6c5c.l, d0 */
+    reach(0x23B04); go_on(0x23B04);    /* then: lsl.w #$2, d0 */
+}
+int draw_seg_23AC2(void) { return run(seg_23AC2); }
+
+static void seg_23B32(void)
+{
+    from(0x23B32);
+    reach(0x23B32); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x23B3A); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x23B44); call(screen_clear, 0x23B4A, m68k_cost[0x23B44 >> 1]);    /* jsr $522.l */
+    from(0x23B4A);
+    reach(0x23B4A); jsr_game(0x1928, 0x23B50);    /* jsr $1928.l */
+}
+int draw_seg_23B32(void) { return run(seg_23B32); }
+
+static void seg_23B50(void)
+{
+    from(0x23B50);
+    reach(0x23B50); REG_A[6] = 0x55100U;    /* lea.l $55100.l, a6 */
+    reach(0x23B56); command(0x40000000U);    /* move.l #$40000000, $c00004.l */
+    reach(0x23B60); W(REG_D[7], 0xBE); flags_move(0xBE, 16);    /* move.w #$be, d7 */
+    reach(0x23B64); call(tiles_packed, 0x23B6A, m68k_cost[0x23B64 >> 1]);    /* jsr $1146.l */
+    from(0x23B6A);
+    reach(0x23B6A); REG_A[6] = 0x55F14U;    /* lea.l $55f14.l, a6 */
+    reach(0x23B70); command(0x70200002U);    /* move.l #$70200002, $c00004.l */
+    reach(0x23B7A); W(REG_D[7], 0x37); flags_move(0x37, 16);    /* move.w #$37, d7 */
+    reach(0x23B7E); call(tiles_packed, 0x23B84, m68k_cost[0x23B7E >> 1]);    /* jsr $1146.l */
+    from(0x23B84);
+    reach(0x23B84); REG_A[6] = 0x23C00U;    /* lea.l $23c00.l, a6 */
+    reach(0x23B8A); ram_set16(0xFF1830U, 0x40);    /* move.w #$40, $ff1830.l */
+    reach(0x23B92); call(map_rect, 0x23B98, m68k_cost[0x23B92 >> 1]);    /* jsr $28a90.l */
+    from(0x23B98);
+    reach(0x23B98); REG_A[6] = 0x23BF4U;    /* lea.l $23bf4.l, a6 */
+    reach(0x23B9E); ram_set16(0xFF1830U, 0x40);    /* move.w #$40, $ff1830.l */
+    reach(0x23BA6); call(map_rect, 0x23BAC, m68k_cost[0x23BA6 >> 1]);    /* jsr $28a90.l */
+    from(0x23BAC);
+    reach(0x23BAC); W(REG_D[7], 0x25); flags_move(0x25, 16);    /* move.w #$25, d7 */
+    reach(0x23BB0); jsr_game(0x18FC, 0x23BB6);    /* jsr $18fc.l */
+}
+int draw_seg_23B50(void) { return run(seg_23B50); }
+
+static void seg_23BD8(void)
+{
+    from(0x23BD8);
+    reach(0x23BD8); ram_set16(0xFF6C5CU, 0x1);    /* move.w #$1, $ff6c5c.l */
+    reach(0x23BE0); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x23BE8); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x23BF2);    /* rts */
+}
+int draw_seg_23BD8(void) { return run(seg_23BD8); }
+
+static void seg_23C8E(void)
+{
+    from(0x23C8E);
+    reach(0x23C8E); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x23C96); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x23CA0); call(screen_clear, 0x23CA6, m68k_cost[0x23CA0 >> 1]);    /* jsr $522.l */
+    from(0x23CA6);
+    reach(0x23CA6); jsr_game(0x1928, 0x23CAC);    /* jsr $1928.l */
+}
+int draw_seg_23C8E(void) { return run(seg_23C8E); }
+
+static void seg_23CAC(void)
+{
+    from(0x23CAC);
+    reach(0x23CAC); REG_A[6] = 0x296FAU;    /* lea.l $296fa.l, a6 */
+    reach(0x23CB2); command(0x60000002U);    /* move.l #$60000002, $c00004.l */
+    reach(0x23CBC); W(REG_D[7], 0xE8); flags_move(0xE8, 16);    /* move.w #$e8, d7 */
+    reach(0x23CC0); call(tiles_packed, 0x23CC6, m68k_cost[0x23CC0 >> 1]);    /* jsr $1146.l */
+    from(0x23CC6);
+    reach(0x23CC6); REG_A[6] = 0x6C600U;    /* lea.l $6c600.l, a6 */
+    reach(0x23CCC); command(0x40000001U);    /* move.l #$40000001, $c00004.l */
+    reach(0x23CD6); W(REG_D[7], 0x75); flags_move(0x75, 16);    /* move.w #$75, d7 */
+    reach(0x23CDA); call(tiles_packed, 0x23CE0, m68k_cost[0x23CDA >> 1]);    /* jsr $1146.l */
+    from(0x23CE0);
+    reach(0x23CE0); REG_A[6] = 0x6A000U;    /* lea.l $6a000.l, a6 */
+    reach(0x23CE6); command(0x4EC00001U);    /* move.l #$4ec00001, $c00004.l */
+    reach(0x23CF0); W(REG_D[7], 0x8A); flags_move(0x8A, 16);    /* move.w #$8a, d7 */
+    reach(0x23CF4); call(tiles_packed, 0x23CFA, m68k_cost[0x23CF4 >> 1]);    /* jsr $1146.l */
+    from(0x23CFA);
+    reach(0x23CFA); REG_A[6] = 0x2C552U;    /* lea.l $2c552.l, a6 */
+    reach(0x23D00); command(0x50000002U);    /* move.l #$50000002, $c00004.l */
+    reach(0x23D0A); W(REG_D[7], 0x45); flags_move(0x45, 16);    /* move.w #$45, d7 */
+    reach(0x23D0E); call(tiles_packed, 0x23D14, m68k_cost[0x23D0E >> 1]);    /* jsr $1146.l */
+    from(0x23D14);
+    reach(0x23D14); REG_A[6] = 0x23D74U;    /* lea.l $23d74.l, a6 */
+    reach(0x23D1A); ram_set16(0xFF1830U, 0x40);    /* move.w #$40, $ff1830.l */
+    reach(0x23D22); call(map_rect, 0x23D28, m68k_cost[0x23D22 >> 1]);    /* jsr $28a90.l */
+    from(0x23D28);
+    reach(0x23D28); W(REG_D[0], 0x86); flags_move(0x86, 16);    /* move.w #$86, d0 */
+    reach(0x23D2C); jsr_game(0x2D54, 0x23D32);    /* jsr $2d54.l */
+}
+int draw_seg_23CAC(void) { return run(seg_23CAC); }
+
+static void seg_23D60(void)
+{
+    from(0x23D60);
+    reach(0x23D60); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x23D68); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x23D72);    /* rts */
+}
+int draw_seg_23D60(void) { return run(seg_23D60); }
+
+static void seg_23E16(void)
+{
+    from(0x23E16);
+    reach(0x23E16); ram_op16(0xFFC092U, '|', 0x8C08);    /* ori.w #$8c08, $ffc092.l */
+    reach(0x23E1E); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x23E28);    /* rts */
+}
+int draw_seg_23E16(void) { return run(seg_23E16); }
+
+static void seg_23E2A(void)
+{
+    from(0x23E2A);
+    reach(0x23E2A); ram_op16(0xFFC092U, '&', 0x8CF7);    /* andi.w #$8cf7, $ffc092.l */
+    reach(0x23E32); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x23E3C);    /* rts */
+}
+int draw_seg_23E2A(void) { return run(seg_23E2A); }
+
+static void seg_23E60(void)
+{
+    from(0x23E60);
+    reach(0x23E60); ram_op16(0xFFC092U, '&', 0x8CF7);    /* andi.w #$8cf7, $ffc092.l */
+    reach(0x23E68); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x23E72);    /* rts */
+}
+int draw_seg_23E60(void) { return run(seg_23E60); }
+
+static void seg_24536(void)
+{
+    from(0x24536);
+    reach(0x24536); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x2453E); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x24548); jsr_game(0x470, 0x2454E);    /* jsr $470.l */
+}
+int draw_seg_24536(void) { return run(seg_24536); }
+
+static void seg_24572(void)
+{
+    from(0x24572);
+    reach(0x24572); ram_set16(0xFFC092U, 0x8C00);    /* move.w #$8c00, $ffc092.l */
+    reach(0x2457A); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x24584); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
+    reach(0x2458C); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
+    reach(0x24592); bset_d(0, 16);    /* bset.b #$10, d0 */
+    reach(0x24596); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x2459C); REG_A[6] = 0x55100U;    /* lea.l $55100.l, a6 */
+    reach(0x245A2); command(0x40000000U);    /* move.l #$40000000, $c00004.l */
+    reach(0x245AC); W(REG_D[7], 0xBE); flags_move(0xBE, 16);    /* move.w #$be, d7 */
+    reach(0x245B0); call(tiles_packed, 0x245B6, m68k_cost[0x245B0 >> 1]);    /* jsr $1146.l */
+    from(0x245B6);
+    reach(0x245B6); go_on(0x245B6);    /* then: clr.w d0 */
+}
+int draw_seg_24572(void) { return run(seg_24572); }
+
+static void seg_24644(void)
+{
+    from(0x24644);
+    reach(0x24644); command(0x40000010U);    /* move.l #$40000010, $c00004.l */
+    reach(0x2464E); data_word_ram(0xFF6C54U);    /* move.w $ff6c54.l, $c00000.l */
+    reach(0x24658); command(0x40020010U);    /* move.l #$40020010, $c00004.l */
+    reach(0x24662); data_word_ram(0xFF6C56U);    /* move.w $ff6c56.l, $c00000.l */
+    reach(0x2466C); command(0x70020002U);    /* move.l #$70020002, $c00004.l */
+    reach(0x24676); data_word(0x0000);    /* move.w #$0, $c00000.l */
+    reach(0x2467E); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x24686); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x24690);    /* rts */
+}
+int draw_seg_24644(void) { return run(seg_24644); }
+
+static void seg_2497C(void)
+{
+    from(0x2497C);
+    reach(0x2497C); ram_op16(0xFFC092U, '|', 0x8C08);    /* ori.w #$8c08, $ffc092.l */
+    reach(0x24984); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x2498E);    /* rts */
+}
+int draw_seg_2497C(void) { return run(seg_2497C); }
+
+static void seg_24990(void)
+{
+    from(0x24990);
+    reach(0x24990); ram_op16(0xFFC092U, '&', 0x8CF7);    /* andi.w #$8cf7, $ffc092.l */
+    reach(0x24998); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x249A2);    /* rts */
+}
+int draw_seg_24990(void) { return run(seg_24990); }
+
+static void seg_249A4(void)
+{
+    from(0x249A4);
+    reach(0x249A4); ram_op16(0xFFC07CU, '&', 0x81BF);    /* andi.w #$81bf, $ffc07c.l */
+    reach(0x249AC); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x249B6); call(screen_clear, 0x249BC, m68k_cost[0x249B6 >> 1]);    /* jsr $522.l */
+    from(0x249BC);
+    reach(0x249BC); ram_op16(0xFFC092U, '&', 0x8CF7);    /* andi.w #$8cf7, $ffc092.l */
+    reach(0x249C4); reg_word_ram(0xFFC092U);    /* move.w $ffc092.l, $c00004.l */
+    reach(0x249CE); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
+    reach(0x249D6); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
+    reach(0x249E0); jsr_game(0x1928, 0x249E6);    /* jsr $1928.l */
+}
+int draw_seg_249A4(void) { return run(seg_249A4); }
+
+static void seg_3BBFC(void)
+{
+    from(0x3BBFC);
+    reach(0x3BBFC); REG_A[6] = 0x61040U;    /* lea.l $61040.l, a6 */
+    reach(0x3BC02); command(0x70000000U);    /* move.l #$70000000, $c00004.l */
+    reach(0x3BC0C); W(REG_D[7], 0x2C); flags_move(0x2C, 16);    /* move.w #$2c, d7 */
+    reach(0x3BC10); call(tiles_raw, 0x3BC16, m68k_cost[0x3BC10 >> 1]);    /* jsr $119c.l */
+    from(0x3BC16);
+    reach(0x3BC16); ram_set16(0xFF2FAEU, 0x3);    /* move.w #$3, $ff2fae.l */
+    reach(0x3BC1E); ram_set16(0xFF2FB0U, 0x3);    /* move.w #$3, $ff2fb0.l */
+    reach(0x3BC26);    /* rts */
+}
+int draw_seg_3BBFC(void) { return run(seg_3BBFC); }
+
+static void seg_3BC28(void)
+{
+    from(0x3BC28);
+    reach(0x3BC28); REG_A[6] = 0x5C740U;    /* lea.l $5c740.l, a6 */
+    reach(0x3BC2E); command(0x65000000U);    /* move.l #$65000000, $c00004.l */
+    reach(0x3BC38); W(REG_D[7], 0x3F); flags_move(0x3F, 16);    /* move.w #$3f, d7 */
+    reach(0x3BC3C); call(tiles_raw, 0x3BC42, m68k_cost[0x3BC3C >> 1]);    /* jsr $119c.l */
+    from(0x3BC42);
+    reach(0x3BC42); ram_set16(0xFF2FB2U, 0x3);    /* move.w #$3, $ff2fb2.l */
+    reach(0x3BC4A);    /* rts */
+}
+int draw_seg_3BC28(void) { return run(seg_3BC28); }
+
+static void seg_3BD80(void)
+{
+    from(0x3BD80);
+    reach(0x3BD80); REG_A[6] = 0x6CF58U;    /* lea.l $6cf58.l, a6 */
+    reach(0x3BD86); command(0x70C00003U);    /* move.l #$70c00003, $c00004.l */
+    reach(0x3BD90); W(REG_D[7], 0x11); flags_move(0x11, 16);    /* move.w #$11, d7 */
+    reach(0x3BD94); call(tiles_packed, 0x3BD9A, m68k_cost[0x3BD94 >> 1]);    /* jsr $1146.l */
+    from(0x3BD9A);
+    reach(0x3BD9A); REG_A[6] = 0x668E0U;    /* lea.l $668e0.l, a6 */
+    reach(0x3BDA0); command(0x75A00000U);    /* move.l #$75a00000, $c00004.l */
+    reach(0x3BDAA); W(REG_D[7], 0x3B); flags_move(0x3B, 16);    /* move.w #$3b, d7 */
+    reach(0x3BDAE); call(tiles_raw, 0x3BDB4, m68k_cost[0x3BDAE >> 1]);    /* jsr $119c.l */
+    from(0x3BDB4);
+    reach(0x3BDB4); ram_set16(0xFF2FB4U, 0x3);    /* move.w #$3, $ff2fb4.l */
+    reach(0x3BDBC);    /* rts */
+}
+int draw_seg_3BD80(void) { return run(seg_3BD80); }
+
+static void seg_3BE2E(void)
+{
+    from(0x3BE2E);
+    reach(0x3BE2E); REG_A[6] = 0x6B478U;    /* lea.l $6b478.l, a6 */
+    reach(0x3BE34); command(0x79000001U);    /* move.l #$79000001, $c00004.l */
+    reach(0x3BE3E); W(REG_D[7], 0x63); flags_move(0x63, 16);    /* move.w #$63, d7 */
+    reach(0x3BE42); call(tiles_packed, 0x3BE48, m68k_cost[0x3BE42 >> 1]);    /* jsr $1146.l */
+    from(0x3BE48);
+    reach(0x3BE48); REG_A[6] = 0x62EA0U;    /* lea.l $62ea0.l, a6 */
+    reach(0x3BE4E); command(0x75A00000U);    /* move.l #$75a00000, $c00004.l */
+    reach(0x3BE58); W(REG_D[7], 0x1F); flags_move(0x1F, 16);    /* move.w #$1f, d7 */
+    reach(0x3BE5C); call(tiles_raw, 0x3BE62, m68k_cost[0x3BE5C >> 1]);    /* jsr $119c.l */
+    from(0x3BE62);
+    reach(0x3BE62); REG_A[6] = 0x65D80U;    /* lea.l $65d80.l, a6 */
+    reach(0x3BE68); command(0x79A00000U);    /* move.l #$79a00000, $c00004.l */
+    reach(0x3BE72); W(REG_D[7], 0x2D); flags_move(0x2D, 16);    /* move.w #$2d, d7 */
+    reach(0x3BE76); call(tiles_raw, 0x3BE7C, m68k_cost[0x3BE76 >> 1]);    /* jsr $119c.l */
+    from(0x3BE7C);
+    reach(0x3BE7C); ram_set16(0xFF2FBAU, 0x3);    /* move.w #$3, $ff2fba.l */
+    reach(0x3BE84);    /* rts */
+}
+int draw_seg_3BE2E(void) { return run(seg_3BE2E); }
+
+static void seg_3BE86(void)
+{
+    from(0x3BE86);
+    reach(0x3BE86); REG_A[6] = 0x5FD40U;    /* lea.l $5fd40.l, a6 */
+    reach(0x3BE8C); command(0x65000000U);    /* move.l #$65000000, $c00004.l */
+    reach(0x3BE96); W(REG_D[7], 0x23); flags_move(0x23, 16);    /* move.w #$23, d7 */
+    reach(0x3BE9A); call(tiles_raw, 0x3BEA0, m68k_cost[0x3BE9A >> 1]);    /* jsr $119c.l */
+    from(0x3BEA0);
+    reach(0x3BEA0); ram_set16(0xFF2FBCU, 0x3);    /* move.w #$3, $ff2fbc.l */
+    reach(0x3BEA8);    /* rts */
+}
+int draw_seg_3BE86(void) { return run(seg_3BE86); }
+
+static void seg_3BF32(void)
+{
+    from(0x3BF32);
+    reach(0x3BF32); REG_A[6] = 0x6AAB0U;    /* lea.l $6aab0.l, a6 */
+    reach(0x3BF38); command(0x60200001U);    /* move.l #$60200001, $c00004.l */
+    reach(0x3BF42); W(REG_D[7], 0x8B); flags_move(0x8B, 16);    /* move.w #$8b, d7 */
+    reach(0x3BF46); call(tiles_packed, 0x3BF4C, m68k_cost[0x3BF46 >> 1]);    /* jsr $1146.l */
+    from(0x3BF4C);
+    reach(0x3BF4C); ram_set16(0xFF2FBEU, 0x3);    /* move.w #$3, $ff2fbe.l */
+    reach(0x3BF54);    /* rts */
+}
+int draw_seg_3BF32(void) { return run(seg_3BF32); }
+
+static void seg_3C07E(void)
+{
+    from(0x3C07E);
+    reach(0x3C07E); REG_A[6] = 0x2A484U;    /* lea.l $2a484.l, a6 */
+    reach(0x3C084); command(0x60000000U);    /* move.l #$60000000, $c00004.l */
+    reach(0x3C08E); W(REG_D[7], 0xF); flags_move(0xF, 16);    /* move.w #$f, d7 */
+    reach(0x3C092); call(tiles_packed, 0x3C098, m68k_cost[0x3C092 >> 1]);    /* jsr $1146.l */
+    from(0x3C098);
+    reach(0x3C098); ram_set16(0xFF2FC0U, 0x3);    /* move.w #$3, $ff2fc0.l */
+    reach(0x3C0A0);    /* rts */
+}
+int draw_seg_3C07E(void) { return run(seg_3C07E); }

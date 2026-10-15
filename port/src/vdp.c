@@ -201,8 +201,16 @@ static void dma_fill(uint16_t w)
 #include <stdio.h>
 #include <stdlib.h>
 static int vlog = -1;   /* VDPLOG: every control word (the decoded commands go through it) */
+
+/* who used the chip: the drawing routines in C (draw.c sets vdp_in_c while one runs) or
+ * the game's translated code; one count for each register, command, word or status */
+int vdp_in_c;
+unsigned long vdp_uses_c, vdp_uses_translated;
+#define USED() (vdp_in_c ? vdp_uses_c++ : vdp_uses_translated++)
+
 void vdp_write_ctrl(uint16_t w)
 {
+    USED();
     if (vlog < 0) vlog = getenv("VDPLOG") != NULL;
     if (vlog) fprintf(stderr, "ctrl %04x line %d frame %u pc %06x\n", w, md.line, md.frame, cpu_get_pc());
     if (vdp.pending) {
@@ -243,6 +251,7 @@ void vdp_set_reg(int r, uint8_t v)
         vdp_write_ctrl((uint16_t)(0x8000 | (r << 8) | v));
         return;
     }
+    USED();
     state_log(0, r, vdp.reg[r]);
     vdp.reg[r] = v;
     if (r == 0 || r == 1)
@@ -257,6 +266,7 @@ void vdp_command(uint8_t code, uint16_t addr)
         vdp_write_ctrl((uint16_t)(((code & 0x3C) << 2) | (addr >> 14)));
         return;
     }
+    USED();
     vdp.addr = addr;
     vdp.code = code;
     if ((code & 0x20) && (vdp.reg[1] & 0x10)) {
@@ -303,6 +313,7 @@ void vdp_command_long(uint32_t v)
 
 void vdp_write_data(uint16_t w)
 {
+    USED();
     vdp.pending = 0;
     if (vdp.fill_pending) {
         vdp.fill_pending = 0;
@@ -315,6 +326,7 @@ void vdp_write_data(uint16_t w)
 
 uint16_t vdp_read_data(void)
 {
+    USED();
     uint16_t w = 0;
     vdp.pending = 0;
     switch (vdp.code & 0x0F) {
@@ -328,6 +340,7 @@ uint16_t vdp_read_data(void)
 
 uint16_t vdp_read_ctrl(void)
 {
+    USED();
     uint16_t s = 0x3400 | 0x0200; /* FIFO empty */
     int cyc = md_line_cycle();
     vdp.pending = 0;
@@ -944,38 +957,75 @@ static int nchanges, changes_cap, changes_lost;
  * game's routine would have made it in */
 int vdp_ahead = VDP_AHEAD_NONE;
 
-static void vram_log(uint16_t a, uint8_t old, uint8_t now)
+/* the line a change by a routine in C goes with (past MD_LINES: in the next frame) */
+static int ahead_line(void)
 {
-    if (md.line >= 224) return;          /* between pictures: nothing shown changes */
     int line = md.line;
     if (vdp_ahead != VDP_AHEAD_NONE && vdp_ahead >= 0)
         line += 1 + vdp_ahead / MD_CYC68K_LINE;
-    if (line > 224) line = 224;          /* after the picture */
+    return line;
+}
+
+/* changes that go with the next frame's lines (a routine in C that runs on past the
+ * end of this one): moved to the logs when this frame's picture is done */
+static vram_change next_changes[4096];
+static int nnext_changes;
+
+static void vram_add(vram_change c)
+{
     if (nchanges == changes_cap) {
-        int c = changes_cap ? changes_cap * 2 : 4096;
-        vram_change *n = c <= (1 << 20) ? realloc(changes, (size_t)c * sizeof(*n)) : 0;
+        int n2 = changes_cap ? changes_cap * 2 : 4096;
+        vram_change *n = n2 <= (1 << 20) ? realloc(changes, (size_t)n2 * sizeof(*n)) : 0;
         if (!n) { changes_lost = 1; return; }
-        changes = n; changes_cap = c;
+        changes = n; changes_cap = n2;
     }
-    changes[nchanges].a = a;
-    changes[nchanges].old = old;
-    changes[nchanges].now = now;
-    changes[nchanges].line = (uint8_t)line;
-    nchanges++;
+    changes[nchanges++] = c;
+}
+
+static void vram_log(uint16_t a, uint8_t old, uint8_t now)
+{
+    int line = ahead_line();
+    if (line >= MD_LINES) {              /* in the next frame's picture */
+        if (line - MD_LINES >= 224) return;
+        vram_change c = {a, old, now, (uint8_t)(line - MD_LINES)};
+        if (md.line >= 224)              /* this frame's picture is done: the log is the next one's */
+            vram_add(c);
+        else if (nnext_changes == (int)(sizeof(next_changes) / sizeof(next_changes[0])))
+            changes_lost = 1;
+        else
+            next_changes[nnext_changes++] = c;
+        line = 224;
+    }
+    if (md.line >= 224) return;          /* between pictures: nothing shown changes */
+    if (line > 224) line = 224;          /* after the picture */
+    vram_add((vram_change){a, old, now, (uint8_t)line});
 }
 
 /* registers, palette and vertical scroll changed by a routine in C ahead of where the
  * game's routine would have changed them: until that line, the lines are taken with
  * what was there before */
 typedef struct { int line, kind, i; uint16_t old; } state_change;
-static state_change ahead[256];
-static int nahead;
+static state_change ahead[256], next_ahead[256];
+static int nahead, nnext_ahead;
 
 static void state_log(int kind, int i, uint16_t old)
 {
-    if (vdp_ahead == VDP_AHEAD_NONE || vdp_ahead < 0 || md.line >= 224 || nahead == 256)
+    if (vdp_ahead == VDP_AHEAD_NONE || vdp_ahead < 0)
         return;
-    int line = md.line + 1 + vdp_ahead / MD_CYC68K_LINE;
+    int line = ahead_line();
+    if (line >= MD_LINES) {              /* in the next frame's picture */
+        if (line - MD_LINES >= 224) return;
+        state_change c = {line - MD_LINES, kind, i, old};
+        if (md.line >= 224) {            /* this frame's picture is done: the log is the next one's */
+            if (nahead < 256) ahead[nahead++] = c;
+            return;
+        }
+        if (nnext_ahead < 256)
+            next_ahead[nnext_ahead++] = c;
+        line = 224;                      /* and not in this frame's lines either */
+    }
+    if (md.line >= 224 || nahead == 256)
+        return;
     if (line >= 224) line = 224;
     ahead[nahead++] = (state_change){line, kind, i, old};
 }
@@ -1024,6 +1074,9 @@ void vdp_render_frame(void)
     if (replay) memcpy(vdp.vram, live_vram, sizeof(live_vram));
     nchanges = 0; changes_lost = 0;
     nahead = 0;
+    for (int i = 0; i < nnext_changes; i++) vram_add(next_changes[i]);
+    for (int i = 0; i < nnext_ahead; i++) ahead[nahead++] = next_ahead[i];
+    nnext_changes = nnext_ahead = 0;
     memcpy(vdp.reg, live.reg, sizeof(live.reg));
     memcpy(vdp.cram, live.cram, sizeof(live.cram));
     memcpy(vdp.vsram, live.vsram, sizeof(live.vsram));

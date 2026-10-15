@@ -43,7 +43,9 @@ void     vdp_set_reg(int r, uint8_t v);            /* a register (decoded comman
 void     vdp_command(uint8_t code, uint16_t addr); /* where data goes (decoded command) */
 void     vdp_reg_word(uint16_t w);                 /* a register word the game keeps in RAM */
 void     vdp_command_long(uint32_t v);             /* a command (or two register words) made at run time */
-extern unsigned long vdp_raw_words;                /* control words that needed the port's two-word latch */
+extern unsigned long vdp_raw_words;
+extern int vdp_in_c;                               /* a drawing routine in C is running */
+extern unsigned long vdp_uses_c, vdp_uses_translated;   /* chip uses by C / by translated code */                /* control words that needed the port's two-word latch */
 uint16_t vdp_read_ctrl(void);
 uint16_t vdp_read_data(void);
 uint16_t vdp_read_hv(void);

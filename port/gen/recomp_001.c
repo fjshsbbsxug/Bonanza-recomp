@@ -29735,6 +29735,7 @@ L_00BE18: CHK(0xBE18u)  /* jsr $99d6.l */
 	{ uint ea = 0x99D6u; m68ki_push_32(0xBE1Eu); USE_CYCLES(20);
 	  { REG_PC = 0x99D6u; return; } }
 L_00BE1E: CHK(0xBE1Eu)  /* clr.b $ff56a7.l */
+	{ int r_ = draw_seg_0BE1E(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		m68ki_write_8(0xFF56A7u, 0);
 	
