@@ -109,7 +109,7 @@
  */
 #ifndef M68K_EMULATE_INT_ACK
 #define M68K_EMULATE_INT_ACK        M68K_OPT_SPECIFY_HANDLER
-int md_int_ack(int level); /* port/src/cpu68k.c */
+extern int md_int_ack(int level); /* port/src/cpu68k.c */
 #define M68K_INT_ACK_CALLBACK(A)    md_int_ack(A)
 #endif
 

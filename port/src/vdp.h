@@ -37,17 +37,17 @@ void     vdp_set_aspect(double aspect);  /* 4/3 = original, 16/9 = widescreen */
 
 void     vdp_reset(void);
 void     vdp_refresh_palette(void);  /* after md_color_lut changes */
-void     vdp_write_ctrl(uint16_t w);
-void     vdp_write_data(uint16_t w);
-void     vdp_set_reg(int r, uint8_t v);            /* a register (decoded command) */
-void     vdp_command(uint8_t code, uint16_t addr); /* where data goes (decoded command) */
-void     vdp_reg_word(uint16_t w);                 /* a register word the game keeps in RAM */
-void     vdp_command_long(uint32_t v);             /* a command (or two register words) made at run time */
+extern void     vdp_write_ctrl(uint16_t w);
+extern void     vdp_write_data(uint16_t w);
+extern void     vdp_set_reg(int r, uint8_t v);            /* a register (decoded command) */
+extern void     vdp_command(uint8_t code, uint16_t addr); /* where data goes (decoded command) */
+extern void     vdp_reg_word(uint16_t w);                 /* a register word the game keeps in RAM */
+extern void     vdp_command_long(uint32_t v);             /* a command (or two register words) made at run time */
 extern unsigned long vdp_raw_words;
 extern int vdp_in_c;                               /* a drawing routine in C is running */
 extern unsigned long vdp_uses_c, vdp_uses_translated;   /* chip uses by C / by translated code */                /* control words that needed the port's two-word latch */
-uint16_t vdp_read_ctrl(void);
-uint16_t vdp_read_data(void);
+extern uint16_t vdp_read_ctrl(void);
+extern uint16_t vdp_read_data(void);
 uint16_t vdp_read_hv(void);
 void     vdp_render_line(int y);
 void     vdp_line_capture(int y);  /* the state line y is drawn with (while the frame runs) */

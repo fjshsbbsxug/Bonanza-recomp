@@ -21,6 +21,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "mods.h"
+#include "game.h"
 #include "settings.h"
 #include "recomp.h"
 
@@ -668,7 +669,7 @@ void mods_toggle(int i)
 size_t mods_apply(const uint8_t *rom, size_t size, uint8_t *out, size_t cap)
 {
     memcpy(out, rom, size);
-    recomp_validate_all();
+    game.recomp_validate_all();
     status_text[0] = 0;
     size_t n = size;
     int applied = 0, failed = 0;
@@ -715,7 +716,7 @@ size_t mods_apply(const uint8_t *rom, size_t size, uint8_t *out, size_t cap)
     /* changes to the game's own instructions cannot run (no native code for them) */
     int code = 0;
     for (size_t a = 0; a < size && a < n; a++)
-        if (out[a] != rom[a] && recomp_invalidate((uint32_t)a)) code++;
+        if (out[a] != rom[a] && game.recomp_invalidate((uint32_t)a)) code++;
     if (applied || failed)
         snprintf(status_text, sizeof(status_text), "%d mod%s active%s%s", applied, applied == 1 ? "" : "s",
                  failed ? ", some failed (see Mods...)" : "", code ? " (changes game code: not supported)" : "");

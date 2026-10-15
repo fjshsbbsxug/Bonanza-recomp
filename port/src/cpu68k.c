@@ -1,6 +1,7 @@
 /* 68000 execution: all of it is the recompiled game code (port/gen); there is no
  * interpreter. The CPU's state, reset and interrupt entry are in m68k_rt.c. */
 #include "md.h"
+#include "game.h"
 #include "vdp.h"
 #include "recomp.h"
 #include "gamemods.h"
@@ -127,7 +128,7 @@ void cpu_run(int cycles)
             cpu_apply_irq();
         if (CPU_STOPPED)
             break;
-        recomp_fn fn = recomp_find(REG_PC);
+        recomp_fn fn = game.recomp_find(REG_PC);
         if (fn)
             fn();
         else

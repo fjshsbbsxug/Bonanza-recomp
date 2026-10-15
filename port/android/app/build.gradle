@@ -12,7 +12,7 @@ android {
         versionName "1.0"
         externalNativeBuild {
             cmake {
-                arguments "-DANDROID_STL=c++_static", "-DBONANZA_HEADLESS=OFF"
+                arguments "-DANDROID_STL=c++_static", "-DBONANZA_HEADLESS=OFF", "-DBONANZA_GAME_LIB=ON"
                 abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
             }
         }
@@ -32,5 +32,12 @@ android {
     }
     lint {
         abortOnError false
+    }
+    packagingOptions {
+        jniLibs {
+            // the game's code (libbonanza_game.so) is added to the APK by the builder page:
+            // native libraries compressed and extracted when installed
+            useLegacyPackaging true
+        }
     }
 }

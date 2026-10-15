@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "md.h"
+#include "game.h"
 #include "settings.h"
 #include "net.h"
 #include "gamemods.h"
@@ -1162,6 +1163,16 @@ int main(int argc, char **argv)
     setup_mods();
     last_screen = settings.screen;
     fit_window();
+    {                                       /* the game's code: linked in, or its library */
+        char *gbase = SDL_GetBasePath();
+        const char *gerr = game_load(gbase ? gbase : "");
+        if (gbase) SDL_free(gbase);
+        if (gerr) {
+            SDL_Log("%s", gerr);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Bonanza Bros.", gerr, window);
+            return 1;
+        }
+    }
     find_rom(argc, argv);
     if (host_port)
         net_host(atoi(host_port));

@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "extrastages.h"
+#include "game.h"
 #include "gamemods.h"
 #include "md.h"
 #include "recomp.h"
@@ -157,7 +158,7 @@ void xs_scan(void)
         for (uint32_t p = xs[k].list; p + 6 <= md.rom_size && r32(p) != 0xFFFFFFFFu;) {
             uint32_t a = r32(p), n = r16(p + 4);
             for (uint32_t i = 0; i < n; i++)
-                if (a + i < 0x80000) recomp_invalidate(a + i);
+                if (a + i < 0x80000) game.recomp_invalidate(a + i);
             p += 6 + ((n + 1) & ~1u);
         }
     game_mods_apply();

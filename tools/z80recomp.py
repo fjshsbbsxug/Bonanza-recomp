@@ -354,7 +354,13 @@ def image(L, name, data):
 
 
 def main():
-    rom_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "baserom.md")
+    global OUT
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if "--out" in sys.argv:                 # the directory the game's code goes to
+        d = sys.argv[sys.argv.index("--out") + 1]
+        args = [a for a in args if a != d]
+        OUT = os.path.join(d, "z80_driver.c")
+    rom_path = args[0] if args else os.path.join(ROOT, "baserom.md")
     rom = open(rom_path, "rb").read()
     if hashlib.sha1(rom).hexdigest() != SHA1:
         sys.exit("baserom sha1 mismatch")

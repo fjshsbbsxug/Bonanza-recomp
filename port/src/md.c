@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "extrastages.h"
+#include "game.h"
 #include "z80recomp.h"
 #include "sndmix.h"
 #include "cheats.h"
@@ -192,7 +193,7 @@ static void z80_bus_write(uint32_t a, uint8_t v, uint64_t t)
     a &= 0xFFFF;
     if (a < 0x4000) {
         md.zram[a & 0x1FFF] = v;
-        if ((a & 0x1FFF) < Z80R_LEN) zram_dirty = z80r_code_changed = 1;
+        if ((a & 0x1FFF) < Z80R_LEN) zram_dirty = *game.z80r_code_changed = 1;
     } else if (a < 0x6000) {
         ym_write(t, a & 3, v);
     } else if (a < 0x6100) {
@@ -228,7 +229,7 @@ static void z80_write_68k(uint32_t a, uint8_t v)
 static int z80_program(void)
 {
     if (zram_dirty) {
-        z80_prog = z80r_program(md.zram);
+        z80_prog = game.z80r_program(md.zram);
         zram_dirty = 0;
     }
     return z80_prog;
@@ -236,7 +237,7 @@ static int z80_program(void)
 
 static void z80_do_reset(void)
 {
-    z80r_init(&zcpu);
+    game.z80r_init(&zcpu);
     zcpu.read_byte = zr;
     zcpu.write_byte = zw;
     zcpu.port_in = zin;
@@ -465,7 +466,7 @@ static void z80_line(void)
     if (z80_running()) {
         while (z80_line_cyc < MD_CYCZ80_LINE) {
             if (z80_program() >= 0) {
-                int r = z80r_run(z80_prog, &zcpu, &z80_line_cyc, MD_CYCZ80_LINE);
+                int r = game.z80r_run(z80_prog, &zcpu, &z80_line_cyc, MD_CYCZ80_LINE);
                 if (r == 1) break;
                 if (r == 2) continue;         /* its code was written: look again */
             }
@@ -490,7 +491,7 @@ void md_run_frame(void)
             vdp_render_frame();          /* the picture is complete: drawn before the next one's work starts */
         vdp_line_start(line);
         if (line == 224)
-            z80r_gen_int(&zcpu, 0xFF);
+            game.z80r_gen_int(&zcpu, 0xFF);
         z80_line_cyc = 0;
         cpu_run(MD_CYC68K_LINE);
         if (!snd_ready()) z80_line();     /* recorded sounds: no sound hardware runs */
@@ -608,7 +609,7 @@ void md_snd_frame(void)
 {
     for (int line = 0; line < MD_LINES; line++) {
         if (line == 224)
-            z80r_gen_int(&zcpu, 0xFF);
+            game.z80r_gen_int(&zcpu, 0xFF);
         z80_line_cyc = 0;
         z80_line();
         if (line == 225)

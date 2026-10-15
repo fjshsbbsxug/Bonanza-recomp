@@ -17,16 +17,64 @@ set(CORE_SOURCES
   ext/nuked-opn2/ym3438.c
 )
 
-# the game's code, recompiled to C (tools/recomp.py, tools/z80recomp.py): there is no
-# CPU interpreter in the port
-file(GLOB RECOMP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/gen/*.c)
-if(NOT RECOMP_SOURCES)
-  message(FATAL_ERROR "port/gen is missing: run make recomp")
+list(APPEND CORE_SOURCES src/slotcode.c src/draw.c src/game.c src/engine/recomp_cycles.c src/engine/recomp_slot.c)
+
+# The game's code, translated to C from the ROM (tools/recomp.py, tools/z80recomp.py;
+# not in the repository). With the ROM it is made here and linked into the program;
+# with BONANZA_GAME_LIB the program is the engine alone and loads the game's code as a
+# library (bonanza_game.dll / libbonanza_game.so: the builder pages make it from the
+# player's ROM in the browser; with the ROM here it is built too).
+set(BONANZA_ROM "${CMAKE_CURRENT_SOURCE_DIR}/../baserom.md" CACHE FILEPATH "the ROM (Bonanza Bros., JUE)")
+option(BONANZA_GAME_LIB "The engine alone: the game's code is a library made from the ROM" OFF)
+set(GAME_GEN "${CMAKE_CURRENT_BINARY_DIR}/gen")
+set(GAME_SOURCES "")
+if(EXISTS ${BONANZA_ROM})
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  if(NOT EXISTS ${GAME_GEN}/game_link.c OR ${BONANZA_ROM} IS_NEWER_THAN ${GAME_GEN}/game_link.c)
+    message(STATUS "Translating the game's code from ${BONANZA_ROM}")
+    execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/recomp.py ${BONANZA_ROM} --out ${GAME_GEN}
+                    RESULT_VARIABLE r1 OUTPUT_QUIET)
+    execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/z80recomp.py ${BONANZA_ROM} --out ${GAME_GEN}
+                    RESULT_VARIABLE r2 OUTPUT_QUIET)
+    if(r1 OR r2)
+      file(REMOVE ${GAME_GEN}/game_link.c)
+      message(FATAL_ERROR "Translating the game's code failed (is the ROM the right one?)")
+    endif()
+  endif()
+  file(GLOB GAME_SOURCES ${GAME_GEN}/recomp_0*.c)
+  list(APPEND GAME_SOURCES ${GAME_GEN}/recomp_index.c ${GAME_GEN}/m68k_costs.c ${GAME_GEN}/z80_driver.c)
+elseif(NOT BONANZA_GAME_LIB)
+  message(FATAL_ERROR "No ROM (${BONANZA_ROM}): give BONANZA_ROM, or build the engine alone with -DBONANZA_GAME_LIB=ON")
 endif()
-list(APPEND CORE_SOURCES ${RECOMP_SOURCES} src/slotcode.c src/draw.c)
+if(NOT BONANZA_GAME_LIB)
+  list(APPEND CORE_SOURCES ${GAME_SOURCES})
+else()
+  list(APPEND CORE_SOURCES src/engine/game_syms.c)
+endif()
 
 add_library(bonanza_core STATIC ${CORE_SOURCES})
 target_include_directories(bonanza_core PUBLIC src ext/musashi)
+if(NOT BONANZA_GAME_LIB)
+  target_compile_definitions(bonanza_core PRIVATE BONANZA_GAME_STATIC)
+elseif(UNIX)
+  target_link_libraries(bonanza_core PUBLIC ${CMAKE_DL_LIBS})
+endif()
+
+# the game's library built here (with the ROM and BONANZA_GAME_LIB): as the builder pages
+# build it, with nothing from the system
+if(BONANZA_GAME_LIB AND GAME_SOURCES AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  execute_process(COMMAND ${CMAKE_C_COMPILER} -print-file-name=include OUTPUT_VARIABLE CC_INCLUDE OUTPUT_STRIP_TRAILING_WHITESPACE)
+  add_library(bonanza_game SHARED ${GAME_SOURCES} ${GAME_GEN}/game_link.c)
+  set_target_properties(bonanza_game PROPERTIES PREFIX "lib" OUTPUT_NAME bonanza_game C_VISIBILITY_PRESET hidden)
+  if(WIN32)
+    set_target_properties(bonanza_game PROPERTIES PREFIX "")
+  endif()
+  target_include_directories(bonanza_game PRIVATE src ext/musashi)
+  target_compile_options(bonanza_game PRIVATE -O1 -w -fcommon -nostdinc
+                         "SHELL:-isystem ${CMAKE_CURRENT_SOURCE_DIR}/gamelib/include" "SHELL:-isystem ${CC_INCLUDE}"
+                         "SHELL:-include ${GAME_GEN}/game_bind.h")
+  target_link_options(bonanza_game PRIVATE -nostdlib)
+endif()
 
 # Opus: the game's recorded sounds are kept in it (sndbank.c)
 set(BONANZA_OPUS_URL "https://github.com/xiph/opus/releases/download/v1.5.2/opus-1.5.2.tar.gz"
@@ -47,7 +95,9 @@ if(MSVC)
   target_compile_options(bonanza_core PRIVATE /W0)
 else()
   target_compile_options(bonanza_core PRIVATE -w)
-  set_source_files_properties(${RECOMP_SOURCES} PROPERTIES COMPILE_OPTIONS "-O1;-w")
+  if(GAME_SOURCES AND NOT BONANZA_GAME_LIB)
+    set_source_files_properties(${GAME_SOURCES} PROPERTIES COMPILE_OPTIONS "-O1;-w")
+  endif()
 endif()
 if(NOT WIN32 AND NOT EMSCRIPTEN)
   target_link_libraries(bonanza_core PUBLIC m)
@@ -166,7 +216,6 @@ endif()
 # them on its first start. The file depends only on the ROM:
 # a cross build (Windows, web) can take the one a native build made (BONANZA_SOUNDS).
 # Without either the game records them itself the first time.
-set(BONANZA_ROM "${CMAKE_CURRENT_SOURCE_DIR}/../baserom.md" CACHE FILEPATH "ROM the build records the sounds from")
 set(BONANZA_SOUNDS "" CACHE FILEPATH "sounds.bbs made already (used as it is)")
 option(BONANZA_SOUNDS_OPUS "Record the sounds in Opus (about 22 MB) rather than lossless (104 MB)" OFF)
 set(SOUNDS_OUT "${CMAKE_CURRENT_BINARY_DIR}/sounds.bbs")
@@ -176,10 +225,10 @@ if(BONANZA_SOUNDS)
     DEPENDS ${BONANZA_SOUNDS}
     COMMENT "Copying the game's sounds")
   add_custom_target(sounds ALL DEPENDS ${SOUNDS_OUT})
-elseif(BONANZA_HEADLESS AND NOT CMAKE_CROSSCOMPILING AND EXISTS ${BONANZA_ROM})
+elseif(BONANZA_HEADLESS AND NOT CMAKE_CROSSCOMPILING AND EXISTS ${BONANZA_ROM} AND NOT BONANZA_GAME_LIB)
   add_custom_command(OUTPUT ${SOUNDS_OUT}
     COMMAND bonanza-headless ${BONANZA_ROM} --make-sounds ${SOUNDS_OUT} $<$<BOOL:${BONANZA_SOUNDS_OPUS}>:--opus>
-    DEPENDS ${BONANZA_ROM} src/sndrec.c src/sndbank.c ext/nuked-opn2/ym3438.c src/psg.c gen/z80_driver.c
+    DEPENDS ${BONANZA_ROM} src/sndrec.c src/sndbank.c ext/nuked-opn2/ym3438.c src/psg.c ${GAME_GEN}/z80_driver.c
     COMMENT "Recording the game's sounds from the ROM (a minute or two)")
   add_custom_target(sounds ALL DEPENDS ${SOUNDS_OUT})
   add_dependencies(sounds bonanza-headless)

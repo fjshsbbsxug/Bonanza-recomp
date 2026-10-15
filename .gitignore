@@ -13,3 +13,9 @@ port/android/local.properties
 
 # the game's sounds recorded from the ROM
 *.bbs
+
+# made from the ROM (the game's code is not in the repository): the disassembly
+# (make disasm) and the code translated to C (make recomp / the port's build)
+/src/
+/assets.txt
+/port/gen/

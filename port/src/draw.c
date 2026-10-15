@@ -14,6 +14,7 @@
  * written); when an interrupt would come within it, it returns 0 and the game's
  * routine runs as translated, to be stopped where the console stops it. */
 #include "recomp_rt.h"
+#include "game.h"
 #include "draw.h"
 #include "sndmix.h"
 #include <stdio.h>
@@ -29,8 +30,9 @@ static int left0;   /* the time left in the line when the routine began (for rea
 /* the time of instructions run; video changes after it are made that far into the routine */
 #define COST(n) (cyc += (n), dry ? 0 : (vdp_ahead = cyc - left0))
 
-/* each instruction's time where it does not depend on the data (port/gen/m68k_costs.c) */
-extern const unsigned char m68k_cost[0x40000];
+/* each instruction's time where it does not depend on the data (port/gen/m68k_costs.c,
+ * with the game's code) */
+#define m68k_cost (game.m68k_cost)
 
 /* the time of the instructions from a up to b, run one after the other */
 static int span(uint32_t a, uint32_t b)

@@ -41,7 +41,8 @@ jobs:
             libegl1-mesa-dev libgl1-mesa-dev libgles2-mesa-dev libdbus-1-dev libudev-dev libdecor-0-dev
       - name: Build
         run: |
-          cmake -S port -B build -DCMAKE_BUILD_TYPE=Release -DBONANZA_FETCH_SDL=ON -DBONANZA_SDL_URL=$SDL_URL
+          cmake -S port -B build -DCMAKE_BUILD_TYPE=Release -DBONANZA_FETCH_SDL=ON -DBONANZA_SDL_URL=$SDL_URL \
+                -DBONANZA_GAME_LIB=ON
           cmake --build build -j
       - name: Package
         run: python3 port/dist/package.py native --platform linux --exe build/bonanza --out out/bonanza-linux-x64.zip
@@ -59,7 +60,7 @@ jobs:
       - name: Build
         run: |
           cmake -S port -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake \
-                -DBONANZA_FETCH_SDL=ON -DBONANZA_SDL_URL=$SDL_URL
+                -DBONANZA_FETCH_SDL=ON -DBONANZA_SDL_URL=$SDL_URL -DBONANZA_GAME_LIB=ON
           cmake --build build -j
       - name: Package
         run: python3 port/dist/package.py native --platform windows --exe build/bonanza.exe --out out/bonanza-windows-x64.zip
@@ -68,7 +69,9 @@ jobs:
           name: bonanza-windows-x64
           path: out/bonanza-windows-x64.zip
 
+  # the browser runtime has the game's code in it: not made here (no ROM) for now
   web:
+    if: false
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +114,10 @@ jobs:
           name: bonanza-android
           path: out/bonanza-android.apk
 
+  # the builder pages are being remade (the game's code made from the player's ROM in the
+  # page); until then the last published builder stays
   site:
+    if: false
     needs: [linux, windows, web, android]
     runs-on: ubuntu-22.04
     steps:

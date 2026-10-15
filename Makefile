@@ -10,11 +10,15 @@ ASFLAGS := -m68000 --register-prefix-optional -I .
 
 BUILD   := build
 TARGET  := $(BUILD)/bonanza.md
-SRCS    := $(wildcard src/*.s) $(wildcard include/*.inc)
+SRCS    := src/bonanza.s $(wildcard include/*.inc)
 
 .PHONY: all compare clean extract disasm recomp port
 
 all: compare
+
+# the disassembly is made from the ROM (it is not in the repository)
+src/bonanza.s assets.txt: baserom.md tools/disasm.py tools/config.py
+	$(PYTHON) tools/disasm.py
 
 $(BUILD)/.assets: assets.txt baserom.md tools/extract_assets.py
 	@mkdir -p $(BUILD)

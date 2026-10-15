@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "extrastages.h"
+#include "game.h"
 #include "md.h"
 #include "draw.h"
 #include "cheats.h"
@@ -101,6 +102,14 @@ int main(int argc, char **argv)
     if (argc < 2) {
         fprintf(stderr, "usage: %s ROM [--frames N] [--shot F:file.ppm] [--input F:P:btn] [--hash] [--wav f]\n", argv[0]);
         return 1;
+    }
+    {                                       /* the game's code: linked in, or next to the program */
+        static char dir[1024];
+        snprintf(dir, sizeof(dir), "%s", argv[0]);
+        char *slash = strrchr(dir, '/');
+        if (slash) slash[1] = 0; else dir[0] = 0;
+        const char *gerr = game_load(dir);
+        if (gerr) { fprintf(stderr, "%s\n", gerr); return 1; }
     }
     FILE *f = fopen(argv[1], "rb");
     if (!f) { perror(argv[1]); return 1; }
@@ -327,6 +336,6 @@ int main(int argc, char **argv)
             (unsigned long long)draw_stat_c, (unsigned long long)draw_stat_translated);
     fprintf(stderr, "video control words through the port's latch: %lu\n", vdp_raw_words);
     fprintf(stderr, "video chip uses: %lu by drawing routines in C, %lu by translated code\n", vdp_uses_c, vdp_uses_translated);
-    fprintf(stderr, "z80 instructions: %lu native, %lu lines without native code\n", z80r_insns, z80_stat_no_code);
+    fprintf(stderr, "z80 instructions: %lu native, %lu lines without native code\n", *game.z80r_insns, z80_stat_no_code);
     return 0;
 }

@@ -17,6 +17,7 @@
  * never in an online game. */
 #include <stdlib.h>
 #include "cheats.h"
+#include "game.h"
 #include "md.h"
 #include "net.h"
 #include "gamemods.h"
@@ -43,7 +44,7 @@ static void put8(uint32_t a, uint8_t v)
     undo[nundo].old = md.rom[a];
     nundo++;
     md.rom[a] = v;
-    recomp_invalidate(a);
+    game.recomp_invalidate(a);
 }
 void cheat_reset(void)
 {
