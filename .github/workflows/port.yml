@@ -1,6 +1,7 @@
 name: Port
 
 # Builds the native port's engines (Linux, Windows, Android) and the three builder pages.
+# The pages also record the game's sounds from the ROM (the game's recorder as WebAssembly).
 # No ROM is involved and nothing of the game is built here: the engines hold no game
 # code, and a builder page makes it from the player's ROM in the browser (the project's
 # recompiler in Pyodide, TinyCC as WebAssembly), then gives the player the finished
@@ -117,6 +118,13 @@ jobs:
           mkdir -p out/tcc
           sh port/dist/build_tcc.sh out/tcc
           rm -rf out/tcc/.tcc-src
+      # the game's sound recorder for the pages (no game code in it: it plays the sound
+      # driver from the player's ROM)
+      - name: Build the sound recorder (WebAssembly) for the builder pages
+        run: |
+          emcmake cmake -S port -B build-sounds -DCMAKE_BUILD_TYPE=Release -DBONANZA_GAME_LIB=ON -DBONANZA_HEADLESS=OFF
+          cmake --build build-sounds -j --target bonanza-sounds
+          cp build-sounds/bonanza-sounds.js out/tcc/
       - uses: actions/upload-artifact@v4
         with:
           name: tinycc
@@ -139,11 +147,11 @@ jobs:
           V="${GITHUB_SHA::7} ($(date -u +%Y-%m-%d))"
           python3 port/dist/package.py kit --tcc artifacts/tinycc --out out/gamekit.zip
           python3 port/dist/package.py builder --platform windows --package artifacts/bonanza-windows-x64/bonanza-windows-x64.zip \
-                  --kit out/gamekit.zip --pyodide pyodide/package --version "$V" --out builders/BonanzaBuilder-Windows.html
+                  --kit out/gamekit.zip --pyodide pyodide/package --recorder artifacts/tinycc/bonanza-sounds.js --version "$V" --out builders/BonanzaBuilder-Windows.html
           python3 port/dist/package.py builder --platform linux --package artifacts/bonanza-linux-x64/bonanza-linux-x64.zip \
-                  --kit out/gamekit.zip --pyodide pyodide/package --version "$V" --out builders/BonanzaBuilder-Linux.html
+                  --kit out/gamekit.zip --pyodide pyodide/package --recorder artifacts/tinycc/bonanza-sounds.js --version "$V" --out builders/BonanzaBuilder-Linux.html
           python3 port/dist/package.py builder --platform android --package artifacts/bonanza-android/bonanza-android.apk \
-                  --kit out/gamekit.zip --pyodide pyodide/package --version "$V" --out builders/BonanzaBuilder-Android.html
+                  --kit out/gamekit.zip --pyodide pyodide/package --recorder artifacts/tinycc/bonanza-sounds.js --version "$V" --out builders/BonanzaBuilder-Android.html
       - uses: actions/upload-artifact@v4
         with:
           name: BonanzaBuilders
@@ -167,7 +175,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          notes="Download the builder page for your platform (BonanzaBuilder-Windows.html, -Linux.html or -Android.html), open it in your browser, give it your Bonanza Bros. ROM and press Build. The page makes the game's code from your ROM (nothing of the game is in it) and gives you the finished package. Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}."
+          notes="Download the builder page for your platform (BonanzaBuilder-Windows.html, -Linux.html or -Android.html), open it in your browser, give it your Bonanza Bros. ROM and press Build. The page makes the game's code from your ROM and records its sounds (lossless; nothing of the game is in the page) and gives you the finished package. Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}."
           if gh release view builder >/dev/null 2>&1; then
             gh release delete-asset builder BonanzaBuilder.html -y 2>/dev/null || true
             gh release upload builder builders/*.html --clobber

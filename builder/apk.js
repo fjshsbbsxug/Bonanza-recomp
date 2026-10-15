@@ -77,10 +77,10 @@
   }
 
   const DOS_TIME = 0, DOS_DATE = (2026 - 1980) << 9 | 1 << 5 | 1;
-  async function localEntry(name, data, at) {
+  async function localEntry(name, data, at, store) {
     const nm = utf8(name);
     const crc = crc32(data);
-    let body = await deflateRaw(data), method = 8;
+    let body = store ? null : await deflateRaw(data), method = 8;
     if (!body || body.length >= data.length) { body = data; method = 0; }
     const head = cat([le(0x04034b50, 4), le(20, 2), le(0x0800, 2), le(method, 2), le(DOS_TIME, 2), le(DOS_DATE, 2),
                       le(crc, 4), le(body.length, 4), le(data.length, 4), le(nm.length, 2), le(0, 2), nm]);
@@ -100,7 +100,7 @@
     const locals = [], recs = keep.map(r => r.rec);
     let at = z.entries.length;
     for (const a of add) {
-      const e = await localEntry(a.name, a.data, at);
+      const e = await localEntry(a.name, a.data, at, a.store);
       locals.push(e.local);
       recs.push(e.rec);
       at += e.local.length;
@@ -206,7 +206,7 @@
     return cat([entries, block, cd, eocd2]);
   }
 
-  /* the engine's APK + [{name, data}] -> the signed APK */
+  /* the engine's APK + [{name, data, store}] -> the signed APK (store: not compressed) */
   async function build(apk, add, store) {
     const parts = await addEntries(apk, add);
     const key = await signingKey(store);

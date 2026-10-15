@@ -4,14 +4,16 @@
   package.py native  --platform linux|windows --exe PATH --out ZIP
   package.py kit     --tcc DIR --out gamekit.zip
   package.py builder --platform windows|linux|android --package PKG --kit gamekit.zip
-                     --pyodide DIR --out FILE [--version TEXT]
+                     --pyodide DIR --recorder bonanza-sounds.js --out FILE [--version TEXT]
 
 The packages hold the engine alone: the game's code is not in them. A builder page
 (one for each platform, a single HTML file that works opened from disk) makes it from
 the player's ROM in the browser: the recompiler (tools/, in Pyodide) translates the
 game's code to C and TinyCC (build_tcc.sh) builds the library the engine loads
 (port/src/gamelib.h); the page puts it, the ROM and the settings into the engine's
-package (Android: the APK, signed in the page: builder/apk.js).
+package (Android: the APK, signed in the page: builder/apk.js). The page also records
+the game's sounds from the ROM (the game's recorder as WebAssembly, port/src/sndrec_web.c,
+on every core: builder/sounds.js), so the game has them from its first start.
 
 kit: what the page needs for that, in one zip: the recompiler and the sources it
 reads, the headers the game's code is built with, TinyCC for each kind of library.
@@ -90,10 +92,10 @@ def builder(args):
     page = open(os.path.join(ROOT, "builder", "index.html"), encoding="utf-8").read()
     embed = {"version": args.version or "dev", "platform": args.platform,
              "packages": {args.platform: b64(read(args.package))},
-             "res": {"gamekit.zip": gz(read(args.kit))}}
+             "res": {"gamekit.zip": gz(read(args.kit)), "bonanza-sounds.js": gz(read(args.recorder))}}
     for name in PYODIDE:
         embed["res"]["pyodide/" + name] = gz(read(os.path.join(args.pyodide, name)))
-    for name in ("jszip.min.js", "apk.js", "gamecode.js"):
+    for name in ("jszip.min.js", "apk.js", "gamecode.js", "sounds.js"):
         tag = '<script src="%s"></script>' % name
         assert tag in page, "builder/index.html: no " + tag
         js = open(os.path.join(ROOT, "builder", name), encoding="utf-8").read()
@@ -123,6 +125,7 @@ def main():
     p.add_argument("--package", required=True)
     p.add_argument("--kit", required=True)
     p.add_argument("--pyodide", required=True)
+    p.add_argument("--recorder", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--version")
     args = ap.parse_args()

@@ -265,6 +265,7 @@
 <script src="jszip.min.js"></script>
 <script src="apk.js"></script>
 <script src="gamecode.js"></script>
+<script src="sounds.js"></script>
 <script type="application/json" id="bonanza-embedded"></script>
 <script>
 (() => {
@@ -418,6 +419,7 @@
     line.textContent = msg;
     el.appendChild(line);
     el.scrollTop = el.scrollHeight;
+    return line;
   }
 
   if (EMBED && $('makerlink')) $('makerlink').style.display = 'none';   /* not in the builder pages */
@@ -488,6 +490,21 @@
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
   }
 
+  /* the game's songs, effects and voices from the ROM, lossless (builder/sounds.js) */
+  async function recordSounds() {
+    const t0 = Date.now();
+    log('Recording the game\'s songs, effects and voices from your ROM (lossless)…');
+    const line = log('  sounds: starting');
+    const bank = await BonanzaSoundBank.record({
+      rom, code: await res('bonanza-sounds.js'),
+      progress: (done, total, cores) => {
+        line.textContent = '  sounds: ' + done + ' / ' + total + ' (on ' + cores + ' core' + (cores > 1 ? 's' : '') + ' at once)';
+      },
+    });
+    line.textContent = '  sounds: all recorded, ' + (bank.length / 1e6).toFixed(0) + ' MB (' + ((Date.now() - t0) / 1000).toFixed(0) + ' s)';
+    return bank;
+  }
+
   async function buildNative(t) {
     $('log').innerHTML = '';
     if (!EMBED || !EMBED.packages || !EMBED.packages[t]) {
@@ -501,14 +518,21 @@
     const pkg = fromBase64(EMBED.packages[t]);
     log(label(t) + ' engine: ' + pkg.length.toLocaleString() + ' bytes (no game code in it)');
     const t0 = Date.now();
+    /* the sounds are recorded on the other cores while the game's code is made */
+    const sounds = recordSounds().catch(e => {
+      log('Could not record the sounds in this browser (' + e.message + '): the game records them on its first start instead (a few minutes, once).', 'bad');
+      return null;
+    });
     const libs = await BonanzaGameCode.make({ rom, platform: t, res, log });
+    const bank = await sounds;
     if (t === 'android') {
       log('Signing the app (a key made in this browser and kept here, so later builds install over this one)…');
-      const apk = await BonanzaApk.build(pkg, libs.map(l => ({ name: l.path, data: l.data })),
-                                         BonanzaApk.idbStore('bonanza-recomp'));
+      const add = libs.map(l => ({ name: l.path, data: l.data }));
+      if (bank) add.push({ name: 'assets/sounds.bbs', data: bank, store: true });
+      const apk = await BonanzaApk.build(pkg, add, BonanzaApk.idbStore('bonanza-recomp'));
       download(apk, OUTPUT.android, 'application/vnd.android.package-archive');
       log('✓ Downloaded ' + OUTPUT.android + ' (' + apk.length.toLocaleString() + ' bytes, ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s).', 'ok');
-      log('Install it, open “Bonanza Bros” and select your ROM once. On its first start it records the game\'s sounds from the ROM, losslessly (a few minutes).');
+      log('Install it, open “Bonanza Bros” and select your ROM once.' + (bank ? ' The sounds recorded here are in the app.' : ''));
       log('(Allow installing apps from your browser / file manager when Android asks.)');
       if (modList().length) log('Mods: copy your .bbro files to Android/data/com.bonanzarecomp.port/files/mods on the phone, then turn them on in the game menu (Mods...).');
       return;
@@ -524,7 +548,10 @@
     log('Added your ROM as ' + dir + 'baserom.md');
     zip.file(dir + 'bonanza.ini', toIni());
     log('Added your screen & color settings as ' + dir + 'bonanza.ini');
-    log('The game records its songs, effects and voices from your ROM on its first start on this computer, losslessly (a few minutes, once).');
+    if (bank) {
+      zip.file(dir + 'sounds.bbs', bank, { binary: true, compression: 'STORE' });
+      log('Added the sounds recorded from your ROM as ' + dir + 'sounds.bbs (lossless, ' + (bank.length / 1e6).toFixed(0) + ' MB)');
+    }
     for (const n of modList()) {
       zip.file(dir + 'mods/' + n, MODFILES[n], { binary: true });
       log('Added mod ' + dir + 'mods/' + n);

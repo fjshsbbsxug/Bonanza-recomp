@@ -37,7 +37,7 @@ ROM, and press *Build*:
 | Android | `BonanzaBros.apk` (Android 7.0 and later; arm64-v8a, armeabi-v7a, x86_64): the app asks for the ROM once |
 
 A page carries the platform's **engine**, which holds no game code, and makes the
-game's code from your ROM in the browser, in about ten seconds:
+game's code from your ROM in the browser, in about ten seconds, and records its sounds:
 
 1. the project's recompiler (`tools/recomp.py`, `tools/z80recomp.py`) runs in Python
    compiled to WebAssembly ([Pyodide](https://pyodide.org)) and translates the game's
@@ -45,14 +45,21 @@ game's code from your ROM in the browser, in about ten seconds:
 2. [TinyCC](https://github.com/TinyCC/tinycc), compiled to WebAssembly
    (`port/dist/build_tcc.sh`), builds that into the library the engine loads at start
    (`port/src/gamelib.h`);
-3. the page puts the library, the ROM and your settings into the engine's package. An
-   Android app is then signed in the page (`builder/apk.js`, APK Signature Scheme v2)
-   with a key it makes the first time and keeps in the browser, so later builds install
-   over earlier ones.
+3. at the same time the page records the game's songs, effects and voices from the ROM,
+   losslessly (`sounds.bbs`, 104 MB): the game's own recorder compiled to WebAssembly
+   (`port/src/sndrec_web.c`; it plays the sound driver from the ROM, so nothing of the
+   game is in it) runs on every core at once, one sound per core
+   (`builder/sounds.js`), and the parts are put together into the same file, byte for
+   byte, as the game records itself. About 40 seconds on four cores;
+4. the page puts the library, the sounds, the ROM and your settings into the engine's
+   package. An Android app is then signed in the page (`builder/apk.js`, APK Signature
+   Scheme v2) with a key it makes the first time and keeps in the browser, so later
+   builds install over earlier ones.
 
-Nothing is uploaded. On every device the game records its songs, effects and voices from
-the ROM on its first start, losslessly (about a minute or two, shown on screen), and keeps
-them in its settings folder. The settings start at the best ones: widescreen 16:9, the
+Nothing is uploaded. The game has its sounds from its first start (on Android it copies
+them once out of the app). If a browser cannot record them, the game records them itself
+on its first start instead (a minute or two, shown on screen) and keeps them in its
+settings folder. The settings start at the best ones: widescreen 16:9, the
 room above Robo, guards walking back to their posts and active anywhere on the wide
 screen, original colors, sharp pixels.
 

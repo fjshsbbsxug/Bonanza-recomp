@@ -106,6 +106,17 @@ if(WIN32)
   target_link_libraries(bonanza_core PUBLIC ws2_32)   # online play (net.c)
 endif()
 
+if(EMSCRIPTEN AND BONANZA_GAME_LIB)
+  # the builder pages' sound recorder (src/sndrec_web.c): the game's sounds recorded from
+  # the player's ROM while the page builds the package; one file, run in page workers
+  add_executable(bonanza-sounds src/sndrec_web.c ext/z80/z80.c)
+  target_link_libraries(bonanza-sounds bonanza_core)
+  target_compile_options(bonanza-sounds PRIVATE -O3)
+  set_target_properties(bonanza-sounds PROPERTIES SUFFIX ".js" LINK_FLAGS
+    "-O3 -sMODULARIZE=1 -sEXPORT_NAME=BonanzaSounds -sSINGLE_FILE=1 -sENVIRONMENT=worker,node -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=2147483648 -sEXPORTED_FUNCTIONS=['_sndweb_ids','_sndweb_rom','_sndweb_record','_malloc','_free'] -sEXPORTED_RUNTIME_METHODS=['FS','HEAPU8'] -sINVOKE_RUN=0")
+  return()
+endif()
+
 if(EMSCRIPTEN)
   add_executable(bonanza src/main_sdl.c)
   set(EMFLAGS "-sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sEXPORTED_RUNTIME_METHODS=['FS','callMain','ccall'] -sINVOKE_RUN=0 -sENVIRONMENT=web -sSTACK_SIZE=1048576")

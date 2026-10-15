@@ -215,8 +215,26 @@ static void save_rom_copy(const uint8_t *data, size_t size)
     }
 }
 
-/* The game's sounds, recorded from the ROM (sndrec.c) by the build (sounds.bbs next to
- * the program) or else the first time the game starts, and played back (sndmix.c): no
+#if defined(__ANDROID__)
+static int copy_file(const char *from, const char *to)
+{
+    SDL_RWops *in = SDL_RWFromFile(from, "rb");
+    if (!in) return 0;
+    SDL_RWops *out = SDL_RWFromFile(to, "wb");
+    int ok = out != NULL;
+    static char buf[1 << 16];
+    size_t n;
+    while (ok && (n = SDL_RWread(in, buf, 1, sizeof(buf))) > 0)
+        ok = SDL_RWwrite(out, buf, 1, n) == n;
+    SDL_RWclose(in);
+    if (out && SDL_RWclose(out) != 0) ok = 0;
+    if (!ok) remove(to);
+    return ok;
+}
+#endif
+
+/* The game's sounds, recorded from the ROM (sndrec.c) by the build or the builder page
+ * (sounds.bbs next to the program; Android: in the app) or else the first time the game starts, and played back (sndmix.c): no
  * sound hardware runs while the game plays. On the web the page fetches the build's
  * file or keeps the recorded one (IndexedDB) and puts it there before the game starts. */
 static void start_sounds(void)
@@ -244,6 +262,12 @@ static void start_sounds(void)
             snprintf(sounds_path, sizeof(sounds_path), "%ssounds.bbs", pref ? pref : "");
             SDL_free(pref);
         }
+#if defined(__ANDROID__)
+        /* the sounds the builder page recorded are in the app (assets/sounds.bbs): copied
+         * once into the app's folder, where they are read from */
+        if (!file_exists(sounds_path) && copy_file("sounds.bbs", sounds_path))
+            SDL_Log("sounds copied from the app");
+#endif
 #endif
     }
     if (snd_ready()) {

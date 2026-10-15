@@ -147,20 +147,35 @@ static int sound_frame(sndrec *r)
     return 0;
 }
 
-sndrec *snd_record_start(const char *path)
+int snd_record_ids(uint8_t ids[64])
 {
+    /* every sound the game can ask for: songs 0x81-0x8C, effects 0x98-0xBD, voices E4/E5 */
+    int n = 0;
+    for (int id = 0x81; id <= 0x8C; id++) ids[n++] = (uint8_t)id;
+    for (int id = 0x98; id <= 0xBD; id++) ids[n++] = (uint8_t)id;
+    ids[n++] = 0xE4;
+    ids[n++] = 0xE5;
+    return n;
+}
+
+sndrec *snd_record_start_ids(const char *path, const uint8_t *ids, int n)
+{
+    if (n < 1 || n > 64) return 0;
     sndrec *r = calloc(1, sizeof(*r));
     if (!r) return 0;
-    /* every sound the game can ask for: songs 0x81-0x8C, effects 0x98-0xBD, voices E4/E5 */
-    for (int id = 0x81; id <= 0x8C; id++) r->ids[r->n++] = (uint8_t)id;
-    for (int id = 0x98; id <= 0xBD; id++) r->ids[r->n++] = (uint8_t)id;
-    r->ids[r->n++] = 0xE4;
-    r->ids[r->n++] = 0xE5;
+    memcpy(r->ids, ids, (size_t)n);
+    r->n = n;
     r->w = sb_write_begin(path);
     if (!r->w) { free(r); return 0; }
     md_audio_set_rate((int)sb_write_rate());
     begin_sound(r);
     return r;
+}
+
+sndrec *snd_record_start(const char *path)
+{
+    uint8_t ids[64];
+    return snd_record_start_ids(path, ids, snd_record_ids(ids));
 }
 
 int snd_record_step(sndrec *r, int frames)
