@@ -13,7 +13,7 @@ set(BONANZA_SDL_URL "https://github.com/libsdl-org/SDL/releases/download/release
 
 set(CORE_SOURCES
   src/md.c src/vdp.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c src/extrastages.c src/cheats.c src/net.c src/mods.c
-  src/m68k_rt.c src/sndbank.c src/sndrec.c src/sndmix.c
+  src/m68k_rt.c src/sndbank.c src/sndrec.c src/sndmix.c src/crt.c
   ext/nuked-opn2/ym3438.c
 )
 
@@ -98,6 +98,8 @@ else()
   if(GAME_SOURCES AND NOT BONANZA_GAME_LIB)
     set_source_files_properties(${GAME_SOURCES} PROPERTIES COMPILE_OPTIONS "-O1;-w")
   endif()
+  # the CRT filter: its row loops are vectorised (no errno or traps from its maths)
+  set_source_files_properties(src/crt.c PROPERTIES COMPILE_OPTIONS "-O3;-fno-math-errno;-fno-trapping-math")
 endif()
 if(NOT WIN32 AND NOT EMSCRIPTEN)
   target_link_libraries(bonanza_core PUBLIC m)

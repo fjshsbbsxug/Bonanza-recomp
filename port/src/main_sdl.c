@@ -13,6 +13,7 @@
 #include <string.h>
 #include "md.h"
 #include "game.h"
+#include "crt.h"
 #include "settings.h"
 #include "net.h"
 #include "gamemods.h"
@@ -622,6 +623,98 @@ static void draw_touch(int ww, int wh)
 
 /* ------------------------------------------------------------------ video */
 
+/* The CRT filter (crt.c) works out every screen pixel the picture covers, on a few
+ * threads: the main one and workers that each take a share of the rows. */
+#define CRT_MAX_THREADS 8
+static SDL_Texture *crt_tex;
+static int crt_tex_w, crt_tex_h;
+static uint32_t *crt_buf;
+static struct {
+    int n;                                   /* threads, the main one included */
+    SDL_Thread *t[CRT_MAX_THREADS];
+    SDL_sem *go[CRT_MAX_THREADS], *done;
+    void (*job)(void *, int, int);
+    void *u;
+    int rows;
+    int quit;
+} pool;
+
+static int crt_worker(void *arg)
+{
+    int i = (int)(intptr_t)arg;
+    for (;;) {
+        SDL_SemWait(pool.go[i]);
+        if (pool.quit) return 0;
+        pool.job(pool.u, pool.rows * i / pool.n, pool.rows * (i + 1) / pool.n);
+        SDL_SemPost(pool.done);
+    }
+}
+
+static void crt_parallel_rows(void (*job)(void *, int, int), void *u, int n)
+{
+    if (pool.n <= 1 || n < 16) { job(u, 0, n); return; }
+    pool.job = job;
+    pool.u = u;
+    pool.rows = n;
+    for (int i = 1; i < pool.n; i++) SDL_SemPost(pool.go[i]);
+    job(u, 0, n / pool.n);                       /* the main thread's share */
+    for (int i = 1; i < pool.n; i++) SDL_SemWait(pool.done);
+}
+
+static void crt_pool_start(void)
+{
+#ifndef __EMSCRIPTEN__
+    if (pool.n) return;
+    int cpus = SDL_GetCPUCount();
+    int n = cpus > 1 ? cpus - 1 : 1;             /* a core left for the game and the system */
+    if (n > CRT_MAX_THREADS) n = CRT_MAX_THREADS;
+    pool.done = SDL_CreateSemaphore(0);
+    pool.n = 1;
+    for (int i = 1; i < n && pool.done; i++) {
+        pool.go[i] = SDL_CreateSemaphore(0);
+        if (!pool.go[i]) break;
+        pool.t[i] = SDL_CreateThread(crt_worker, "crt", (void *)(intptr_t)i);
+        if (!pool.t[i]) { SDL_DestroySemaphore(pool.go[i]); break; }
+        pool.n = i + 1;
+    }
+#else
+    pool.n = 1;
+#endif
+}
+
+/* the picture through the CRT filter, drawn into dst (screen pixels) */
+static void present_crt(const uint32_t *fb, int sw, SDL_Rect dst)
+{
+    crt_pool_start();
+    /* very large screens: worked out at a fraction of the size and scaled up */
+    int div = 1;
+    while (dst.w / div > 2560 || dst.h / div > 1600) div++;
+    int w = dst.w / div, h = dst.h / div;
+    if (w < 4 || h < 4) return;
+    if (!crt_tex || w != crt_tex_w || h != crt_tex_h) {
+        if (crt_tex) SDL_DestroyTexture(crt_tex);
+        free(crt_buf);
+        crt_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+        crt_buf = malloc((size_t)w * h * 4);
+        crt_tex_w = w;
+        crt_tex_h = h;
+        if (!crt_tex || !crt_buf) {
+            if (crt_tex) SDL_DestroyTexture(crt_tex);
+            free(crt_buf);
+            crt_tex = NULL;
+            crt_buf = NULL;
+            crt_tex_w = crt_tex_h = 0;
+            return;
+        }
+    }
+    crt_render(settings.crt, fb, MD_FB_W, sw, MD_SCREEN_H, crt_buf, w, h, crt_parallel_rows);
+    SDL_UpdateTexture(crt_tex, NULL, crt_buf, w * 4);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+    SDL_SetTextureScaleMode(crt_tex, div > 1 ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+#endif
+    SDL_RenderCopy(renderer, crt_tex, NULL, &dst);
+}
+
 static void present(void)
 {
     int ww, wh;
@@ -658,7 +751,10 @@ static void present(void)
             dst.w = dw;
             dst.h = dh;
         }
-        SDL_RenderCopy(renderer, texture, &src, &dst);
+        if (settings.crt > 0 && settings.crt < CRT_COUNT)
+            present_crt(fb, sw, dst);
+        else
+            SDL_RenderCopy(renderer, texture, &src, &dst);
         if (show_touch && !menu_is_open())
             draw_touch(ww, wh);
     }

@@ -137,6 +137,16 @@ builder/      the HTML builder page
   * Checked against the build with no routines in C: the same game state, sound and
     picture in every frame of the reference runs (`--picture-hash` in the headless
     runner).
+* **CRT filter** (`port/src/crt.c`; menu: CRT filter, `crt =` in bonanza.ini: off,
+  scanlines, tv, monitor): the picture as a CRT shows it, worked out for every screen pixel
+  it covers, in linear light (the tube's gamma 2.4). Across a line each pixel is a flat
+  step blurred at its edges by the signal's bandwidth (nearest neighbour, blended only at
+  the edges); down the screen the beam draws each line as a Gaussian spot that grows with
+  its brightness, for red, green and blue apart, carrying the line's light; then the
+  phosphor mask on the screen's own pixels (slot mask for the TV, aperture grille for the
+  monitor), halation in the glass, and for the TV a curved face, rounded corners and
+  darker edges. The row passes are vectorised and shared among the CPU's cores (about
+  6-10 ms a frame at 1280x800 on four cores of a slow machine).
 * **Recorded sound** (`port/src/sndrec.c`, `sndbank.c`, `sndmix.c`): on first start the
   port plays every sound the game can ask for (songs 0x81-0x8C, effects 0x98-0xBD,
   voices E4/E5) alone through the game's own driver and sound chips (`md_snd_*`: the

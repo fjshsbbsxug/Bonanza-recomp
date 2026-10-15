@@ -5,6 +5,7 @@
 #include "md.h"
 #include "vdp.h"
 #include "settings.h"
+#include "crt.h"
 #include "font8x8_basic.h"
 #include "net.h"
 #include "mods.h"
@@ -105,11 +106,11 @@ static void slider(uint32_t *buf, int x, int y, int v, int lo, int hi, int selec
 /* ------------------------------------------------------------ items */
 
 enum {
-    IT_RESUME, IT_ONLINE, IT_MODS, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
+    IT_RESUME, IT_ONLINE, IT_MODS, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_CRT, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
     IT_CHARS, IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
 };
 static const char *item_label[IT_COUNT] = {
-    "Resume", "Online...", "Mods...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
+    "Resume", "Online...", "Mods...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "CRT filter", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
     "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
@@ -186,6 +187,7 @@ static int adjust_main(int item, int dir)
     switch (item) {
     case IT_SCREEN: settings.screen = (settings.screen + dir + SCREEN_COUNT) % SCREEN_COUNT; break;
     case IT_SCALING: settings.smooth = !settings.smooth; break;
+    case IT_CRT: settings.crt = (settings.crt + dir + CRT_COUNT) % CRT_COUNT; break;
     case IT_UPPER: settings.show_2p_panel = !settings.show_2p_panel; break;
     case IT_CUTSCENES: settings.crop_cutscenes = !settings.crop_cutscenes; break;
     case IT_GUARDS: settings.patrol_return = !settings.patrol_return; break;
@@ -213,7 +215,7 @@ static int activate_main(int item)
     case IT_ONLINE: page = PAGE_ONLINE; sel = 0; return MENU_ACT_NONE;
     case IT_MODS: page = PAGE_MODS; sel = 0; mods_scan(); return MENU_ACT_NONE;
     case IT_RESETCOLORS: {
-        int screen = settings.screen, smooth = settings.smooth;
+        int screen = settings.screen, smooth = settings.smooth, crt = settings.crt;
         /* keeps character colours; they have their own reset */
         int on[CHAR_COUNT][PART_COUNT];
         uint32_t rgb[CHAR_COUNT][PART_COUNT];
@@ -222,6 +224,7 @@ static int activate_main(int item)
         settings_defaults();
         settings.screen = screen;
         settings.smooth = smooth;
+        settings.crt = crt;
         memcpy(settings.char_on, on, sizeof(on));
         memcpy(settings.char_rgb, rgb, sizeof(rgb));
         changed();
@@ -545,7 +548,11 @@ void menu_draw(uint32_t *buf)
                 text(buf, VALUE_X - 16, y, t, C_TEXT);
                 break;
             case IT_SCALING:
-                text(buf, VALUE_X - 16, y, settings.smooth ? "< Smooth >" : "< Sharp >", C_TEXT);
+                text(buf, VALUE_X - 16, y, settings.smooth ? "< Smooth >" : "< Sharp >", settings.crt ? C_DIM : C_TEXT);
+                break;
+            case IT_CRT:
+                snprintf(t, sizeof(t), "< %s >", crt_name(settings.crt));
+                text(buf, VALUE_X - 16, y, t, C_TEXT);
                 break;
             case IT_UPPER:
                 text(buf, VALUE_X - 16, y, settings.show_2p_panel ? "< 2P panel >" : "< Room above >", C_TEXT);

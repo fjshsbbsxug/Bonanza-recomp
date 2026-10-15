@@ -5,6 +5,9 @@
 #include <string.h>
 #include <ctype.h>
 #include "settings.h"
+#include "crt.h"
+
+static const char *crt_keys[CRT_COUNT] = { "off", "scanlines", "tv", "monitor" };
 #include "gamemods.h"
 #include "md.h"
 #include "vdp.h"
@@ -226,6 +229,11 @@ int settings_set(const char *key, const char *value)
         return 0;
     }
     if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
+    if (!strcmp(key, "crt")) {
+        for (int i = 0; i < CRT_COUNT; i++)
+            if (!strcmp(value, crt_keys[i])) { settings.crt = i; return 1; }
+        return 0;
+    }
     if (!strcmp(key, "cutscenes")) { settings.crop_cutscenes = strcmp(value, "wide") != 0; return 1; }
     if (!strcmp(key, "mods")) { snprintf(settings.mods, sizeof(settings.mods), "%s", value); return 1; }
     if (!strcmp(key, "join")) { snprintf(settings.join_address, sizeof(settings.join_address), "%s", value); return 1; }
@@ -299,6 +307,8 @@ int settings_save(const char *path)
     fprintf(f, "# screen: original, 16:9, 16:10, 21:9, stretch\n");
     fprintf(f, "screen = %s\n", screen_keys[settings.screen]);
     fprintf(f, "smooth = %d\n", settings.smooth);
+    fprintf(f, "# CRT filter: off, scanlines, tv (consumer TV: slot mask, curved), monitor (PVM: aperture grille, flat)\n");
+    fprintf(f, "crt = %s\n", crt_keys[settings.crt >= 0 && settings.crt < CRT_COUNT ? settings.crt : 0]);
     fprintf(f, "# top of the screen in a 1-player game: room (the floor above) or panel (original)\n");
     fprintf(f, "upper_view = %s\n", settings.show_2p_panel ? "panel" : "room");
     fprintf(f, "# widescreen during cutscenes/title: 4:3 (cropped, game overs stay wide) or wide\n");

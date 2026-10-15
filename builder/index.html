@@ -182,6 +182,10 @@
       <label>Scaling
         <select id="o-smooth"><option value="0">Sharp pixels</option><option value="1">Smooth</option></select>
       </label>
+      <label>CRT filter
+        <select id="o-crt"><option value="off">Off</option><option value="scanlines">Scanlines</option>
+          <option value="tv">CRT TV (slot mask, curved glass)</option><option value="monitor">CRT monitor (PVM: aperture grille, flat)</option></select>
+      </label>
       <label>Color style
         <select id="o-colors">
           <option value="original">Original</option><option value="vivid">Vivid</option><option value="soft">Soft</option>
@@ -573,7 +577,7 @@
   const CLOTHES = ['#101010', '#f0f0f0', '#e02020', '#f08020', '#f0d020', '#20b040', '#2050e0', '#8030c0', '#f070b0'];
   /* the best settings: widescreen, the room above Robo, guards back to their posts and
    * active anywhere on the wide screen; original colors and sharp pixels */
-  const freshOpts = () => ({ screen: '16:9', upper: 'room', cutscenes: '4:3', guards: 'return', floor_alert: 'semi', join: '', mods: '', smooth: '0', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
+  const freshOpts = () => ({ screen: '16:9', upper: 'room', cutscenes: '4:3', guards: 'return', floor_alert: 'semi', join: '', mods: '', smooth: '0', crt: 'off', colors: 'original', brightness: 0, contrast: 0, saturation: 0, hue: 0,
                              recolor: {}, chars: {} });
   const OPT = freshOpts();
   const SLIDERS = ['brightness', 'contrast', 'saturation', 'hue'];
@@ -581,7 +585,7 @@
   const mdHex = key => '#' + [0, 1, 2].map(i => mdLevel(+key[i]).toString(16).padStart(2, '0')).join('');
   function toIni() {
     let t = '# Bonanza Bros port settings (made with the port builder)\n';
-    t += `screen = ${OPT.screen}\nupper_view = ${OPT.upper}\ncutscenes = ${OPT.cutscenes}\nguards = ${OPT.guards}\nfloor_alert = ${OPT.floor_alert}\nsmooth = ${OPT.smooth}\ncolors = ${OPT.colors}\n`;
+    t += `screen = ${OPT.screen}\nupper_view = ${OPT.upper}\ncutscenes = ${OPT.cutscenes}\nguards = ${OPT.guards}\nfloor_alert = ${OPT.floor_alert}\nsmooth = ${OPT.smooth}\ncrt = ${OPT.crt}\ncolors = ${OPT.colors}\n`;
     if (OPT.join) t += `join = ${OPT.join}\n`;
     if (OPT.mods) t += `mods = ${OPT.mods}\n`;
     for (const k of SLIDERS) t += `${k} = ${OPT[k]}\n`;
@@ -665,6 +669,7 @@
     syncChars();
     $('o-screen').value = OPT.screen;
     $('o-smooth').value = OPT.smooth;
+    $('o-crt').value = OPT.crt;
     $('o-upper').value = OPT.upper;
     $('o-cutscenes').value = OPT.cutscenes;
     $('o-guards').value = OPT.guards;
@@ -712,7 +717,7 @@
       try { Module.ccall('bonanza_set', 'number', ['string', 'string'], [key, String(value)]); } catch (e) { /* not ready */ }
     }
   }
-  ['screen', 'smooth', 'colors', 'guards', 'floor_alert'].forEach(k => $('o-' + k).addEventListener('change', e => { OPT[k] = e.target.value; gameSet(k, OPT[k]); }));
+  ['screen', 'smooth', 'crt', 'colors', 'guards', 'floor_alert'].forEach(k => $('o-' + k).addEventListener('change', e => { OPT[k] = e.target.value; gameSet(k, OPT[k]); }));
   /* mods: kept in memory, added to the package's mods folder and enabled in bonanza.ini */
   const MODFILES = {};
   function modList() { return OPT.mods ? OPT.mods.split('|').filter(n => MODFILES[n]) : []; }
