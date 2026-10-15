@@ -59,6 +59,9 @@ int  draw_tile_stream_p2(void); /* sub_08510 */
 int  draw_window_regs(void);    /* sub_006EA */
 int  draw_hex_number(void);     /* sub_01268 */
 int  draw_title_clear(void);
+int  draw_start_up(void);       /* sub_0021E to 0x2AA */
+int  draw_boot_status(void);    /* sub_0021E at 0x318 */
+int  draw_title_rows(void);     /* sub_02E34 at 0x2EEC */
 /* the screen set-ups: straight runs of the game's routines from the address named */
 int  draw_seg_00366(void);
 int  draw_seg_0042E(void);

@@ -481,6 +481,7 @@ L_000218: CHK(0x218u)  /* stop #$2700 */
 L_00021C: CHK(0x21Cu)  /* bra.b $214 */
 	USE_CYCLES(10); goto L_000214;
 L_00021E: CHK(0x21Eu)  /* tst.l $a10008.l */
+	{ int r_ = draw_start_up(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = m68ki_read_32(0xA10008u);
 	
@@ -966,6 +967,7 @@ L_0002A6: CHK(0x2A6u)  /* move.w #$2700, sr */
 L_0002AA: CHK(0x2AAu)  /* bra.b $318 */
 	USE_CYCLES(10); goto L_000318;
 L_000318: CHK(0x318u)  /* tst.w $c00004.l */
+	{ int r_ = draw_boot_status(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = vdp_read_ctrl();
 	
@@ -16037,6 +16039,7 @@ L_002EE8: CHK(0x2EE8u)  /* lea.l $312a(pc), a0 */
 	}
 	USE_CYCLES(8);
 L_002EEC: CHK(0x2EECu)  /* move.l #$461c0003, d0 */
+	{ int r_ = draw_title_rows(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } if (r_ == 2) goto dispatch; }
 	{
 		uint res = 0x461C0003u;
 		uint* r_dst = &REG_D[0];

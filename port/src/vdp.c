@@ -206,7 +206,14 @@ static int vlog = -1;   /* VDPLOG: every control word (the decoded commands go t
  * the game's translated code; one count for each register, command, word or status */
 int vdp_in_c;
 unsigned long vdp_uses_c, vdp_uses_translated;
-#define USED() (vdp_in_c ? vdp_uses_c++ : vdp_uses_translated++)
+static int vwho = -1;
+static void used_translated(void)
+{
+    vdp_uses_translated++;
+    if (vwho < 0) vwho = getenv("VDPWHO") != NULL;
+    if (vwho) fprintf(stderr, "who %06x\n", cpu_get_pc());
+}
+#define USED() (vdp_in_c ? (void)vdp_uses_c++ : used_translated())
 
 void vdp_write_ctrl(uint16_t w)
 {

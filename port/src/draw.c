@@ -2241,11 +2241,18 @@ static void screen_clear(void)
 
 static void seg_00366(void)
 {
+    /* the checksum did not match: the backdrop red (64 words of colour 0x00E), then the
+     * game stops (the loop of nops at 0x37E) */
     from(0x366);
     reach(0x366); command(0xC0000000U);    /* move.l #$c0000000, $c00004.l */
     reach(0x370); REG_D[7] = 0x0000003FU; flags_move(REG_D[7], 32);    /* moveq #$3f, d7 */
-    reach(0x372); data_word(0x000E);    /* move.w #$e, $c00000.l */
-    reach(0x37A); go_on(0x37A);    /* then: dbra d7, $372 */
+    reach(0x372);
+    for (int i = 0; i < 64; i++) {
+        data_word(0x000E);                                /* move.w #$e, $c00000.l */
+        COST(20 + dbra_cost(i == 63));                   /* dbra d7, $372 */
+    }
+    W(REG_D[7], 0xFFFF);
+    go_on(0x37E);
 }
 int draw_seg_00366(void) { return run(seg_00366); }
 
@@ -3376,3 +3383,181 @@ static void seg_3C07E(void)
     reach(0x3C0A0);    /* rts */
 }
 int draw_seg_3C07E(void) { return run(seg_3C07E); }
+
+/* sub_0021E at 0x318: the status read the boot code starts with (tst.w VDP_CTRL) */
+static void boot_status(void)
+{
+    from(0x318);
+    uint16_t v = dry ? 0 : vdp_read_ctrl();
+    flags_move(v, 16);
+    reach(0x31E);
+    go_on(0x31E);
+}
+int draw_boot_status(void) { return run(boot_status); }
+
+/* sub_02E34 at 0x2EEC: the title's 4 rows of 12 tiles (a0: the table for this console's
+ * region) at 0xC61C, 0xC69C, ... (plane A) */
+static void title_rows(void)
+{
+    from(0x2EEC);
+    reach(0x2EF2);                                       /* move.l #$461c0003,d0 */
+    uint32_t d0 = 0x461C0003u, a0 = REG_A[0];
+    int rows = (int)(uint16_t)REG_D[6] + 1, n = (int)(uint16_t)REG_D[5] + 1;
+    for (int r = 0; r < rows; r++) {
+        COST(4);                                         /* move.w d5,d7 */
+        command(d0);                                     /* move.l d0,$c00004.l */
+        COST(20);
+        for (int i = 0; i < n; i++) {
+            data_word((uint16_t)RD16(a0));               /* move.w (a0)+,$c00000.l */
+            a0 += 2;
+            COST(20 + dbra_cost(i == n - 1));
+        }
+        uint32_t s = d0 + 0x800000u;                     /* addi.l #$800000,d0 */
+        if (!dry) {
+            FLAG_N = NFLAG_32(s); FLAG_Z = s;
+            FLAG_V = VFLAG_ADD_32(0x800000u, d0, s);
+            FLAG_X = FLAG_C = CFLAG_ADD_32(0x800000u, d0, s);
+        }
+        d0 = s;
+        COST(16 + dbra_cost(r == rows - 1));
+    }
+    REG_D[0] = d0;
+    REG_A[0] = a0;
+    W(REG_D[7], 0xFFFF);
+    W(REG_D[6], 0xFFFF);
+    go_on(0x2F0E);
+}
+int draw_title_rows(void) { return run(title_rows); }
+
+/* ---------------------------------------------------------------- start-up */
+
+/* sub_0021E to 0x2AA: the console's start-up (after a reset with the controller ports
+ * not yet set up; else straight on): the TMSS word, the 24 registers, all of video
+ * memory filled with 0, the Z80's program, the work RAM cleared, the palette and the
+ * vertical scroll cleared, the PSG silenced; then on at 0x318. The values are the
+ * table at 0x2AC, read from the ROM. */
+#define ROM8(a) ((uint)md.rom[a])
+
+static void start_up(void)
+{
+    from(0x21E);
+    uint32_t c1 = RD32(0xA10008u);
+    flags_move(c1, 32);
+    COST(20);                                            /* tst.l $a10008.l */
+    int warm = c1 != 0;
+    if (warm) {
+        COST(10 + 10);                                   /* bne.b $22c taken; bne.b $2aa taken */
+    } else {
+        COST(8);
+        uint16_t c2 = (uint16_t)RD16(0xA1000Cu);
+        flags_move(c2, 16);
+        COST(16);                                        /* tst.w $a1000c.l */
+        warm = c2 != 0;
+        COST(warm ? 10 : 8);                             /* bne.b $2aa */
+    }
+    if (warm) {
+        COST(10);                                        /* bra.b $318 */
+        go_on(0x318);
+        return;
+    }
+    uint32_t t = 0x2AC;                                  /* lea $2ac(pc),a5 */
+    REG_D[5] = (REG_D[5] & 0xFFFF0000u) | ROM16(t);      /* movem.w (a5)+,d5-d7 */
+    REG_D[6] = (REG_D[6] & 0xFFFF0000u) | ROM16(t + 2);
+    REG_D[7] = (REG_D[7] & 0xFFFF0000u) | ROM16(t + 4);
+    t += 6;
+    for (int i = 0; i < 5; i++)                          /* movem.l (a5)+,a0-a4 */
+        REG_A[i] = ROM32(t + 4u * i);
+    t += 20;
+    /* movem.w sign-extends into the whole register */
+    REG_D[5] = (uint32_t)(int16_t)REG_D[5]; REG_D[6] = (uint32_t)(int16_t)REG_D[6]; REG_D[7] = (uint32_t)(int16_t)REG_D[7];
+    uint32_t a0 = REG_A[0], a1 = REG_A[1], a2 = REG_A[2];
+    from(0x22E);
+    reach(0x23A);                                        /* lea, movem.w, movem.l */
+    uint8_t ver = (uint8_t)(RD8(a1 - 0x10FF) & 0x0F);  /* move.b -$10ff(a1),d0; andi.b #$f,d0 */
+    REG_D[0] = (REG_D[0] & 0xFFFFFF00u) | ver;
+    reach(0x242);
+    if (ver) {
+        COST(8);                                         /* beq.b not taken */
+        if (!dry) WR32(a1 + 0x2F00, 0x53454741u);        /* move.l #'SEGA',$2f00(a1) */
+        COST(24);
+    } else
+        COST(10);
+    from(0x24C);
+    uint16_t st = dry ? 0 : vdp_read_ctrl();             /* move.w (a4),d0 */
+    W(REG_D[0], st);
+    reach(0x24E);
+    REG_D[0] = 0; REG_A[6] = 0;                          /* moveq #0,d0; movea.l d0,a6; move a6,usp */
+    if (!dry) REG_USP = 0;
+    reach(0x256);                                        /* moveq #$17,d1 */
+    uint16_t d5 = (uint16_t)REG_D[5], d7 = (uint16_t)REG_D[7];
+    for (int r = 0; r < 24; r++) {
+        d5 = (uint16_t)((d5 & 0xFF00) | ROM8(t + r));    /* move.b (a5)+,d5 */
+        COST(8);
+        reg_word(d5);                                    /* move.w d5,(a4) */
+        COST(8);
+        d5 = (uint16_t)(d5 + d7);                        /* add.w d7,d5 */
+        COST(4 + dbra_cost(r == 23));
+    }
+    t += 24;
+    W(REG_D[5], d5);
+    W(REG_D[1], 0xFFFF);
+    command(ROM32(t));                                   /* move.l (a5)+,(a4): the fill */
+    t += 4;
+    COST(20);
+    data_word(0);                                        /* move.w d0,(a3) */
+    COST(8);
+    if (!dry) { WR16(a1, d7); WR16(a2, d7); }            /* the Z80: bus, out of reset */
+    COST(8 + 8);
+    for (;;) {                                           /* btst.l d0,(a1); bne.b */
+        int busy = dry ? 0 : RD8(a1) & 1;               /* granted at once (the bus request written) */
+        COST(8);
+        if (!busy) { COST(8); break; }
+        COST(10);
+    }
+    COST(4);                                             /* moveq #$25,d2 */
+    for (int i = 0; i < 38; i++) {                       /* move.b (a5)+,(a0)+ */
+        if (!dry) WR8(a0 + i, ROM8(t + i));
+        COST(12 + dbra_cost(i == 37));
+    }
+    t += 38;
+    REG_A[0] = a0 + 38;
+    if (!dry) { WR16(a2, 0); WR16(a1, 0); WR16(a2, d7); }
+    COST(8 + 8 + 8);
+    int n = (int)(uint16_t)REG_D[6] + 1;                 /* move.l d0,-(a6), d6+1 times */
+    uint32_t a6 = 0;
+    for (int i = 0; i < n; i++) {
+        a6 -= 4;
+        if (!dry) WR32(a6, 0);
+        COST(12 + dbra_cost(i == n - 1));
+    }
+    REG_A[6] = a6;
+    command(ROM32(t)); COST(20);                         /* move.l (a5)+,(a4): registers 1, 15 */
+    command(ROM32(t + 4)); COST(20);                     /* the palette */
+    t += 8;
+    COST(4);
+    for (int i = 0; i < 32; i++) {                       /* move.l d0,(a3) */
+        data_word(0); data_word(0);
+        COST(12 + dbra_cost(i == 31));
+    }
+    command(ROM32(t)); COST(20);                         /* the vertical scroll */
+    t += 4;
+    COST(4);
+    for (int i = 0; i < 20; i++) {
+        data_word(0); data_word(0);
+        COST(12 + dbra_cost(i == 19));
+    }
+    COST(4);
+    for (int i = 0; i < 4; i++) {                        /* move.b (a5)+,$11(a3): the PSG */
+        if (!dry) WR8(0xC00011u, ROM8(t + i));
+        COST(16 + dbra_cost(i == 3));
+    }
+    if (!dry) WR16(a2, 0);                               /* the Z80 in reset */
+    COST(8);
+    for (int i = 0; i < 15; i++)                         /* movem.l (a6),d0-d7/a0-a6 */
+        REG_DA[i] = RD32(a6 + 4u * i);
+    COST(span(0x2A2, 0x2A6));
+    set_sr_imm(0x2700);                                  /* move.w #$2700,sr */
+    COST(16 + 10);                                       /* and bra.b $318 */
+    go_on(0x318);
+}
+int draw_start_up(void) { return run(start_up); }

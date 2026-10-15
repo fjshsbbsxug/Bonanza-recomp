@@ -271,6 +271,9 @@ DRAW = {
     0x006EA: "draw_window_regs",
     0x01268: "draw_hex_number",
     0x02E7C: "draw_title_clear",
+    0x0021E: "draw_start_up",
+    0x00318: "draw_boot_status",
+    0x02EEC: "draw_title_rows",
     # the screen set-ups (draw.c seg_*)
     0x00366: "draw_seg_00366",
     0x0042E: "draw_seg_0042E",
