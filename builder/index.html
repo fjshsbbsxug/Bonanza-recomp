@@ -106,13 +106,14 @@
 <main>
   <header>
     <h1>Bonanza Bros <span>Port Builder</span></h1>
-    <p>Turn your own copy of the Mega Drive game into a native Windows, Linux or Android port, or play it right here in the browser. The ROM stays on your device: everything happens in this page and nothing is uploaded.</p>
+    <p>Turn your own copy of the Mega Drive game into a native Windows, Linux or Android port. The game's code is made from your ROM in this page; the ROM stays on your device and nothing is uploaded.</p>
     <p style="margin-top:6px" id="makerlink"><a href="levelmaker.html">Bonanza Maker</a>: build your own stages Mario Maker style, test-play them, and save them as .bbro mods.</p>
   </header>
 
   <div class="fallback" id="usesingle">
-    <b>Opened from disk?</b> Open <a href="BonanzaBuilder.html">BonanzaBuilder.html</a> instead (in this folder, or from the
-    project's Releases page). It has the Windows, Linux and Android runtimes inside it, so it only needs your ROM.
+    <b>This page is the builder's source.</b> Use one of the builder pages instead
+    (<b>BonanzaBuilder-Windows.html</b>, <b>BonanzaBuilder-Linux.html</b>, <b>BonanzaBuilder-Android.html</b>, from the
+    project's Releases page): each has its platform's engine inside it and makes the game's code from your ROM.
   </div>
 
   <section class="step" id="step-rom">
@@ -252,18 +253,19 @@
 
 
   <footer>
-    Built from the <b>bonanza-recomp</b> project: the game's 68000 code is statically recompiled to C and runs on a
-    re-implementation of the Mega Drive hardware. Bonanza Bros. is &copy; SEGA; no game data is included in the runtime.
+    Built from the <b>bonanza-recomp</b> project. Nothing of the game is in this page or in the engine it carries: the
+    game's 68000 code is translated to C from your ROM right here (the project's recompiler, run by
+    <a href="https://pyodide.org">Pyodide</a>, MPL-2.0) and compiled by <a href="https://github.com/TinyCC/tinycc">TinyCC</a>
+    (LGPL-2.1, compiled to WebAssembly), and its graphics and sounds come from the ROM when the game runs.
+    Bonanza Bros. is &copy; SEGA.
     <span id="version"></span>
   </footer>
 </main>
 
 <script src="jszip.min.js"></script>
-<script>
-  /* JSZip ships next to this page; fall back to the CDN if the page was copied on its own. */
-  if (typeof JSZip === 'undefined')
-    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>');
-</script>
+<script src="apk.js"></script>
+<script src="gamecode.js"></script>
+<script type="application/json" id="bonanza-embedded"></script>
 <script>
 (() => {
   'use strict';
@@ -298,6 +300,17 @@
   };
   let embeddedWeb = null;      /* the browser runtime (one .js with the wasm inside) */
   const webRuntime = () => embeddedWeb || (embeddedWeb = fromBase64(EMBED.web));
+
+  /* the builder pages' resources (gzipped in the page): the game kit and Pyodide */
+  const resCache = {};
+  async function res(name) {
+    if (resCache[name]) return resCache[name];
+    if (!EMBED || !EMBED.res || !EMBED.res[name]) throw new Error('this page lacks ' + name);
+    const gz = fromBase64(EMBED.res[name]);
+    const ds = new DecompressionStream('gzip');
+    const data = new Uint8Array(await new Response(new Blob([gz]).stream().pipeThrough(ds)).arrayBuffer());
+    return (resCache[name] = data);
+  }
 
   /* ---------- SHA-1 (crypto.subtle when available, small JS fallback otherwise) ---------- */
   function sha1js(bytes) {
@@ -407,8 +420,13 @@
     el.scrollTop = el.scrollHeight;
   }
 
-  if (EMBED && $('makerlink')) $('makerlink').style.display = 'none';   /* not in the single file */
-  if (!EMBED && location.protocol === 'file:') $('usesingle').classList.add('show');   /* point at the one-file builder */
+  if (EMBED && $('makerlink')) $('makerlink').style.display = 'none';   /* not in the builder pages */
+  if (!EMBED) $('usesingle').classList.add('show');                     /* point at the builder pages */
+  if (EMBED && EMBED.platform) {                /* a builder page: its platform only */
+    document.querySelectorAll('.target').forEach(b => { if (b.dataset.target !== EMBED.platform) b.style.display = 'none'; });
+    document.title = 'Bonanza Bros ' + label(EMBED.platform) + ' Builder';
+    $('step-target').querySelector('h2').lastChild.textContent = ' Platform';
+  }
 
   /* ---------- packages ---------- */
   async function loadManifest() {
@@ -472,29 +490,36 @@
 
   async function buildNative(t) {
     $('log').innerHTML = '';
-    log('Fetching the ' + label(t) + ' runtime…');
-    let pkg = await fetchPackage(t);
-    if (!pkg) {
-      log('Runtime package not found next to this page. Select it below.', 'bad');
-      pkg = await pickPackageFromDisk(t);
-      $('fallback').classList.remove('show');
-    }
-    log('Runtime: ' + pkg.length.toLocaleString() + ' bytes');
-    if (t === 'android') {
-      download(pkg, OUTPUT.android, 'application/vnd.android.package-archive');
-      log('✓ Downloaded ' + OUTPUT.android + '. Install it, open “Bonanza Bros” and select your ROM once.', 'ok');
-      log('On its first start the app records the game\'s sounds from your ROM, losslessly (a few minutes).');
-      log('(Allow installing apps from your browser / file manager when Android asks.)');
-      if (modList().length) log('Mods: copy your .bbro files to Android/data/com.bonanzarecomp.port/files/mods on the phone, then turn them on in the game menu (Mods...).');
+    if (!EMBED || !EMBED.packages || !EMBED.packages[t]) {
+      log('This page has no ' + label(t) + ' engine: use BonanzaBuilder-' + label(t) + '.html.', 'bad');
       return;
     }
-    if (typeof JSZip === 'undefined') {
-      log('The zip library could not be loaded (offline?). Reload the page with a network connection.', 'bad');
+    if (typeof JSZip === 'undefined' || typeof DecompressionStream === 'undefined') {
+      log('This browser is too old for the builder (it needs DecompressionStream): use a current Chrome, Edge, Firefox or Safari.', 'bad');
+      return;
+    }
+    const pkg = fromBase64(EMBED.packages[t]);
+    log(label(t) + ' engine: ' + pkg.length.toLocaleString() + ' bytes (no game code in it)');
+    const t0 = Date.now();
+    const libs = await BonanzaGameCode.make({ rom, platform: t, res, log });
+    if (t === 'android') {
+      log('Signing the app (a key made in this browser and kept here, so later builds install over this one)…');
+      const apk = await BonanzaApk.build(pkg, libs.map(l => ({ name: l.path, data: l.data })),
+                                         BonanzaApk.idbStore('bonanza-recomp'));
+      download(apk, OUTPUT.android, 'application/vnd.android.package-archive');
+      log('✓ Downloaded ' + OUTPUT.android + ' (' + apk.length.toLocaleString() + ' bytes, ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s).', 'ok');
+      log('Install it, open “Bonanza Bros” and select your ROM once. On its first start it records the game\'s sounds from the ROM, losslessly (a few minutes).');
+      log('(Allow installing apps from your browser / file manager when Android asks.)');
+      if (modList().length) log('Mods: copy your .bbro files to Android/data/com.bonanzarecomp.port/files/mods on the phone, then turn them on in the game menu (Mods...).');
       return;
     }
     const zip = await JSZip.loadAsync(pkg);
     const root = Object.keys(zip.files).find(n => /(^|\/)bonanza(\.exe)?$/.test(n));
     const dir = root ? root.replace(/[^/]*$/, '') : '';
+    for (const l of libs) {
+      zip.file(dir + l.path, l.data, { binary: true, unixPermissions: 0o755 });
+      log('Added the game\'s code as ' + dir + l.path);
+    }
     zip.file(dir + 'baserom.md', rom, { binary: true });
     log('Added your ROM as ' + dir + 'baserom.md');
     zip.file(dir + 'bonanza.ini', toIni());
@@ -508,7 +533,7 @@
                                           compressionOptions: { level: 6 } },
                                         m => { /* progress */ });
     download(out, OUTPUT[t], 'application/zip');
-    log('✓ Downloaded ' + OUTPUT[t] + ' (' + out.length.toLocaleString() + ' bytes).', 'ok');
+    log('✓ Downloaded ' + OUTPUT[t] + ' (' + out.length.toLocaleString() + ' bytes, ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s).', 'ok');
     log(t === 'windows' ? 'Unzip it and double-click bonanza.exe.' : 'Unzip it and run ./bonanza (needs a desktop with SDL-compatible video/audio).');
   }
 
@@ -831,6 +856,10 @@
   });
 
   loadManifest();
+  if (EMBED && EMBED.platform) {                /* a builder page: its platform chosen */
+    const b = document.querySelector('[data-target="' + EMBED.platform + '"]');
+    if (b) b.click();
+  }
 })();
 </script>
 </body>

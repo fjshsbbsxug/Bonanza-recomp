@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Package port builds and assemble the builder website.
+"""Package the port's engines and make the builder pages.
 
   package.py native  --platform linux|windows --exe PATH --out ZIP
-  package.py web     --build DIR --out DIR
-  package.py site    --out DIR [--version TEXT]
-  package.py single  --site DIR --out FILE
+  package.py kit     --tcc DIR --out gamekit.zip
+  package.py builder --platform windows|linux|android --package PKG --kit gamekit.zip
+                     --pyodide DIR --out FILE [--version TEXT]
 
-single: the builder as one HTML file (BonanzaBuilder.html) that carries the runtimes
-(the site's packages and web/bonanza-single.js) and the zip library inside it, so it
-works opened from disk with no web server or network.
+The packages hold the engine alone: the game's code is not in them. A builder page
+(one for each platform, a single HTML file that works opened from disk) makes it from
+the player's ROM in the browser: the recompiler (tools/, in Pyodide) translates the
+game's code to C and TinyCC (build_tcc.sh) builds the library the engine loads
+(port/src/gamelib.h); the page puts it, the ROM and the settings into the engine's
+package (Android: the APK, signed in the page: builder/apk.js).
 
-The site layout is what builder/index.html expects:
-  index.html, levelmaker.html (+ levelcore.js, jszip.min.js), play.html
-  packages/manifest.json
-  packages/bonanza-windows-x64.zip, bonanza-linux-x64.zip, bonanza-android.apk
-  web/bonanza.js, web/bonanza.wasm, web/bonanza-single.js (level maker test play)
+kit: what the page needs for that, in one zip: the recompiler and the sources it
+reads, the headers the game's code is built with, TinyCC for each kind of library.
 """
 import argparse
 import json
@@ -46,63 +46,66 @@ def native(args):
     print("wrote", args.out)
 
 
-def web(args):
-    os.makedirs(args.out, exist_ok=True)
-    for name in ("bonanza.js", "bonanza.wasm", "bonanza-single.js"):
-        if name == "bonanza-single.js" and not os.path.exists(os.path.join(args.build, name)):
-            continue                     # (older build directories)
-        shutil.copy(os.path.join(args.build, name), os.path.join(args.out, name))
-    print("copied web runtime to", args.out)
+def kit(args):
+    """gamekit.zip: recomp/ (the tools and what they read), include/ (headers), tcc/"""
+    files = {}
+    for name in ("recomp.py", "z80recomp.py", "disasm.py", "m68k.py", "m68kdec.py", "config.py"):
+        files["recomp/tools/" + name] = os.path.join(ROOT, "tools", name)
+    files["recomp/port/ext/musashi/m68kops.c"] = os.path.join(ROOT, "port", "ext", "musashi", "m68kops.c")
+    files["recomp/port/ext/z80/z80.c"] = os.path.join(ROOT, "port", "ext", "z80", "z80.c")
+    files["recomp/port/src/draw.h"] = os.path.join(ROOT, "port", "src", "draw.h")
+
+    def tree(src, to, ext=(".h",)):
+        for name in sorted(os.listdir(src)):
+            p = os.path.join(src, name)
+            if os.path.isfile(p) and (name.endswith(".c") is False if ext is None else name.endswith(ext)):
+                files[to + name] = p
+    tree(os.path.join(ROOT, "port", "src"), "include/src/")
+    tree(os.path.join(ROOT, "port", "gamelib", "include"), "include/gamelib/")
+    tree(os.path.join(ROOT, "port", "ext", "musashi"), "include/musashi/")
+    tree(os.path.join(ROOT, "port", "ext", "musashi", "softfloat"), "include/musashi/softfloat/", None)
+    files["include/ext/z80/z80.h"] = os.path.join(ROOT, "port", "ext", "z80", "z80.h")
+    tree(os.path.join(args.tcc, "include"), "include/tcc/")
+    for kind in ("win64", "linux64", "arm64", "arm"):
+        files["tcc/tcc-%s.js" % kind] = os.path.join(args.tcc, "tcc-%s.js" % kind)
+        files["tcc/%s-libtcc1.a" % kind] = os.path.join(args.tcc, "%s-libtcc1.a" % kind)
+    files["tcc/COPYING"] = os.path.join(args.tcc, "TINYCC-COPYING")
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    with zipfile.ZipFile(args.out, "w", zipfile.ZIP_DEFLATED) as zf:
+        for arc, path in sorted(files.items()):
+            zf.write(path, arc)
+    print("wrote", args.out, "(%.1f MB, %d files)" % (os.path.getsize(args.out) / 1e6, len(files)))
 
 
-def site(args):
-    out = args.out
-    os.makedirs(os.path.join(out, "packages"), exist_ok=True)
-    for name in ("index.html", "jszip.min.js", "levelmaker.html", "levelcore.js", "play.html"):
-        shutil.copy(os.path.join(ROOT, "builder", name), os.path.join(out, name))
-    pk = {}
-    for key, name in (("windows", "packages/bonanza-windows-x64.zip"), ("linux", "packages/bonanza-linux-x64.zip"),
-                      ("android", "packages/bonanza-android.apk"), ("web", "web/bonanza.js")):
-        if os.path.exists(os.path.join(out, name)):
-            pk[key] = name
-    manifest = {"version": args.version or "dev", "packages": pk}
-    with open(os.path.join(out, "packages", "manifest.json"), "w") as f:
-        json.dump(manifest, f, indent=2)
-    print("site ready in", out, "with", ", ".join(sorted(pk)) or "no packages")
+PYODIDE = ("pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json")
 
 
-def single(args):
+def builder(args):
+    """one builder page for a platform: everything inside, the big parts gzipped"""
     import base64
-    site_dir = args.site
-    with open(os.path.join(ROOT, "builder", "index.html"), encoding="utf-8") as f:
-        page = f.read()
-    with open(os.path.join(ROOT, "builder", "jszip.min.js"), encoding="utf-8") as f:
-        jszip = f.read()
-    b64 = lambda path: base64.b64encode(open(path, "rb").read()).decode("ascii")
-    try:
-        with open(os.path.join(site_dir, "packages", "manifest.json")) as f:
-            version = json.load(f).get("version", "dev")
-    except OSError:
-        version = "dev"
-    embed = {"version": version, "packages": {}}
-    for key, name in (("windows", "packages/bonanza-windows-x64.zip"), ("linux", "packages/bonanza-linux-x64.zip"),
-                      ("android", "packages/bonanza-android.apk")):
-        path = os.path.join(site_dir, name)
-        if os.path.exists(path):
-            embed["packages"][key] = b64(path)
-    web = os.path.join(site_dir, "web", "bonanza-single.js")
-    if os.path.exists(web):
-        embed["web"] = b64(web)
-    tag = '<script src="jszip.min.js"></script>'
-    assert tag in page, "builder/index.html: the jszip script tag moved"
-    # the zip library and the runtimes in the page ("</" never occurs in base64 or JSON here)
-    page = page.replace(tag, "<script>" + jszip.replace("</script", "<\\/script") + "</script>\n"
-                        + '<script type="application/json" id="bonanza-embedded">' + json.dumps(embed) + "</script>", 1)
+    import gzip
+    b64 = lambda data: base64.b64encode(data).decode("ascii")
+    gz = lambda data: b64(gzip.compress(data, 9, mtime=0))
+    read = lambda path: open(path, "rb").read()
+    page = open(os.path.join(ROOT, "builder", "index.html"), encoding="utf-8").read()
+    embed = {"version": args.version or "dev", "platform": args.platform,
+             "packages": {args.platform: b64(read(args.package))},
+             "res": {"gamekit.zip": gz(read(args.kit))}}
+    for name in PYODIDE:
+        embed["res"]["pyodide/" + name] = gz(read(os.path.join(args.pyodide, name)))
+    for name in ("jszip.min.js", "apk.js", "gamecode.js"):
+        tag = '<script src="%s"></script>' % name
+        assert tag in page, "builder/index.html: no " + tag
+        js = open(os.path.join(ROOT, "builder", name), encoding="utf-8").read()
+        page = page.replace(tag, "<script>" + js.replace("</script", "<\\/script") + "</script>", 1)
+    tag = '<script type="application/json" id="bonanza-embedded"></script>'
+    assert tag in page, "builder/index.html: no embedded data tag"
+    # base64 and JSON: "</" never occurs in them
+    page = page.replace(tag, '<script type="application/json" id="bonanza-embedded">' + json.dumps(embed) + "</script>", 1)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(page)
-    print("wrote", args.out, "(%.1f MB) with" % (os.path.getsize(args.out) / 1e6),
-          ", ".join(sorted(embed["packages"]) + (["web"] if "web" in embed else [])))
+    print("wrote", args.out, "(%.1f MB)" % (os.path.getsize(args.out) / 1e6))
 
 
 def main():
@@ -112,17 +115,18 @@ def main():
     p.add_argument("--platform", choices=["linux", "windows"], required=True)
     p.add_argument("--exe", required=True)
     p.add_argument("--out", required=True)
-    p = sub.add_parser("web")
-    p.add_argument("--build", required=True)
+    p = sub.add_parser("kit")
+    p.add_argument("--tcc", required=True)
     p.add_argument("--out", required=True)
-    p = sub.add_parser("site")
+    p = sub.add_parser("builder")
+    p.add_argument("--platform", choices=["windows", "linux", "android"], required=True)
+    p.add_argument("--package", required=True)
+    p.add_argument("--kit", required=True)
+    p.add_argument("--pyodide", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--version")
-    p = sub.add_parser("single")
-    p.add_argument("--site", required=True)
-    p.add_argument("--out", required=True)
     args = ap.parse_args()
-    {"native": native, "web": web, "site": site, "single": single}[args.cmd](args)
+    {"native": native, "kit": kit, "builder": builder}[args.cmd](args)
 
 
 if __name__ == "__main__":

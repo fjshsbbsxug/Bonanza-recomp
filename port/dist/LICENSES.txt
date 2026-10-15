@@ -1,11 +1,20 @@
 Third-party components
 ======================
 
-The port runtime (port/src) and tools are part of the bonanza-recomp project.
-The game code translated into port/gen is derived from the original game, which
-remains the property of SEGA. No game data is distributed; it is read from the
-player's own ROM (the sounds in sounds.bbs were recorded from it when this copy
-was built).
+The port's engine (port/src) and tools are part of the bonanza-recomp project.
+The game's code (bonanza_game.dll / libbonanza_game.so) was made from the player's
+own ROM by the builder page, which translated it to C and compiled it in the
+browser; it is derived from the original game, which remains the property of SEGA.
+Nothing of the game is distributed with the engine: its code, graphics and sounds
+all come from the player's ROM.
+
+TinyCC - Copyright (c) 2001-2004 Fabrice Bellard and contributors - GNU Lesser
+  General Public License v2.1 (the builder pages compile the game's code with it,
+  built as WebAssembly: port/dist/build_tcc.sh; source: https://github.com/TinyCC/tinycc).
+  Its runtime library (libtcc1) is part of the game's library.
+Pyodide - Mozilla Public License 2.0 (the builder pages run the project's
+  recompiler with it: https://pyodide.org), with the Python standard library
+  (Python Software Foundation License).
 
 Musashi 68000 emulator - Copyright 1998-2001 Karl Stenerud - MIT License
 Z80 emulator (superzazu/z80) - Copyright (c) 2019 Nicolas Allemand - MIT License
