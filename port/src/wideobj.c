@@ -421,6 +421,19 @@ int wobj_build(int margin, int width, int patrol_return, wobj_sprite *list, int 
     return out_n;
 }
 
+/* Prop Hunt: a player drawn as another object's frame, in each view that shows him */
+int wobj_build_disguise(int obj, uint16_t frame, uint16_t attr_or, wobj_sprite *list, int max)
+{
+    static snap_t s;
+    take_snapshot(&s);
+    out_list = list; out_n = 0; out_max = max;
+    const obj_t *b = &s.o[obj];
+    for (int v = 0; v < 2; v++)
+        if (view_on(&s, v) && (b->vis & (1 << v)))
+            emit_frame(&s, v, frame, b->x, b->y, b->z, b->flip != 0, attr_or, 0, 0);
+    return out_n;
+}
+
 void wobj_reset(void)
 {
     level_id = 0;

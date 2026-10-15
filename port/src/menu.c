@@ -254,17 +254,35 @@ static void edit_change(int row, int dir)
 }
 
 /* ------------------------------------------------------------ online page */
-/* rows: Host, Join <address>, Search LAN, LAN games..., Leave / Back */
-static int online_rows(void) { return 3 + net_lan_count() + 1; }
+/* rows: Host, Mode (the host's: Normal / Prop Hunt), Round length (Prop Hunt), Join
+ * <address>, Search LAN, LAN games..., Leave / Back */
+#define OR_HOST 0
+#define OR_MODE 1
+#define OR_ROUND 2
+#define OR_JOIN 3
+#define OR_LAN 4
+#define OR_FIRST_GAME 5
+static int online_rows(void) { return OR_FIRST_GAME + net_lan_count() + 1; }
+
+/* the host's game options: changed only while not online (the joiner gets the host's) */
+static void online_option(int row, int dir)
+{
+    if (net_state() != NET_OFF) return;
+    if (row == OR_MODE) settings.prop_hunt = !settings.prop_hunt;
+    else if (row == OR_ROUND) settings.ph_minutes = (settings.ph_minutes - 1 + dir + 9) % 9 + 1;
+    else return;
+    menu_settings_dirty = 1;
+}
 
 static int online_activate(int row)
 {
     int lan = net_lan_count();
-    if (row == 0) { net_host(NET_DEFAULT_PORT); return MENU_ACT_NONE; }
-    if (row == 1) { editing = 1; return MENU_ACT_NONE; }
-    if (row == 2) { net_lan_search(); return MENU_ACT_NONE; }
-    if (row < 3 + lan) {
-        snprintf(settings.join_address, sizeof(settings.join_address), "%s", net_lan_address(row - 3));
+    if (row == OR_HOST) { net_host(NET_DEFAULT_PORT); return MENU_ACT_NONE; }
+    if (row == OR_MODE || row == OR_ROUND) { online_option(row, 1); return MENU_ACT_NONE; }
+    if (row == OR_JOIN) { editing = 1; return MENU_ACT_NONE; }
+    if (row == OR_LAN) { net_lan_search(); return MENU_ACT_NONE; }
+    if (row < OR_FIRST_GAME + lan) {
+        snprintf(settings.join_address, sizeof(settings.join_address), "%s", net_lan_address(row - OR_FIRST_GAME));
         menu_settings_dirty = 1;
         net_join(settings.join_address);
         return MENU_ACT_NONE;
@@ -424,6 +442,7 @@ int menu_key(int key)
         if (sel >= n) sel = n - 1;
         if (key == MK_UP) sel = (sel + n - 1) % n;
         else if (key == MK_DOWN) sel = (sel + 1) % n;
+        else if (key == MK_LEFT || key == MK_RIGHT) online_option(sel, key == MK_LEFT ? -1 : 1);
         else if (key == MK_OK) return online_activate(sel);
     } else if (page == PAGE_MODS) {
         int n = mods_rows();
@@ -504,7 +523,7 @@ int menu_pointer(int x, int y)
         /* its rows are 2 pixels further apart */
         int row = (y - (ROW_Y0 + 4) + 3) / (ROW_H + 2);
         if (y < ROW_Y0 + 1 || row < 0 || row >= online_rows()) return MENU_ACT_NONE;
-        if (editing && row != 1) editing = 0;
+        if (editing && row != OR_JOIN) editing = 0;
         sel = row;
         return menu_key(MK_OK);
     }
@@ -518,7 +537,7 @@ int menu_pointer(int x, int y)
     int is_value = page == PAGE_MAIN ? (row >= IT_SCREEN && row <= IT_HUE)
                  : page == PAGE_CHARS ? row < CHAR_COUNT * PART_COUNT
                  : page == PAGE_ONLINE ? 0 : row <= 2;
-    if (page == PAGE_ONLINE && editing && row != 1) editing = 0;
+    if (page == PAGE_ONLINE && editing && row != OR_JOIN) editing = 0;
     if (is_value && x >= VALUE_X)
         return menu_key(x < VALUE_X + 50 ? MK_LEFT : MK_RIGHT);
     return menu_key(MK_OK);
@@ -629,16 +648,22 @@ void menu_draw(uint32_t *buf)
             if (s) fill(buf, PANEL_X + 4, y - 3, PANEL_W - 8, ROW_H + 2, C_SEL);
             if (s) fill(buf, PANEL_X + 4, y - 3, 2, ROW_H + 2, C_ACCENT);
             const char *label = "";
-            if (i == 0) {
+            if (i == OR_HOST) {
                 snprintf(t, sizeof(t), "Host a game (port %d)", NET_DEFAULT_PORT);
                 label = t;
-            } else if (i == 1) {
+            } else if (i == OR_MODE) {
+                snprintf(t, sizeof(t), "  Mode    < %s >", settings.prop_hunt ? "Prop Hunt" : "Normal");
+                label = t;
+            } else if (i == OR_ROUND) {
+                snprintf(t, sizeof(t), "  Round   < %d min >%s", settings.ph_minutes, settings.prop_hunt ? "" : "  (Prop Hunt)");
+                label = t;
+            } else if (i == OR_JOIN) {
                 snprintf(t, sizeof(t), "Join: %s%s", settings.join_address, editing && (CURSOR_ON) ? "_" : "");
                 label = t;
-            } else if (i == 2) {
+            } else if (i == OR_LAN) {
                 label = "Search LAN";
-            } else if (i < 3 + lan) {
-                snprintf(t, sizeof(t), "  %s", net_lan_entry(i - 3));
+            } else if (i < OR_FIRST_GAME + lan) {
+                snprintf(t, sizeof(t), "  %s", net_lan_entry(i - OR_FIRST_GAME));
                 label = t;
             } else {
                 label = net_state() != NET_OFF ? "Leave online game" : "Back";

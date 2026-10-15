@@ -229,6 +229,20 @@ builder/      the HTML builder page
     `bonanza-headless --net-host PORT` / `--net-join ADDR` play scripted online games
     for testing (both sides' `--hash` output must be identical).
 
+  * *Prop Hunt* (`port/src/prophunt.c`, online only): the host chooses it in
+    `Online...` (Mode: Prop Hunt, Round: 1-9 minutes; sent to the joiner with the
+    welcome). One player hides as one of the stage's guards, treasures or gadgets (A
+    changes the disguise), the other has to find and shoot him; if the time runs out
+    the hider wins. Roles swap every round and the stage starts again. The first 10
+    seconds only the hider moves (the seeker's screen is dark). Guards ignore the
+    hider, who never attacks; as a guard he moves as guards do (half a pixel per frame,
+    no jumping), as a treasure or gadget he runs 1.1 times as fast as a player, jumps
+    1.1 times sooner and changes lanes 1.1 times slower. Nobody loses lives and the
+    exit stays shut. The rules run in lockstep on both machines around every frame
+    (they read only the pads and RAM); the disguise and the banner are drawn by each
+    machine for itself. `PH_OFFLINE=minutes` runs the rules offline in the headless
+    runner (tests).
+
   * *Mods* (`port/src/mods.c`): `.bbro` files (zip archives: `mod.ini`, IPS and text
     ROM patches in `patches/`) or folders in a `mods` folder next to `bonanza.ini`,
     turned on in the menu (`Mods...`, saved as `mods = a.bbro|b.bbro`) and applied to the

@@ -19,6 +19,8 @@ const char *net_status(void);             /* one line for the menu / title */
 /* Lockstep. Both machines run the same game; only button states are exchanged. */
 int  net_take_start(void);                /* 1 once when a game starts: reset the machine */
 int  net_option_floor_alert(void);        /* game options chosen by the host */
+int  net_option_prop_hunt(void);          /* Prop Hunt (only while playing online) */
+int  net_option_ph_minutes(void);         /* Prop Hunt: minutes a round lasts */
 void net_local_input(uint8_t pad);        /* this player's buttons, every refresh */
 int  net_inputs_for_next_frame(uint8_t pads[2]); /* 1 if the next frame can run */
 void net_frame_done(uint32_t state_hash); /* after running that frame */

@@ -35,6 +35,8 @@ typedef struct {
     int crop_cutscenes;      /* widescreen: show cutscenes/title 4:3 (game overs stay wide) */
     int patrol_return;       /* widescreen: guards leaving the 4:3 picture walk back to their posts */
     int floor_alert;         /* game change: FLOOR_ALERT_* */
+    int prop_hunt;           /* online game mode chosen by the host: Prop Hunt (prophunt.c) */
+    int ph_minutes;          /* Prop Hunt: minutes a round lasts (1-9) */
     char join_address[64];   /* online: last address joined */
     char mods[1024];         /* enabled mods (file names in the mods folder), in order, '|' between */
     int preset;              /* PRESET_* */

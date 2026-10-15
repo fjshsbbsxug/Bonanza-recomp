@@ -23,7 +23,7 @@
 #include "md.h"
 #include "settings.h"
 
-#define NET_VERSION 1
+#define NET_VERSION 2      /* 2: the welcome carries the Prop Hunt options */
 #define RING 1024
 #define HASH_EVERY 60
 
@@ -33,13 +33,15 @@
 
 static char status_text[200] = "Not connected";
 static int state = NET_OFF, local_player;
-static int start_pending, opt_floor_alert;
+static int start_pending, opt_floor_alert, opt_prop_hunt, opt_ph_minutes = 3;
 static char peer_name[32];
 
 const char *net_status(void) { return status_text; }
 int net_state(void) { return state; }
 int net_local_player(void) { return local_player; }
 int net_option_floor_alert(void) { return opt_floor_alert; }
+int net_option_prop_hunt(void) { return state == NET_PLAYING && opt_prop_hunt; }
+int net_option_ph_minutes(void) { return opt_ph_minutes; }
 
 int net_take_start(void)
 {
@@ -232,7 +234,9 @@ static void send_welcome(void)
 {
     uint8_t b[64] = {'B', 'Z', 'W', NET_VERSION, (uint8_t)settings.floor_alert};
     memcpy(b + 5, my_name, 24);
-    send_to(&peer, b, 29);
+    b[29] = (uint8_t)opt_prop_hunt;           /* as connected() took them */
+    b[30] = (uint8_t)opt_ph_minutes;
+    send_to(&peer, b, 31);
 }
 
 static void send_inputs(void)
@@ -257,8 +261,11 @@ static void send_inputs(void)
 
 static void connected(const char *name)
 {
-    if (local_player == 0)
-        opt_floor_alert = settings.floor_alert;   /* the host's game options count */
+    if (local_player == 0) {                  /* the host's game options count */
+        opt_floor_alert = settings.floor_alert;
+        opt_prop_hunt = settings.prop_hunt != 0;
+        opt_ph_minutes = settings.ph_minutes >= 1 && settings.ph_minutes <= 9 ? settings.ph_minutes : 3;
+    }
     snprintf(peer_name, sizeof(peer_name), "%.*s", 24, name);
     state = NET_PLAYING;
     start_pending = 1;
@@ -423,13 +430,15 @@ static void receive(void)
         if (!same_peer(&from))
             continue;
         last_recv = now_ms();
-        if (type == 'W' && state == NET_JOINING && n >= 29) {
+        if (type == 'W' && state == NET_JOINING && n >= 31) {
             if (b[3] != NET_VERSION) {
                 net_stop();
                 snprintf(status_text, sizeof(status_text), "Host runs a different version of the port");
                 return;
             }
             opt_floor_alert = b[4];
+            opt_prop_hunt = b[29] != 0;
+            opt_ph_minutes = b[30] >= 1 && b[30] <= 9 ? b[30] : 3;
             char name[32];
             snprintf(name, sizeof(name), "%.24s", (const char *)b + 5);
             local_player = 1;

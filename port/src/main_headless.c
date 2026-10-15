@@ -33,6 +33,7 @@ extern unsigned long z80_stat_no_code;
 #include "settings.h"
 #include "net.h"
 #include "mods.h"
+#include "prophunt.h"
 #ifdef _WIN32
 #include <windows.h>
 static void nap(void) { Sleep(1); }
@@ -67,7 +68,8 @@ static void write_ppm(const char *path)
     if (!f) { perror(path); return; }
     int w = md_screen_width();
     fprintf(f, "P6\n%d %d\n255\n", w, MD_SCREEN_H);
-    const uint32_t *fb = md_framebuffer();
+    uint32_t *fb = (uint32_t *)md_framebuffer();
+    ph_overlay(fb, MD_FB_W, w, MD_SCREEN_H, net_state() == NET_PLAYING ? net_local_player() : -1);
     for (int y = 0; y < MD_SCREEN_H; y++)
         for (int x = 0; x < w; x++) {
             uint32_t p = fb[y * MD_FB_W + x];
@@ -250,6 +252,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "net: playing as player %d\n", vdp_local_player + 1);
     }
     md_reset();
+    ph_reset();
     if (play_extra > 0) xs_play(play_extra - 1);
     uint8_t mine = 0;
     for (int fr = 0; fr < frames; fr++) {
@@ -277,7 +280,9 @@ int main(int argc, char **argv)
                 md.ram[pokes[k].addr & 0xFFFE] = pokes[k].val >> 8;
                 md.ram[(pokes[k].addr & 0xFFFE) + 1] = pokes[k].val;
             }
+        ph_pre_frame();                         /* Prop Hunt (online, if the host chose it) */
         md_run_frame();
+        ph_post_frame();
         cheat_frame();                          /* does nothing in an online game */
         int16_t abuf[4096 * 2];
         int got;

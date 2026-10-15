@@ -60,6 +60,7 @@ void settings_defaults(void)
     settings.preset = PRESET_ORIGINAL;
     settings.crop_cutscenes = 1;
     settings.patrol_return = 1;
+    settings.ph_minutes = 3;
 }
 
 /* ------------------------------------------------------------ colour */
@@ -229,6 +230,12 @@ int settings_set(const char *key, const char *value)
         return 0;
     }
     if (!strcmp(key, "smooth")) { settings.smooth = atoi(value) != 0; return 1; }
+    if (!strcmp(key, "prop_hunt")) { settings.prop_hunt = atoi(value) != 0 || !strcmp(value, "on"); return 1; }
+    if (!strcmp(key, "prop_hunt_minutes")) {
+        int v = atoi(value);
+        settings.ph_minutes = v < 1 ? 1 : v > 9 ? 9 : v;
+        return 1;
+    }
     if (!strcmp(key, "crt")) {
         for (int i = 0; i < CRT_COUNT; i++)
             if (!strcmp(value, crt_keys[i])) { settings.crt = i; return 1; }
@@ -307,6 +314,8 @@ int settings_save(const char *path)
     fprintf(f, "# screen: original, 16:9, 16:10, 21:9, stretch\n");
     fprintf(f, "screen = %s\n", screen_keys[settings.screen]);
     fprintf(f, "smooth = %d\n", settings.smooth);
+    fprintf(f, "# online game mode when hosting: prop_hunt = 1 (Prop Hunt), round length in minutes\n");
+    fprintf(f, "prop_hunt = %d\nprop_hunt_minutes = %d\n", settings.prop_hunt, settings.ph_minutes);
     fprintf(f, "# CRT filter: off, scanlines, tv (consumer TV: slot mask, curved), monitor (PVM: aperture grille, flat)\n");
     fprintf(f, "crt = %s\n", crt_keys[settings.crt >= 0 && settings.crt < CRT_COUNT ? settings.crt : 0]);
     fprintf(f, "# top of the screen in a 1-player game: room (the floor above) or panel (original)\n");

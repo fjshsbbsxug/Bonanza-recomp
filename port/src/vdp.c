@@ -5,6 +5,7 @@
 #include "md.h"
 #include "settings.h"
 #include "wideobj.h"
+#include "prophunt.h"
 
 vdp_t vdp;
 
@@ -623,6 +624,10 @@ static int char_part(int ch, int c, int row, int lx, const char_info *ci)
 }
 
 static wobj_sprite wobj_list[256];
+/* Prop Hunt: the hider (drawn as his disguise instead of himself), the disguise's pieces */
+static int ph_hide = -1;
+static wobj_sprite ph_list[32];
+static int ph_count;
 static int wobj_count;
 
 /* sprites built by wideobj.c, below the real ones */
@@ -679,6 +684,9 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
             } else {
                 seen_nonzero_x = 1;
             }
+            /* Prop Hunt: the hider's own pieces are not drawn (his disguise is) */
+            if (ph_hide >= 0 && char_of(attr) >= 0 && wobj_player_of(attr) == ph_hide)
+                continue;
             /* player colours only for the players' own pieces */
             int ch = chars && char_of(attr) >= 0 ? wobj_player_of(attr) : -1;
             const char_info *ci = ch >= 0 ? char_analyse(attr, hsz, vsz, ch) : NULL;
@@ -707,6 +715,7 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
     } while (link && ++count < max_sprites);
 done:
     draw_wobj(out, y, width, m, wobj_list, wobj_count);
+    draw_wobj(out, y, width, m, ph_list, ph_count);
 }
 
 static int margin40, margin32;
@@ -1222,7 +1231,13 @@ void vdp_render_line(int y)
     int playing = views[0].ok && (views[0].frame == md.frame || views[0].frame == md.frame + 1);
     if (y == 0 && !level_load())
         views[0].ok = views[1].ok = 0;
-    if (any_char_colors()) wobj_sample_players();
+    if (y == 0) {                         /* Prop Hunt: the hider's disguise */
+        uint16_t f, at;
+        ph_hide = ph_hidden_player();
+        ph_count = ph_hide >= 0 && ph_disguise(&f, &at)
+                 ? wobj_build_disguise(ph_hide, f, at, ph_list, (int)(sizeof(ph_list) / sizeof(ph_list[0]))) : 0;
+    }
+    if (any_char_colors() || ph_hide >= 0) wobj_sample_players();
     if (y == 0)   /* objects beside the picture (also keeps its snapshots up to date) */
         wobj_count = wobj_build(m && playing ? m : 0, width, settings.patrol_return && !settings.floor_alert,
                                 wobj_list, (int)(sizeof(wobj_list) / sizeof(wobj_list[0])));

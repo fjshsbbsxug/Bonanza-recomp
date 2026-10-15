@@ -19,5 +19,7 @@ void wobj_reset(void);
 int wobj_player_of(uint16_t attr);
 int wobj_sample_players(void);    /* every line: the players' frame numbers this picture */
 int wobj_build_stacked(int v, int vtop, int real_wy0, wobj_sprite *list, int max);
+/* Prop Hunt: object obj drawn with another frame (prophunt.c) */
+int wobj_build_disguise(int obj, uint16_t frame, uint16_t attr_or, wobj_sprite *list, int max);
 
 #endif

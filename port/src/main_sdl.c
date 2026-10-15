@@ -14,6 +14,7 @@
 #include "md.h"
 #include "game.h"
 #include "crt.h"
+#include "prophunt.h"
 #include "settings.h"
 #include "net.h"
 #include "gamemods.h"
@@ -732,6 +733,7 @@ static void present(void)
                 if (VDP_COLOR(fm[i]) == hl)
                     fb[i] = 0xFFFFFFFFu ^ (fb[i] & 0x00FFFFFF);
         }
+        ph_overlay(fb, MD_FB_W, sw, MD_SCREEN_H, net_state() == NET_PLAYING ? net_local_player() : -1);
         SDL_UpdateTexture(texture, NULL, fb, MD_FB_W * 4);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
         SDL_SetTextureScaleMode(texture, settings.smooth ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
@@ -1044,6 +1046,7 @@ static void net_update(void)
             game_mods_apply();
         }
         md_reset();
+        ph_reset();
         paused = 0;
         memset(key_pad, 0, sizeof(key_pad));
         SDL_Log("online game started: player %d", net_local_player() + 1);
@@ -1104,7 +1107,9 @@ static int run_net_frame(void)
         return 0;                               /* the other player's buttons are not here yet */
     md.pad[0] = pads2[0];
     md.pad[1] = pads2[1];
+    ph_pre_frame();                             /* Prop Hunt (if the host chose it) */
     md_run_frame();
+    ph_post_frame();
     int16_t buf[2048 * 2 + 64];
     int n;
     while ((n = md_audio_take(buf, 2048)) > 0)
