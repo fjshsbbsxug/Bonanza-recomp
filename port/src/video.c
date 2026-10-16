@@ -29,6 +29,11 @@ void video_store(int to, uint16_t addr, uint16_t w)
 
 void video_at(int to, uint16_t addr)
 {
+    if (vdp.pending) {                  /* a mod's half-written command on the port */
+        video_port_ctrl((uint16_t)(((to & 3) << 14) | (addr & 0x3FFF)));
+        video_port_ctrl((uint16_t)(((to & 0x3C) << 2) | (addr >> 14)));
+        return;
+    }
     vdp.code = (uint8_t)to;
     vdp.addr = addr;
 }
@@ -36,7 +41,7 @@ void video_at(int to, uint16_t addr)
 void video_put(uint16_t w)
 {
     if (vdp.pending || vdp.fill_pending) {     /* a mod's half-written command on the port */
-        vdp_write_data(w);
+        video_port_data(w);
         return;
     }
     video_store(vdp.code, vdp.addr, w);
@@ -45,6 +50,10 @@ void video_put(uint16_t w)
 
 void video_set(int r, uint8_t v)
 {
+    if (vdp.pending) {                  /* a mod's half-written command on the port */
+        video_port_ctrl((uint16_t)(0x8000 | (r << 8) | v));
+        return;
+    }
     vdp.reg[r] = v;
     if (r == 0 || r == 1)               /* the frame's and the bands' interrupts on or off */
         cpu_set_irq(vdp_irq_level());
@@ -53,7 +62,7 @@ void video_set(int r, uint8_t v)
 void video_reg_word(uint16_t w)
 {
     if (vdp.pending || (w & 0xC000) != 0x8000 || ((w >> 8) & 0x1F) >= 24) {
-        vdp_reg_word(w);                /* not a register word: as the port takes it */
+        video_port_ctrl(w);             /* not a register word: as the port takes it */
         return;
     }
     video_set((w >> 8) & 0x1F, (uint8_t)w);
@@ -63,7 +72,8 @@ void video_at_long(uint32_t cmd)
 {
     uint16_t hi = (uint16_t)(cmd >> 16), lo = (uint16_t)cmd;
     if (vdp.pending) {
-        vdp_command_long(cmd);
+        video_port_ctrl(hi);
+        video_port_ctrl(lo);
         return;
     }
     if ((hi & 0xC000) == 0x8000) {      /* two register words */
@@ -74,7 +84,8 @@ void video_at_long(uint32_t cmd)
     int to = ((hi >> 14) & 3) | ((lo >> 2) & 0x3C);
     uint16_t addr = (uint16_t)((hi & 0x3FFF) | ((lo & 3) << 14));
     if (to & 0x20) {                    /* a copy set up through the registers (mods) */
-        vdp_command_long(cmd);
+        video_port_ctrl(hi);
+        video_port_ctrl(lo);
         return;
     }
     video_at(to, addr);

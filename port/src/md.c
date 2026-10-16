@@ -292,9 +292,9 @@ uint32_t md_read8(uint32_t a)
         return md.ram[a & 0xFFFF];
     if (a >= 0xC00000 && a < 0xC00020) {
         uint16_t w;
-        if (a < 0xC00004) w = vdp_read_data();
-        else if (a < 0xC00008) w = vdp_read_ctrl();
-        else if (a < 0xC00010) w = vdp_read_hv();
+        if (a < 0xC00004) w = video_port_read();
+        else if (a < 0xC00008) w = video_port_status();
+        else if (a < 0xC00010) w = video_port_hv();
         else return 0xFF;
         return (a & 1) ? (w & 0xFF) : (w >> 8);
     }
@@ -317,9 +317,9 @@ uint32_t md_read16(uint32_t a)
     if (a >= 0xE00000)
         return (md.ram[a & 0xFFFF] << 8) | md.ram[(a + 1) & 0xFFFF];
     if (a >= 0xC00000 && a < 0xC00020) {
-        if (a < 0xC00004) return vdp_read_data();
-        if (a < 0xC00008) return vdp_read_ctrl();
-        if (a < 0xC00010) return vdp_read_hv();
+        if (a < 0xC00004) return video_port_read();
+        if (a < 0xC00008) return video_port_status();
+        if (a < 0xC00010) return video_port_hv();
         return 0xFFFF;
     }
     if (a >= 0xA00000 && a < 0xA10000) {
@@ -344,8 +344,8 @@ void md_write8(uint32_t a, uint32_t v)
         return;
     }
     if (a >= 0xC00000 && a < 0xC00020) {
-        if (a < 0xC00004) vdp_write_data((uint16_t)(v | (v << 8)));
-        else if (a < 0xC00008) vdp_write_ctrl((uint16_t)(v | (v << 8)));
+        if (a < 0xC00004) video_port_data((uint16_t)(v | (v << 8)));
+        else if (a < 0xC00008) video_port_ctrl((uint16_t)(v | (v << 8)));
         else if (a >= 0xC00010 && a < 0xC00018 && (a & 1)) psg_write((uint8_t)v);
         return;
     }
@@ -385,8 +385,8 @@ void md_write16(uint32_t a, uint32_t v)
         return;
     }
     if (a >= 0xC00000 && a < 0xC00020) {
-        if (a < 0xC00004) vdp_write_data((uint16_t)v);
-        else if (a < 0xC00008) vdp_write_ctrl((uint16_t)v);
+        if (a < 0xC00004) video_port_data((uint16_t)v);
+        else if (a < 0xC00008) video_port_ctrl((uint16_t)v);
         else if (a >= 0xC00010 && a < 0xC00018) psg_write((uint8_t)v);
         return;
     }

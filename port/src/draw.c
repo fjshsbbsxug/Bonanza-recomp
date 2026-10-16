@@ -75,9 +75,7 @@ static int run(void (*body)(void))
     }
     draw_stat_c++;
     dry = 0; cyc = 0; jumped = 0;
-    vdp_in_c = 1;
     body();
-    vdp_in_c = 0;
     USE_CYCLES(cyc);
     return jumped ? 2 : 1;
 }

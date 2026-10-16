@@ -339,8 +339,7 @@ int main(int argc, char **argv)
             (unsigned long long)cpu_stat_recomp_insns, (unsigned long long)cpu_stat_no_code);
     fprintf(stderr, "drawing routines: %llu calls in C, %llu as translated (an interrupt came within)\n",
             (unsigned long long)draw_stat_c, (unsigned long long)draw_stat_translated);
-    fprintf(stderr, "video control words through the port's latch: %lu\n", vdp_raw_words);
-    fprintf(stderr, "video chip uses: %lu by drawing routines in C, %lu by translated code\n", vdp_uses_c, vdp_uses_translated);
+    fprintf(stderr, "video port words (a mod's own code): %lu\n", video_port_words);
     fprintf(stderr, "z80 instructions: %lu native, %lu lines without native code\n", *game.z80r_insns, z80_stat_no_code);
     return 0;
 }

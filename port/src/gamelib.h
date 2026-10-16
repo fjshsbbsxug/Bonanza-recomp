@@ -7,12 +7,12 @@
  * (on Android: in the app's libraries).
  *
  * The library takes nothing from the system: every name it uses from the engine
- * (memory, the CPU's state, the video chip, the drawing routines in C) is a pointer it
+ * (memory, the CPU's state, the video stores, the drawing routines in C) is a pointer it
  * is given here, by name; it gives back what the engine calls. */
 #ifndef GAMELIB_H
 #define GAMELIB_H
 
-#define BONANZA_GAME_ABI 1
+#define BONANZA_GAME_ABI 2
 #define BONANZA_GAME_ENTRY "bonanza_game"
 
 typedef struct { const char *name; void *p; } bonanza_sym;

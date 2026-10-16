@@ -111,7 +111,7 @@ builder/      the HTML builder page
   md.c runs the program it finds in Z80 RAM (`z80r_program`); writing over its code
   bytes makes it look again. The sound chips (YM2612, PSG) are simulated only to record
   the sounds, or to play them when there is no recording (below).
-* **Drawing** (`port/src/draw.c`, `vdp.c`):
+* **Drawing** (`port/src/draw.c`, `video.c`, `vdp.c`):
   * The game's drawing routines are written in C: tile loading (raw and packed), lines
     of text and the queued text, the HUD (frame, stage name, time, scores, counters),
     the split screen's line effects (one function per band), the planes' new columns
@@ -127,8 +127,15 @@ builder/      the HTML builder page
     change where video data goes: on the console a tile copy they cut into is partly
     sent elsewhere, as happens once in stage 9), the game's routine runs as translated
     so it is stopped at the same instruction.
-  * The game's other commands to the video chip are decoded when its code is translated
-    (registers and where data goes: direct calls).
+  * They write the video stores directly (`port/src/video.h`): a word to video memory,
+    the palette or the vertical scroll at a cursor, a register by number, copies from RAM,
+    fills and copies within video memory as plain loops. No console port, command words,
+    status polls or copies set up through registers. The game's own translated code (and
+    a mod's routines, when they are translated) make the same calls; the console's port
+    is kept only for a mod's code in other shapes (`video port words` in the headless
+    runner counts what goes through it: none for the game and the maker's mods).
+  * The split screen's band routines run at the lines a band schedule gives (each band
+    says, in register 10, how many lines later the next one comes).
   * The game runs a frame at a time (`md_run_frame`), not line by line: the split
     screen's band routines (its line interrupts) run as calls at their lines, the
     picture is drawn at once, then the frame routine (the vertical blank, where the whole

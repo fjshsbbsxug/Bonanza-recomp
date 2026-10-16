@@ -4,6 +4,7 @@
 
 #include "md.h"
 #include "vdp.h"
+#include "video.h"
 #include "draw.h"
 #include "recomp.h"
 #include "gamemods.h"

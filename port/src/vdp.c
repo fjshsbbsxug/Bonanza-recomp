@@ -86,8 +86,9 @@ int vdp_irq_within(int n, int mask)
 
 /* ---------------------------------------------------------------- ports */
 
-/* ---- the console's port, for what still talks to it (a mod's own 68000 code): its
- * commands decoded onto the native stores (video.c) */
+/* ---- the console's port, for what still talks to it (a mod's own 68000 code in
+ * shapes the slot translation does not take): its words decoded onto the native stores
+ * (video.c), copies set up through its registers included */
 static void port_write(uint16_t w)
 {
     video_store(vdp.code, vdp.addr, w);
@@ -142,24 +143,14 @@ static void dma_fill(uint16_t w)            /* after the first word (port_write)
 
 #include <stdio.h>
 #include <stdlib.h>
-static int vlog = -1;   /* VDPLOG: every control word (the decoded commands go through it) */
+static int vlog = -1;   /* VDPLOG: every control word on the port */
 
-/* who used the chip: the drawing routines in C (draw.c sets vdp_in_c while one runs) or
- * the game's translated code; one count for each register, command, word or status */
-int vdp_in_c;
-unsigned long vdp_uses_c, vdp_uses_translated;
-static int vwho = -1;
-static void used_translated(void)
-{
-    vdp_uses_translated++;
-    if (vwho < 0) vwho = getenv("VDPWHO") != NULL;
-    if (vwho) fprintf(stderr, "who %06x\n", cpu_get_pc());
-}
-#define USED() (vdp_in_c ? (void)vdp_uses_c++ : used_translated())
+/* words through the port (a mod's own code that the slot translation does not take) */
+unsigned long video_port_words;
 
-void vdp_write_ctrl(uint16_t w)
+void video_port_ctrl(uint16_t w)
 {
-    USED();
+    video_port_words++;
     if (vlog < 0) vlog = getenv("VDPLOG") != NULL;
     if (vlog) fprintf(stderr, "ctrl %04x line %d frame %u pc %06x\n", w, md.line, md.frame, cpu_get_pc());
     if (vdp.pending) {
@@ -177,11 +168,8 @@ void vdp_write_ctrl(uint16_t w)
     }
     if ((w & 0xC000) == 0x8000) {
         int r = (w >> 8) & 0x1F;
-        if (r < 24) {
-            vdp.reg[r] = (uint8_t)w;
-            if (r == 0 || r == 1)
-                cpu_set_irq(vdp_irq_level());
-        }
+        if (r < 24)
+            video_set(r, (uint8_t)w);
         return;
     }
     vdp.addr = (vdp.addr & 0xC000) | (w & 0x3FFF);
@@ -189,91 +177,20 @@ void vdp_write_ctrl(uint16_t w)
     vdp.pending = 1;
 }
 
-/* The game's video commands, decoded when its code was translated (tools/recomp.py):
- * a register, or where the data that follows goes (and the copy it may start). They do
- * what the command words do when written to the control port one after the other. */
-void vdp_set_reg(int r, uint8_t v)
+void video_port_data(uint16_t w)
 {
-    if (vlog < 0) vlog = getenv("VDPLOG") != NULL;
-    if (vdp.pending || vlog > 0) {       /* half a command waits: the word completes it */
-        vdp_write_ctrl((uint16_t)(0x8000 | (r << 8) | v));
-        return;
-    }
-    USED();
-    vdp.reg[r] = v;
-    if (r == 0 || r == 1)
-        cpu_set_irq(vdp_irq_level());
-}
-
-void vdp_command(uint8_t code, uint16_t addr)
-{
-    if (vlog < 0) vlog = getenv("VDPLOG") != NULL;
-    if (vdp.pending || vlog > 0) {
-        vdp_write_ctrl((uint16_t)(((code & 3) << 14) | (addr & 0x3FFF)));
-        vdp_write_ctrl((uint16_t)(((code & 0x3C) << 2) | (addr >> 14)));
-        return;
-    }
-    USED();
-    vdp.addr = addr;
-    vdp.code = code;
-    if ((code & 0x20) && (vdp.reg[1] & 0x10)) {
-        switch (vdp.reg[23] >> 6) {
-        case 0: case 1: dma_68k(); break;
-        case 2: vdp.fill_pending = 1; break;
-        case 3: dma_copy(); break;
-        }
-    }
-}
-
-/* The game's register words (its copies of the registers at 0xFFC07A..), and commands
- * it makes at run time, decoded here: what writing the words to the control port does.
- * A word the decoding cannot place (half a command waiting) goes through the port's
- * latch; vdp_raw_words counts them (none in the game). */
-unsigned long vdp_raw_words;
-
-void vdp_reg_word(uint16_t w)
-{
-    if (vdp.pending || (w & 0xC000) != 0x8000 || ((w >> 8) & 0x1F) >= 24) {
-        vdp_raw_words++;
-        vdp_write_ctrl(w);
-        return;
-    }
-    vdp_set_reg((w >> 8) & 0x1F, (uint8_t)w);
-}
-
-void vdp_command_long(uint32_t v)
-{
-    uint16_t hi = (uint16_t)(v >> 16), lo = (uint16_t)v;
-    if (vdp.pending) {
-        vdp_raw_words++;
-        vdp_write_ctrl(hi);
-        vdp_write_ctrl(lo);
-        return;
-    }
-    if ((hi & 0xC000) == 0x8000) {               /* two register words */
-        vdp_reg_word(hi);
-        vdp_reg_word(lo);
-        return;
-    }
-    vdp_command((uint8_t)(((hi >> 14) & 3) | ((lo >> 2) & 0x3C)), (uint16_t)((hi & 0x3FFF) | ((lo & 3) << 14)));
-}
-
-void vdp_write_data(uint16_t w)
-{
-    USED();
+    video_port_words++;
     vdp.pending = 0;
+    port_write(w);
     if (vdp.fill_pending) {
         vdp.fill_pending = 0;
-        port_write(w);
         dma_fill(w);
-        return;
     }
-    port_write(w);
 }
 
-uint16_t vdp_read_data(void)
+uint16_t video_port_read(void)
 {
-    USED();
+    video_port_words++;
     uint16_t w = 0;
     vdp.pending = 0;
     switch (vdp.code & 0x0F) {
@@ -285,14 +202,13 @@ uint16_t vdp_read_data(void)
     return w;
 }
 
-uint16_t vdp_read_ctrl(void)
+uint16_t video_port_status(void)
 {
-    USED();
     vdp.pending = 0;
     return video_status();
 }
 
-uint16_t vdp_read_hv(void)
+uint16_t video_port_hv(void)
 {
     int line = md.line;
     int v = line <= 0xEA ? line : line - 6; /* NTSC jump EA -> E5 */

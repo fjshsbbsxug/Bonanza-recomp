@@ -400,28 +400,32 @@ VDP_DATA, VDP_CTRL = 0xC00000, 0xC00004
 
 
 def video_words(words):
-    """C calls for control words written one after the other (none waiting before)."""
+    """Native video calls (port/src/video.h) for control words written one after the
+    other (none waiting before)."""
     out, i = [], 0
     while i < len(words):
         w = words[i]
         if (w & 0xC000) == 0x8000 and ((w >> 8) & 0x1F) < 24:
-            out.append("vdp_set_reg(%d, 0x%02X);" % ((w >> 8) & 0x1F, w & 0xFF))
+            out.append("video_set(%d, 0x%02X);" % ((w >> 8) & 0x1F, w & 0xFF))
             i += 1
         elif (w & 0xC000) != 0x8000 and i + 1 < len(words):
             hi, lo = w, words[i + 1]
             code = ((hi >> 14) & 3) | ((lo >> 2) & 0x3C)
             addr = (hi & 0x3FFF) | ((lo & 3) << 14)
-            out.append("vdp_command(0x%02X, 0x%04X);" % (code, addr))
+            if code & 0x20:                                     # a copy the registers set up
+                out.append("video_at_long(0x%04X%04Xu);" % (hi, lo))
+            else:
+                out.append("video_at(0x%02X, 0x%04X);" % (code, addr))
             i += 2
         else:
-            out.append("vdp_write_ctrl(0x%04X);" % w)
+            out.append("video_port_ctrl(0x%04X);" % w)
             i += 1
     return " ".join(out)
 
 
 def video_calls(spec, stats):
-    """Writes and reads of the video chip's ports as direct calls; fixed control words
-    (registers, where data goes) decoded now."""
+    """Writes and reads of the video chip's ports as native video calls; fixed control
+    words (registers, where data goes) decoded now."""
     m = re.search(r"uint ea = 0x([0-9A-F]+)u;", spec)
     w = re.search(r"m68ki_write_(16|32)\(ea, res\);", spec)
     if m and w and int(m.group(1), 16) in (VDP_DATA, VDP_CTRL):
@@ -433,18 +437,21 @@ def video_calls(spec, stats):
             call = video_words(words)
             stats["video_fixed"] += 1
         elif port == VDP_CTRL and size == 32:
-            call = "vdp_command_long(res);"                  # a command made at run time
+            call = "video_at_long(res);"                     # a command made at run time
             stats["video_decoded"] += 1
         elif port == VDP_CTRL and re.search(r"uint res = m68ki_read_16\(0xFFC0[7-9A][0-9A-F]u\);", spec):
-            call = "vdp_reg_word((uint16_t)res);"            # the game's copy of a register
+            call = "video_reg_word((uint16_t)res);"          # the game's copy of a register
+            stats["video_decoded"] += 1
+        elif port == VDP_DATA:
+            call = ("video_put((uint16_t)(res >> 16)); video_put((uint16_t)res);" if size == 32
+                    else "video_put((uint16_t)res);")
             stats["video_decoded"] += 1
         else:
-            fn = "vdp_write_data" if port == VDP_DATA else "vdp_write_ctrl"
-            call = ("%s((uint16_t)(res >> 16)); %s((uint16_t)res);" % (fn, fn) if size == 32
-                    else "%s((uint16_t)res);" % fn)
+            call = ("video_port_ctrl((uint16_t)(res >> 16)); video_port_ctrl((uint16_t)res);" if size == 32
+                    else "video_port_ctrl((uint16_t)res);")
             stats["video_port"] += 1
         spec = spec[:w.start()] + call + spec[w.end():]
-    for port, fn in ((VDP_DATA, "vdp_read_data"), (VDP_CTRL, "vdp_read_ctrl")):
+    for port, fn in ((VDP_DATA, "video_port_read"), (VDP_CTRL, "video_status")):
         pat = "m68ki_read_16(0x%Xu)" % port
         if pat in spec:
             spec = spec.replace(pat, "%s()" % fn)
@@ -919,8 +926,8 @@ def gen_cycles(mu):
 
 LIB_FUNCS = ["m68k_read_memory_8", "m68k_read_memory_16", "m68k_read_memory_32",
              "m68k_write_memory_8", "m68k_write_memory_16", "m68k_write_memory_32",
-             "md_int_ack", "vdp_write_ctrl", "vdp_write_data", "vdp_set_reg", "vdp_command",
-             "vdp_reg_word", "vdp_command_long", "vdp_read_ctrl", "vdp_read_data",
+             "md_int_ack", "video_at", "video_at_long", "video_put", "video_set", "video_reg_word",
+             "video_status", "video_port_ctrl", "video_port_read",
              "game_hook", "slot_find", "slot_reset", "fprintf"]
 LIB_DATA = ["m68ki_cpu", "m68ki_remaining_cycles", "m68ki_shift_32_table", "cpu_stat_recomp_insns",
             "cpu_irq_dirty", "md", "game_hooks", "stderr"]
