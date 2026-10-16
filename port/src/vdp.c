@@ -356,6 +356,32 @@ uint16_t vdp_read_hv(void)
 
 /* ---------------------------------------------------------------- render */
 
+/* The picture of a frame: video memory as it is when the picture is drawn (the frame's
+ * logic done, before its vertical blank), and its bands - runs of lines drawn with the
+ * same registers, palette and scroll. The game's band routines (its line interrupts)
+ * change the scroll between the split screen's parts, and once in a while the logic
+ * turns the display off part way down. Each line's look is taken as the line starts
+ * (vdp_line_capture), the picture is drawn from them at once (vdp_render_frame). */
+typedef struct {
+    uint8_t  reg[24];       /* the registers the picture uses (look_reg); the others 0 */
+    uint16_t cram[64];      /* palette */
+    uint16_t vsram[40];     /* vertical scroll */
+    uint16_t hs[2];         /* horizontal scroll of plane A / B */
+} pic_look;
+typedef struct { int y0, y1; pic_look look; } pic_band;      /* lines y0 .. y1-1 */
+static struct { int n; pic_band band[224]; uint8_t band_of[224]; } pic;
+static const pic_look *cur;     /* the look of the line being drawn */
+static const uint8_t *V;        /* the picture's video memory */
+
+/* a line's horizontal scroll (the split screen's band routines rewrite the table while
+ * the picture is shown, so it is the line's own) */
+static int pic_hscroll(int y, int plane_b)
+{
+    if (y < 0) y = 0;
+    if (y > 223) y = 223;
+    return pic.band[pic.band_of[y]].look.hs[plane_b];
+}
+
 /* pixel encoding in line buffers: bit7 = priority, bits0-5 = palette index, 0 in low nibble = transparent */
 
 static inline int tile_pixel(uint16_t entry, int px, int py)
@@ -363,7 +389,7 @@ static inline int tile_pixel(uint16_t entry, int px, int py)
     if (entry & 0x1000) py = 7 - py;
     if (entry & 0x0800) px = 7 - px;
     uint32_t a = ((entry & 0x07FF) << 5) + (py << 2) + (px >> 1);
-    uint8_t b = vdp.vram[a & 0xFFFF];
+    uint8_t b = V[a & 0xFFFF];
     int c = (px & 1) ? (b & 0x0F) : (b >> 4);
     if (!c)
         return (entry >> 8) & 0x80;    /* transparent; the priority still counts for shadows */
@@ -385,21 +411,20 @@ static uint16_t map_entry(int wx, int wy);
 static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
 {
     static const int sizes[4] = {32, 64, 32, 128};
-    int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
-    uint32_t name = plane_b ? (vdp.reg[4] & 0x07) << 13 : (vdp.reg[2] & 0x38) << 10;
-    extern int line_hscroll_pub(int y, int plane_b);
-    int hs = line_hscroll_pub(y, plane_b);
-    int column_vs = vdp.reg[11] & 4;
+    int pw = sizes[cur->reg[16] & 3], ph = sizes[(cur->reg[16] >> 4) & 3];
+    uint32_t name = plane_b ? (cur->reg[4] & 0x07) << 13 : (cur->reg[2] & 0x38) << 10;
+    int hs = pic_hscroll(y, plane_b);
+    int column_vs = cur->reg[11] & 4;
     if (ovr_hs >= 0) { hs = ovr_hs; column_vs = 0; }
     int wmask = pw * 8 - 1, hmask = ph * 8 - 1;
-    int vs = ovr_vs >= 0 ? ovr_vs : vdp.vsram[plane_b];
+    int vs = ovr_vs >= 0 ? ovr_vs : cur->vsram[plane_b];
     int last_tile = -1, last_py = -1;
     uint16_t entry = 0;
     for (int x = -m; x < width + m; x++) {
         if (column_vs) {
             int col = x < 0 ? 0 : (x >> 4);
             if (col > (width >> 4) - 1) col = (width >> 4) - 1;
-            vs = vdp.vsram[col * 2 + plane_b];
+            vs = cur->vsram[col * 2 + plane_b];
         }
         int sx = x;
         if (wrap_margins && (x < 0 || x >= width))
@@ -409,7 +434,7 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
         int tile = px >> 3;
         if (tile != last_tile || py != last_py) {
             uint32_t ea = name + (((py >> 3) * pw + tile) << 1);
-            entry = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
+            entry = (V[ea & 0xFFFF] << 8) | V[(ea + 1) & 0xFFFF];
             last_tile = tile;
             last_py = py;
         }
@@ -428,20 +453,20 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
 static void draw_window(uint8_t *out, int y, int width, int m, uint8_t *in_window)
 {
     int h40 = width == 320;
-    uint32_t name = (vdp.reg[3] & (h40 ? 0x3C : 0x3E)) << 10;
+    uint32_t name = (cur->reg[3] & (h40 ? 0x3C : 0x3E)) << 10;
     int ww = h40 ? 64 : 32;
-    int vp = (vdp.reg[18] & 0x1F) * 8, hp = (vdp.reg[17] & 0x1F) * 16;
-    int vin = (vdp.reg[18] & 0x80) ? (y >= vp) : (y < vp);
+    int vp = (cur->reg[18] & 0x1F) * 8, hp = (cur->reg[17] & 0x1F) * 16;
+    int vin = (cur->reg[18] & 0x80) ? (y >= vp) : (y < vp);
     for (int x = -m; x < width + m; x++) {
         /* outside the real screen the window extends its edge column */
         int cx = x < 0 ? 0 : (x >= width ? width - 1 : x);
-        int hin = (vdp.reg[17] & 0x80) ? (cx >= hp) : (cx < hp);
+        int hin = (cur->reg[17] & 0x80) ? (cx >= hp) : (cx < hp);
         in_window[x + m] = (uint8_t)(vin || hin);
         if (!in_window[x + m])
             continue;
         int wx = x & (ww * 8 - 1);
         uint32_t ea = name + (((y >> 3) * ww + (wx >> 3)) << 1);
-        uint16_t entry = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
+        uint16_t entry = (V[ea & 0xFFFF] << 8) | V[(ea + 1) & 0xFFFF];
         out[x + m] = (uint8_t)tile_pixel(entry, wx & 7, y & 7);
     }
 }
@@ -484,7 +509,7 @@ static int sprite_index(uint16_t attr, int hsz, int vsz, int x, int row)
     if (attr & 0x1000) { cy = vsz - 1 - cy; py = 7 - py; }
     if (attr & 0x0800) { cx = hsz - 1 - cx; px = 7 - px; }
     uint32_t a = (((attr + cx * vsz + cy) & 0x07FF) << 5) + (py << 2) + (px >> 1);
-    uint8_t b = vdp.vram[a & 0xFFFF];
+    uint8_t b = V[a & 0xFFFF];
     return (px & 1) ? (b & 0x0F) : (b >> 4);
 }
 
@@ -637,14 +662,14 @@ static int stack_count;
 static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
 {
     int h40 = width == 320;
-    uint32_t sat = (vdp.reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
+    uint32_t sat = (cur->reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
     int max_sprites = h40 ? 80 : 64, max_line = h40 ? 20 : 16, max_px = h40 ? 320 : 256;
     int link = 0, count = 0, line_count = 0, pixels = 0, masked = 0, seen_nonzero_x = 0;
     int chars = any_char_colors();
     memset(out, 0, width + 2 * m);
     memset(part, 0, width + 2 * m);
     do {
-        const uint8_t *s = &vdp.vram[(sat + link * 8) & 0xFFFF];
+        const uint8_t *s = &V[(sat + link * 8) & 0xFFFF];
         int sy = ((s[0] << 8) | s[1]) & 0x3FF;
         int vsz = (s[2] & 3) + 1, hsz = ((s[2] >> 2) & 3) + 1;
         link = s[3] & 0x7F;
@@ -712,14 +737,15 @@ void vdp_set_aspect(double aspect)
     }
 }
 
-int vdp_margin(void)
+static int margin_for(int width)
 {
-    int width = vdp_width();
     int m = width == 320 ? margin40 : margin32;
     if (width + 2 * m > VDP_FB_W)
         m = (VDP_FB_W - width) / 2;
     return m;
 }
+
+int vdp_margin(void) { return margin_for(vdp_width()); }
 
 int vdp_out_width(void)
 {
@@ -851,15 +877,14 @@ static uint32_t hud_seen_frame;       /* last frame (+1) the HUD was on screen *
 static void hud_entries(uint16_t *out, int width)
 {
     static const int sizes[4] = {32, 64, 32, 128};
-    int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
-    uint32_t name = (vdp.reg[4] & 0x07) << 13;     /* the HUD is in plane B */
-    extern int line_hscroll_pub(int y, int plane_b);
-    int hs = line_hscroll_pub(HUD_Y, 1), vs = vdp.vsram[1];
+    int pw = sizes[cur->reg[16] & 3], ph = sizes[(cur->reg[16] >> 4) & 3];
+    uint32_t name = (cur->reg[4] & 0x07) << 13;     /* the HUD is in plane B */
+    int hs = pic_hscroll(HUD_Y, 1), vs = cur->vsram[1];
     for (int k = 0; k < 16; k++) {
         int x = k * width / 16 + 4;
         int px = (x - hs) & (pw * 8 - 1), py = (HUD_Y + vs) & (ph * 8 - 1);
         uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
-        out[k] = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
+        out[k] = (V[ea & 0xFFFF] << 8) | V[(ea + 1) & 0xFFFF];
     }
 }
 
@@ -886,23 +911,19 @@ static void view_camera(int v, int y0, int hs_reg, int vs_reg, int *camx, int *w
 static int view_matches_map(int y, int camx, int wy, int width)
 {
     static const int sizes[4] = {32, 64, 32, 128};
-    int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
-    uint32_t name = (vdp.reg[2] & 0x38) << 10;
-    int hs = 0, vs = vdp.vsram[0];
-    {
-        extern int line_hscroll_pub(int y, int plane_b);
-        hs = line_hscroll_pub(y, 0);
-    }
+    int pw = sizes[cur->reg[16] & 3], ph = sizes[(cur->reg[16] >> 4) & 3];
+    uint32_t name = (cur->reg[2] & 0x38) << 10;
+    int hs = pic_hscroll(y, 0), vs = cur->vsram[0];  /* (the scroll of line y, the rest of the drawn line's) */
     int good = 0, tested = 0, inside = 0, inside_good = 0;
     for (int x = 4; x < width; x += 16) {
         uint16_t me = map_entry(camx + x, wy);
         int px = (x - hs) & (pw * 8 - 1), py = (y + vs) & (ph * 8 - 1);
         uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
-        uint16_t ve = (vdp.vram[ea & 0xFFFF] << 8) | vdp.vram[(ea + 1) & 0xFFFF];
+        uint16_t ve = (V[ea & 0xFFFF] << 8) | V[(ea + 1) & 0xFFFF];
         tested++;
         if (me == 0xFFFF) {
             /* outside the building: the game shows an empty tile there */
-            const uint8_t *t = &vdp.vram[(ve & 0x07FF) << 5];
+            const uint8_t *t = &V[(ve & 0x07FF) << 5];
             int blank = 1;
             for (int i = 0; i < 32 && blank; i++) blank = !t[i];
             good += blank;
@@ -973,49 +994,43 @@ static int line_opaque(const uint8_t *buf, int m, int width)
     return 0;
 }
 
-static int line_hscroll(int y, int plane_b);
+/* ---------------------------------------------------------------- the picture */
 static int hscroll_now(int y, int plane_b);
-int line_hscroll_pub(int y, int plane_b) { return line_hscroll(y, plane_b); }
+static const uint8_t look_reg[24] = {0,1,1,1,1,1,0,1,0,0,0,1,1,1,0,0,1,1,1,0,0,0,0,0};
 
-/* ---------------------------------------------------------------- the frame, drawn at once
- *
- * The game's code runs for the whole frame first; while it runs, the state the picture
- * takes line by line (registers, palette, vertical scroll, the line's horizontal scroll:
- * what the game's line effects change between the split screen's bands) is kept for
- * each line, and the picture is drawn from it when the frame is over. */
-typedef struct {
-    uint8_t  reg[24];
-    uint16_t cram[64];
-    uint16_t vsram[40];
-    uint16_t hs[2];          /* the line's horizontal scroll (the frame driver) */
-} line_state;
-static line_state lines[224];
-
+/* line y's look, as the line starts (md.c: before its band routine) */
 void vdp_line_capture(int y)
 {
-    line_state *l = &lines[y];
-    memcpy(l->reg, vdp.reg, sizeof(l->reg));
-    memcpy(l->cram, vdp.cram, sizeof(l->cram));
-    memcpy(l->vsram, vdp.vsram, sizeof(l->vsram));
-    l->hs[0] = (uint16_t)hscroll_now(y, 0);
-    l->hs[1] = (uint16_t)hscroll_now(y, 1);
+    pic_look l;
+    memset(&l, 0, sizeof(l));
+    for (int r = 0; r < 24; r++)
+        if (look_reg[r]) l.reg[r] = vdp.reg[r];
+    memcpy(l.cram, vdp.cram, sizeof(l.cram));
+    memcpy(l.vsram, vdp.vsram, sizeof(l.vsram));
+    l.hs[0] = (uint16_t)hscroll_now(y, 0);
+    l.hs[1] = (uint16_t)hscroll_now(y, 1);
+    if (y == 0)
+        pic.n = 0;
+    if (!pic.n || memcmp(&pic.band[pic.n - 1].look, &l, sizeof(l))) {
+        pic.band[pic.n].y0 = y;
+        pic.band[pic.n].look = l;
+        pic.n++;
+    }
+    pic.band[pic.n - 1].y1 = y + 1;
+    pic.band_of[y] = (uint8_t)(pic.n - 1);
 }
 
+static void render_line(int y);
+
+/* the picture, top to bottom (the port's extras carry decisions from line to line) */
 void vdp_render_frame(void)
 {
-    line_state live;
-    memcpy(live.reg, vdp.reg, sizeof(live.reg));
-    memcpy(live.cram, vdp.cram, sizeof(live.cram));
-    memcpy(live.vsram, vdp.vsram, sizeof(live.vsram));
-    for (int y = 0; y < 224; y++) {
-        memcpy(vdp.reg, lines[y].reg, sizeof(live.reg));
-        memcpy(vdp.cram, lines[y].cram, sizeof(live.cram));
-        memcpy(vdp.vsram, lines[y].vsram, sizeof(live.vsram));
-        vdp_render_line(y);
+    V = vdp.vram;
+    for (int b = 0; b < pic.n; b++) {
+        cur = &pic.band[b].look;
+        for (int y = pic.band[b].y0; y < pic.band[b].y1; y++)
+            render_line(y);
     }
-    memcpy(vdp.reg, live.reg, sizeof(live.reg));
-    memcpy(vdp.cram, live.cram, sizeof(live.cram));
-    memcpy(vdp.vsram, live.vsram, sizeof(live.vsram));
 }
 
 /* the horizontal scroll in the table in video memory, as it is now */
@@ -1031,14 +1046,6 @@ static int hscroll_now(int y, int plane_b)
     return ((vdp.vram[hsa & 0xFFFF] << 8) | vdp.vram[(hsa + 1) & 0xFFFF]) & 0x3FF;
 }
 
-/* a line's horizontal scroll: the split screen's band routines rewrite the table while
- * the picture is shown, so each line's value is kept as it starts */
-static int line_hscroll(int y, int plane_b)
-{
-    if (y >= 0 && y < 224)
-        return lines[y].hs[plane_b];
-    return hscroll_now(y, plane_b);
-}
 
 /* Shadow / highlight (register 12 bit 3), used for the spotlights of the story and
  * targets screens. Where neither plane's tile has priority, the picture is shadowed
@@ -1073,10 +1080,10 @@ static void shade_line(uint16_t *fb, const uint8_t *s, const uint8_t *a, const u
     }
 }
 
-void vdp_render_line(int y)
+static void render_line(int y)
 {
-    int width = vdp_width();
-    int m = vdp_margin();
+    int width = (cur->reg[12] & 0x01) ? 320 : 256;
+    int m = margin_for(width);
     int ow = width + 2 * m;
     if (y == 0) {
         /* player 2's screen in an online game: while he plays, his view (lines 7-86)
@@ -1094,9 +1101,9 @@ void vdp_render_line(int y)
     uint16_t *fb = vdp.fbmd[in_real ? VIEW_BOT_Y0 + y - real_y0 : in_other ? VIEW_TOP_Y0 + y - other_y0 : y];
     uint16_t pal[64];
     for (int i = 0; i < 64; i++)
-        pal[i] = md_color_index(vdp.cram[i]);
-    uint16_t bg = pal[vdp.reg[7] & 0x3F];
-    if (!(vdp.reg[1] & 0x40)) {
+        pal[i] = md_color_index(cur->cram[i]);
+    uint16_t bg = pal[cur->reg[7] & 0x3F];
+    if (!(cur->reg[1] & 0x40)) {
         for (int x = 0; x < VDP_FB_W; x++)
             fb[x] = bg;
         return;
@@ -1125,12 +1132,12 @@ void vdp_render_line(int y)
     if (y == 0 && wobj_count) {
         /* drop pieces the game's own sprite table already shows */
         int h40 = width == 320, n = 0;
-        uint32_t sat = (vdp.reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
+        uint32_t sat = (cur->reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
         for (int i = 0; i < wobj_count; i++) {
             const wobj_sprite *w = &wobj_list[i];
             int dup = 0, link = 0, count = 0;
             do {
-                const uint8_t *e = &vdp.vram[(sat + link * 8) & 0xFFFF];
+                const uint8_t *e = &V[(sat + link * 8) & 0xFFFF];
                 link = e[3] & 0x7F;
                 if ((((e[0] << 8) | e[1]) & 0x3FF) - 128 == w->y && (((e[6] << 8) | e[7]) & 0x1FF) - 128 == w->x &&
                     ((e[4] << 8) | e[5]) == w->attr) { dup = 1; break; }
@@ -1152,7 +1159,7 @@ void vdp_render_line(int y)
     int vi = in_bot ? 0 : 1;
     int camx = 0, wy0 = 0, map_view = 0;
     if (in_view && level.w) {
-        view_camera(vi, in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0, line_hscroll(y, 0), vdp.vsram[0], &camx, &wy0);
+        view_camera(vi, in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0, pic_hscroll(y, 0), cur->vsram[0], &camx, &wy0);
         if (y == (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0)) {
             /* once per frame and view: check the map against what the game drew */
             view_check(&views[vi], y, camx, wy0, width);
@@ -1163,12 +1170,12 @@ void vdp_render_line(int y)
             static int vlog_top = -1;
             if (vlog_top < 0) vlog_top = getenv("VIEWLOG") != NULL;
             if (vlog_top)
-                fprintf(stderr, "top %u hs %d vs %d\n", md.frame, line_hscroll(y, 0), vdp.vsram[0]);
+                fprintf(stderr, "top %u hs %d vs %d\n", md.frame, pic_hscroll(y, 0), cur->vsram[0]);
         }
         if (y == (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0)) {
             view_rec[vi].frame = md.frame + 1;
-            view_rec[vi].hsB = line_hscroll(y, 1);
-            view_rec[vi].vsB = vdp.vsram[1];
+            view_rec[vi].hsB = pic_hscroll(y, 1);
+            view_rec[vi].vsB = cur->vsram[1];
             view_rec[vi].hsA = camx;      /* full camera x */
             view_rec[vi].vsA = wy0;       /* world y of the view's first line */
             static int vlog_view = -1;
@@ -1287,7 +1294,7 @@ void vdp_render_line(int y)
     if (m && playing && in_view && !map_view && !room_above)
         clamp_edges = 1;
     /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
-    if ((vdp.reg[17] & 0x9F) || (vdp.reg[18] & 0x9F)) {
+    if ((cur->reg[17] & 0x9F) || (cur->reg[18] & 0x9F)) {
         draw_window(wbuf, y, width, m, win);
         for (int x = 0; x < ow; x++)
             if (win[x])
@@ -1321,7 +1328,7 @@ void vdp_render_line(int y)
     } else {
         draw_sprites(s, part, y, width, m);
     }
-    if (vdp.reg[12] & 0x08) {
+    if (cur->reg[12] & 0x08) {
         shade_line(fb, s, a, b, part, pal, bg, ow);
     } else for (int x = 0; x < ow; x++) {
         int p;
