@@ -1383,27 +1383,20 @@ void vdp_render_line(int y)
         map_wy = room_above_wy + (y - other_y0);
         draw_plane(a, y, width, m, 0);
         map_on = map_all = 0;
-        /* Open air above the roof (at the top of the level): not a second copy of the
-         * city but the sky - the background lined up with player
-         * 1's own view where the two overlap, above it the colour at the top of his
-         * view's sky. Windows and rooms keep the game's own background. */
+        /* Open air above the roof (at the top of the level): the background lined up with
+         * player 1's own view, as it lies in the world, and repeated upward above it (a
+         * view's height at a time) - not a copy at the top view's own place, which
+         * floated a second city above the roof. Windows and rooms keep the game's own
+         * background. */
         uint8_t sky[VDP_FB_W];
-        int line = map_wy - view_rec[focus].vsA, above = line < 0;
+        int line = map_wy - view_rec[focus].vsA;
+        line = ((line % VIEW_H) + VIEW_H) % VIEW_H;
         ovr_hs = view_rec[focus].hsB;
-        ovr_vs = (view_rec[focus].vsB + real_y0 + (above ? 0 : line > VIEW_H - 1 ? VIEW_H - 1 : line) - y) & 0x3FF;
+        ovr_vs = (view_rec[focus].vsB + real_y0 + line - y) & 0x3FF;
         wrap_margins = m != 0;
         draw_plane(sky, y, width, m, 1);
         wrap_margins = 0;
         ovr_hs = ovr_vs = -1;
-        if (above) {
-            /* the sky's colour: the commonest one on the top line of his view's sky */
-            int count[256] = { 0 }, best = 0;
-            for (int x = 0; x < ow; x++)
-                if (sky[x] & 0x0F) count[sky[x]]++;
-            for (int v = 1; v < 256; v++)
-                if (count[v] > count[best]) best = v;
-            memset(sky, best, (size_t)ow);
-        }
         for (int x = -m; x < width + m; x++)
             if (above_roof(map_camx + x, map_wy))
                 b[x + m] = sky[x + m];
