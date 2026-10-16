@@ -7,6 +7,7 @@
 #include "settings.h"
 #include "wideobj.h"
 #include "prophunt.h"
+#include "video.h"
 
 vdp_t vdp;
 static int pic_out_w;       /* the width the last picture was drawn at (0: none yet) */
@@ -85,40 +86,11 @@ int vdp_irq_within(int n, int mask)
 
 /* ---------------------------------------------------------------- ports */
 
-static inline void vram_set(uint16_t a, uint8_t v)
-{
-    vdp.vram[a] = v;
-}
-
-static void vram_write_word(uint16_t a, uint16_t w)
-{
-    if (a & 1)
-        w = (uint16_t)((w >> 8) | (w << 8));
-    vram_set(a & 0xFFFE, (uint8_t)(w >> 8));
-    vram_set((a & 0xFFFE) | 1, (uint8_t)w);
-}
-
+/* ---- the console's port, for what still talks to it (a mod's own 68000 code): its
+ * commands decoded onto the native stores (video.c) */
 static void port_write(uint16_t w)
 {
-    switch (vdp.code & 0x0F) {
-    case 1:
-        vram_write_word(vdp.addr, w);
-        break;
-    case 3: {
-        int i = (vdp.addr >> 1) & 0x3F;
-        vdp.cram[i] = w & 0x0EEE;
-        break;
-    }
-    case 5: {
-        int i = (vdp.addr >> 1) & 0x3F;
-        if (i < 40) {
-            vdp.vsram[i] = w & 0x07FF;
-        }
-        break;
-    }
-    default:
-        break;
-    }
+    video_store(vdp.code, vdp.addr, w);
     vdp.addr += vdp.reg[15];
 }
 
@@ -137,12 +109,8 @@ static void dma_68k(void)
 {
     uint32_t len = dma_len();
     uint32_t src = (vdp.reg[21] | (vdp.reg[22] << 8) | ((vdp.reg[23] & 0x7F) << 16)) << 1;
-    while (len--) {
-        uint16_t w = (uint16_t)md_read16(src);
-        /* source wraps inside a 128 KiB window */
-        src = (src & 0xFE0000) | ((src + 2) & 0x1FFFF);
-        port_write(w);
-    }
+    vdp.addr = video_from_ram(vdp.code, vdp.addr, src, len, vdp.reg[15]);
+    src = (src & 0xFE0000) | ((src + 2 * len) & 0x1FFFF);
     src >>= 1;
     vdp.reg[21] = src & 0xFF;
     vdp.reg[22] = (src >> 8) & 0xFF;
@@ -153,25 +121,18 @@ static void dma_copy(void)
 {
     uint32_t len = dma_len();
     uint16_t src = vdp.reg[21] | (vdp.reg[22] << 8);
-    while (len--) {
-        vram_set(vdp.addr, vdp.vram[src]);
-        src++;
-        vdp.addr += vdp.reg[15];
-    }
+    vdp.addr = video_vram_copy(vdp.addr, src, len, vdp.reg[15]);
+    src = (uint16_t)(src + len);
     vdp.reg[21] = src & 0xFF;
     vdp.reg[22] = src >> 8;
     dma_set_len0();
 }
 
-static void dma_fill(uint16_t w)
+static void dma_fill(uint16_t w)            /* after the first word (port_write) */
 {
     uint32_t len = dma_len();
-    uint8_t b = (uint8_t)(w >> 8);
     if ((vdp.code & 0x0F) == 1) {
-        while (len--) {
-            vram_set(vdp.addr ^ 1, b);
-            vdp.addr += vdp.reg[15];
-        }
+        vdp.addr = (uint16_t)(video_fill((uint16_t)(vdp.addr - vdp.reg[15]), len, vdp.reg[15], w));
     } else {
         while (len--)
             port_write(w);
