@@ -19,7 +19,6 @@ typedef struct {
     uint16_t addr;
     uint8_t  code;
     int      fill_pending;
-    uint16_t read_buf;
 
     int      vint_pending, hint_pending;
     int      vint_flag;    /* status F bit */
@@ -27,7 +26,6 @@ typedef struct {
     int      in_vblank;
 
     uint16_t fbmd[224][VDP_FB_W];  /* picture as 9-bit Mega Drive colours (see md_color_index) */
-    uint32_t palette[64];  /* cached CRAM -> RGB */
 } vdp_t;
 
 extern vdp_t vdp;
@@ -36,7 +34,6 @@ extern vdp_t vdp;
 void     vdp_set_aspect(double aspect);  /* 4/3 = original, 16/9 = widescreen */
 
 void     vdp_reset(void);
-void     vdp_refresh_palette(void);  /* after md_color_lut changes */
 extern void     vdp_write_ctrl(uint16_t w);
 extern void     vdp_write_data(uint16_t w);
 extern void     vdp_set_reg(int r, uint8_t v);            /* a register (decoded command) */

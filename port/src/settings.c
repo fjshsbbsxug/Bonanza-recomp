@@ -200,7 +200,6 @@ void settings_apply(void)
         l[CHAR_SLOT_SKIN] = 0xFF000000u | settings.char_rgb[c][PART_SKIN];
         l[CHAR_SLOT_SKIN_DARK] = shade(settings.char_rgb[c][PART_SKIN], 0.80);     /* like 740 -> 620 */
     }
-    vdp_refresh_palette();
     md_set_aspect(settings_aspect());
     game_mods_apply();
 }

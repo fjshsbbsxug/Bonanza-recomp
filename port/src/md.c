@@ -1,4 +1,4 @@
-/* Mega Drive machine: memory map, I/O, Z80 + sound, frame scheduler. */
+/* Mega Drive machine: memory map, I/O, Z80 + sound, the frame (md_run_frame). */
 #include <string.h>
 #include <stdio.h>
 #include "extrastages.h"
@@ -600,9 +600,8 @@ int md_snd_take(int16_t *out[MD_SND_STEMS], int max)
 /* back to the normal machine (the next md_reset sets everything up) */
 void md_snd_end(void) { snd_stems = 0; }
 
-/* a request, as the game's sub_02DC2 / sub_02D98 make it (pause: 0x1C10) */
+/* a request, as the game's sub_02DC2 / sub_02D98 make it */
 void md_snd_command(uint8_t id) { md.zram[0x1C0A] = id; }
-void md_snd_pause(uint8_t v) { md.zram[0x1C10] = v; }
 
 /* one video frame's time of sound (output in md_audio_take): for the recorder, and for
  * the game without recorded sounds, after the 68000's frame */

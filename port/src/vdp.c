@@ -1,4 +1,5 @@
-/* Mega Drive VDP (YM7101): ports, DMA and a per-scanline renderer. */
+/* Mega Drive VDP (YM7101): ports, DMA, and the picture: drawn once a frame from video
+ * memory and its bands (see "the picture" below). */
 #include <stdlib.h>
 #include <string.h>
 #include "vdp.h"
@@ -10,24 +11,12 @@
 vdp_t vdp;
 static int pic_out_w;       /* the width the last picture was drawn at (0: none yet) */
 
-static void update_palette(int i)
-{
-    vdp.palette[i] = md_color_lut[md_color_index(vdp.cram[i])];
-}
-
-void vdp_refresh_palette(void)
-{
-    for (int i = 0; i < 64; i++)
-        update_palette(i);
-}
-
 void vdp_reset(void)
 {
     if (!md_color_lut_ready)
         settings_apply(); /* default colours (all-zero settings are the defaults) */
     memset(&vdp, 0, sizeof(vdp));
     pic_out_w = 0;
-    vdp_refresh_palette();
 }
 
 int vdp_width(void) { return (vdp.reg[12] & 0x01) ? 320 : 256; }
@@ -118,7 +107,6 @@ static void port_write(uint16_t w)
     case 3: {
         int i = (vdp.addr >> 1) & 0x3F;
         vdp.cram[i] = w & 0x0EEE;
-        update_palette(i);
         break;
     }
     case 5: {

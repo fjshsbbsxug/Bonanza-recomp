@@ -127,13 +127,17 @@ builder/      the HTML builder page
     change where video data goes: on the console a tile copy they cut into is partly
     sent elsewhere, as happens once in stage 9), the game's routine runs as translated
     so it is stopped at the same instruction.
-  * Each change a routine makes goes with the line the game's routine would have made it
-    in, so a routine still running while the picture is shown draws the same picture.
   * The game's other commands to the video chip are decoded when its code is translated
     (registers and where data goes: direct calls).
-  * The picture is drawn at once at the start of the vertical blank from the state each
-    line had (registers, palette, scroll and the tiles and maps changed while it was
-    shown), with shadow / highlight (the spotlights of the story and targets screens).
+  * The game runs a frame at a time (`md_run_frame`), not line by line: the split
+    screen's band routines (its line interrupts) run as calls at their lines, the
+    picture is drawn at once, then the frame routine (the vertical blank, where the whole
+    game runs) goes on until the game is idle. The play screen's routine waits for the
+    next picture's top band and goes on from that line. No time is kept within a line.
+  * Each frame's picture is the video memory as it is when it is drawn, plus its bands:
+    runs of lines with the same registers, palette and scroll, as the band routines set
+    them (the game also turns the display off part way down once in a while). It is
+    drawn with shadow / highlight (the spotlights of the story and targets screens).
   * Checked against the build with no routines in C: the same game state, sound and
     picture in every frame of the reference runs (`--picture-hash` in the headless
     runner).
@@ -162,7 +166,9 @@ builder/      the HTML builder page
   on them until it ends; E0 fades 0.75 dB every 6 music ticks for 40 steps, E1 stops,
   E4/E5 (voices) cut the effects and hold the song; pause holds everything. A sound
   starts at the line in the frame where it was asked for. The Z80, YM2612 and PSG are not
-  run while the game plays (`--sounds FILE` in the headless runner).
+  run while the game plays (`--sounds FILE` in the headless runner). Without a recording
+  (when it cannot be written), they run for one frame after each of the game's frames:
+  the game itself is the same either way.
 * The recompiled code yields to the scheduler at exactly the points the interpreter
   does. A recompiled run is therefore **bit-identical** to an interpreted one; this was
   checked frame by frame over the attract mode, menus, and gameplay on x86-64, Windows
@@ -390,8 +396,9 @@ the ROM, so the cross builds take the native build's: `-DBONANZA_SOUNDS=build/so
 `bonanza-headless ROM --make-sounds FILE` does the recording alone.
 
 ```sh
-# regression check: state hashes (and --wav audio) must stay as recorded before a change
-build/bonanza-headless baserom.md --frames 1500 --hash > a.txt
+# regression check: state hashes and pictures (and --wav audio) must stay as recorded
+# before a change (the same with or without --sounds FILE)
+build/bonanza-headless baserom.md --frames 1500 --hash --picture-hash > a.txt
 ```
 
 After changing the tracer or `tools/config.py`, the build translates the game's code
