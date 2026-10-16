@@ -22,11 +22,16 @@ void vdp_reset(void)
 
 int vdp_width(void) { return (vdp.reg[12] & 0x01) ? 320 : 256; }
 
+/* The frame routine (the vertical blank) and the split screen's band routines (the
+ * line interrupts): which is due. A band routine runs at the line band_next; register
+ * 10, as the band set it, says how many lines later the next one comes; after the
+ * picture the count starts again from the top. Register 0 bit 4 lets the bands in,
+ * register 1 bit 5 the frame routine. */
 int vdp_irq_level(void)
 {
-    if (vdp.vint_pending && (vdp.reg[1] & 0x20))
+    if (vdp.frame_due && (vdp.reg[1] & 0x20))
         return 6;
-    if (vdp.hint_pending && (vdp.reg[0] & 0x10))
+    if (vdp.band_due && (vdp.reg[0] & 0x10))
         return 4;
     return 0;
 }
@@ -34,49 +39,44 @@ int vdp_irq_level(void)
 void vdp_ack_irq(int level)
 {
     if (level == 6)
-        vdp.vint_pending = 0;
+        vdp.frame_due = 0;
     else if (level == 4)
-        vdp.hint_pending = 0;
+        vdp.band_due = 0;
     cpu_set_irq(vdp_irq_level());
 }
 
 void vdp_line_start(int line)
 {
     if (line <= 224) {
-        if (--vdp.hint_counter < 0) {
-            vdp.hint_counter = vdp.reg[10];
-            vdp.hint_pending = 1;
+        if (line == vdp.band_next) {
+            vdp.band_due = 1;
+            vdp.band_next = line + vdp.reg[10] + 1;
         }
     } else {
-        vdp.hint_counter = vdp.reg[10];
+        vdp.band_next = vdp.reg[10];
     }
-    if (line == 224) {
-        vdp.in_vblank = 1;
-        vdp.vint_pending = 1;
-        vdp.vint_flag = 1;
-    } else if (line == 0) {
-        vdp.in_vblank = 0;
-    }
+    if (line == 224)
+        vdp.frame_due = 1;
     cpu_set_irq(vdp_irq_level());
 }
 
-/* would an interrupt above the mask be raised at one of the next n line starts (or is
- * one waiting)? Nothing changes. */
+/* would a routine above the mask be due at one of the next n line starts (or is one
+ * waiting)? Nothing changes. */
 int vdp_irq_within(int n, int mask)
 {
     if (vdp_irq_level() > mask)
         return 1;
-    int c = vdp.hint_counter;
+    int next = vdp.band_next;
     for (int i = 1; i <= n; i++) {
         int line = (md.line + i) % MD_LINES;
         if (line <= 224) {
-            if (--c < 0) {
-                c = vdp.reg[10];
+            if (line == next) {
+                next = line + vdp.reg[10] + 1;
                 if ((vdp.reg[0] & 0x10) && mask < 4)
                     return 1;
             }
         } else {
-            c = vdp.reg[10];
+            next = vdp.reg[10];
         }
         if (line == 224 && (vdp.reg[1] & 0x20) && mask < 6)
             return 1;
@@ -288,14 +288,8 @@ uint16_t vdp_read_data(void)
 uint16_t vdp_read_ctrl(void)
 {
     USED();
-    uint16_t s = 0x3400 | 0x0200 | 0x04; /* FIFO empty; no time is kept within a line: in its blank */
     vdp.pending = 0;
-    if (vdp.vint_flag)
-        s |= 0x80;
-    if (vdp.in_vblank || !(vdp.reg[1] & 0x40))
-        s |= 0x08;
-    vdp.vint_flag = 0;
-    return s;
+    return video_status();
 }
 
 uint16_t vdp_read_hv(void)

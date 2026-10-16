@@ -20,10 +20,8 @@ typedef struct {
     uint8_t  code;
     int      fill_pending;
 
-    int      vint_pending, hint_pending;
-    int      vint_flag;    /* status F bit */
-    int      hint_counter;
-    int      in_vblank;
+    int      frame_due, band_due;  /* the frame routine / a band routine is due */
+    int      band_next;            /* the line the next band routine runs at */
 
     uint16_t fbmd[224][VDP_FB_W];  /* picture as 9-bit Mega Drive colours (see md_color_index) */
 } vdp_t;
@@ -53,7 +51,7 @@ int      vdp_margin(void);      /* widescreen extra pixels per side */
 int      vdp_out_width(void);   /* width of the last picture in vdp.fbmd (as it was drawn) */
 int      vdp_irq_level(void);   /* highest pending & enabled interrupt (0, 4 or 6) */
 void     vdp_ack_irq(int level);
-void     vdp_line_start(int line); /* raster bookkeeping (HINT/VINT) */
+void     vdp_line_start(int line); /* a line starts: a band routine, or the frame routine, may be due */
 int      vdp_irq_within(int lines, int mask); /* an interrupt at one of the next line starts? */
 
 /* online games: the player at this screen (0 or 1), -1 = local game. Each player sees

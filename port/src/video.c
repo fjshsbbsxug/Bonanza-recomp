@@ -114,10 +114,5 @@ uint16_t video_vram_copy(uint16_t dst, uint16_t src, uint32_t len, int stride)
 
 uint16_t video_status(void)
 {
-    uint16_t s = 0x3400 | 0x0200 | 0x04;
-    if (vdp.vint_flag)
-        s |= 0x80;
-    if (vdp.in_vblank || !(vdp.reg[1] & 0x40))
-        s |= 0x08;
-    return s;
+    return 0x3400 | 0x0200 | 0x04;     /* nothing waiting, never busy */
 }
