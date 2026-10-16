@@ -10,13 +10,18 @@
  * then the generated code for each instruction, with the same yield points, cycles and
  * results as the recompiled cartridge code.
  *
+ * A move of an immediate to the console's video ports (the maker's tile loader says
+ * where its tiles go that way) becomes the native video call (video.c), with the
+ * instruction's flags and time.
+ *
  * Code in other shapes (not made by the level maker) is not taken: slot_find() returns 0
  * and the CPU takes it as an instruction it cannot run (cpu68k.c). */
 #include <string.h>
 #include "slotcode.h"
 #include "recomp_rt.h"
+#include "video.h"
 
-enum { K_FORM, K_JSR, K_JMP, K_RTS };
+enum { K_FORM, K_JSR, K_JMP, K_RTS, K_VIDEO };
 
 typedef struct {
     uint32_t addr, target;
@@ -90,6 +95,9 @@ static int translate(uint32_t pc)
         s->f = f;
         s->size = (uint8_t)(2 + 2 * f->nwords);
         for (int k = 0; k < f->nwords; k++) s->w[k] = rd16(a + 2 + 2 * k);
+        if ((op == 0x23FC && ((uint32_t)s->w[2] << 16 | s->w[3]) == 0xC00004) ||
+            (op == 0x33FC && (((uint32_t)s->w[1] << 16 | s->w[2]) & ~4u) == 0xC00000))
+            s->kind = K_VIDEO;              /* move.l #cmd / move.w #word to the video ports */
         a += s->size;
     }
     if (!n || (tmp[n - 1].kind != K_RTS && tmp[n - 1].kind != K_JMP)) return 0;
@@ -112,6 +120,21 @@ static void slot_run(void)
         switch (s->kind) {
         case K_FORM:
             s->f->fn(s->w);
+            USE_CYCLES(s->f->cyc);
+            REG_PC = s->addr + s->size;
+            k = lookup(REG_PC);
+            break;
+        case K_VIDEO:
+            if (s->f->op == 0x23FC) {
+                uint32_t v = (uint32_t)s->w[0] << 16 | s->w[1];
+                video_at_long(v);
+                FLAG_N = NFLAG_32(v); FLAG_Z = v;
+            } else {
+                uint16_t v = s->w[0];
+                if (s->w[2] & 4) video_reg_word(v); else video_put(v);
+                FLAG_N = NFLAG_16(v); FLAG_Z = v;
+            }
+            FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
             USE_CYCLES(s->f->cyc);
             REG_PC = s->addr + s->size;
             k = lookup(REG_PC);
