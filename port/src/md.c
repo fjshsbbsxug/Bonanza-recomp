@@ -42,13 +42,6 @@ static int16_t  last_in[2], prev_in[2];
 static int16_t  audio_buf[AUDIO_BUF * 2];
 static int      audio_len;
 
-extern int cpu_line_cycles(void);
-
-int md_line_cycle(void)
-{
-    return cpu_line_cycles();
-}
-
 static void push_output(int16_t l, int16_t r)
 {
     if (audio_len < AUDIO_BUF) {
@@ -489,14 +482,8 @@ static void z80_line(void)
  * takes longer than a frame (a stage being set up) goes on in the next one. The play
  * screen's routine waits for the next picture's top band (cpu_waiting) and goes on
  * from that line. No time is kept within a frame. */
-static int line_mode = -1;      /* LINEMODE=1: the old line-by-line machine (tests) */
-
-static void md_run_frame_lines(void);
-
 void md_run_frame(void)
 {
-    if (line_mode < 0) line_mode = getenv("LINEMODE") != NULL;
-    if (line_mode) { vdp_frame_driver = 0; md_run_frame_lines(); return; }
     vdp_frame_driver = 1;
     for (int line = 0; line < 224; line++) {
         md.line = line;
@@ -524,39 +511,6 @@ void md_run_frame(void)
         for (int i = 0; i < n; i++) push_output(buf[i * 2], buf[i * 2 + 1]);
     } else {
         md_snd_frame();                 /* no recorded sounds: the sound chips, for this frame */
-    }
-    md.frame++;
-}
-
-static void md_run_frame_lines(void)
-{
-    for (int line = 0; line < MD_LINES; line++) {
-        md.line = line;
-        if (line < 224)
-            vdp_line_capture(line);
-        else if (line == 224)
-            vdp_render_frame();          /* the picture is complete: drawn before the next one's work starts */
-        vdp_line_start(line);
-        if (line == 224)
-            game.z80r_gen_int(&zcpu, 0xFF);
-        z80_line_cyc = 0;
-        cpu_run(MD_CYC68K_LINE);
-        if (!snd_ready()) z80_line();     /* recorded sounds: no sound hardware runs */
-        if (line == 225)
-            zcpu.int_pending = 0;
-        z80_line_cyc = 0;
-        master_line_start += MASTER_LINE;
-        if (!snd_ready()) ym_sync(master_line_start);
-    }
-    if (snd_ready()) {                    /* this frame's sound from the player */
-        static double due;
-        int16_t buf[2048 * 2];
-        due += (double)out_rate * MASTER_LINE * MD_LINES / 53693175.0;
-        int n = (int)due;
-        if (n > 2048) n = 2048;
-        due -= n;
-        snd_render(buf, n, out_rate);
-        for (int i = 0; i < n; i++) push_output(buf[i * 2], buf[i * 2 + 1]);
     }
     md.frame++;
 }

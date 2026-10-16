@@ -10,9 +10,6 @@
 #include "../ext/musashi/m68kcpu.h"
 #include "m68k_rt.h"
 
-static int line_budget;   /* cycles requested for the current slice */
-static int carry;         /* overshoot from the previous slice */
-
 uint64_t cpu_stat_recomp_insns, cpu_stat_no_code;
 
 /* ---- Musashi memory interface ---- */
@@ -75,7 +72,6 @@ void cpu_init(void)
 void cpu_reset(void)
 {
     m68k_rt_reset();
-    carry = 0;
 }
 
 /* Interrupt line changes are applied between instructions only. */
@@ -97,11 +93,6 @@ void cpu_apply_irq(void)
 
 uint32_t cpu_get_pc(void) { return REG_PC; }
 
-int cpu_line_cycles(void)
-{
-    return line_budget - GET_CYCLES();
-}
-
 /* PC where there is no native code (never, for the game, its Bonanza Maker mods and the
  * Lost Levels): the 68000's exception for an instruction it cannot run; the game's own
  * error handler takes it from there. */
@@ -112,41 +103,11 @@ static void no_code(void)
     m68k_rt_no_code();
 }
 
-void cpu_run(int cycles)
-{
-    line_budget = cycles - carry;
-    SET_CYCLES(line_budget);
-    if (cpu_irq_dirty)
-        cpu_apply_irq();
-    if (CPU_STOPPED) {
-        SET_CYCLES(0);
-        carry = 0;
-        return;
-    }
-    while (GET_CYCLES() > 0) {
-        if (cpu_irq_dirty)
-            cpu_apply_irq();
-        if (CPU_STOPPED)
-            break;
-        recomp_fn fn = game.recomp_find(REG_PC);
-        if (fn)
-            fn();
-        else
-            no_code();
-    }
-    carry = CPU_STOPPED ? 0 : -GET_CYCLES();
-    /* keep cpu_line_cycles() meaningful until the next slice */
-    line_budget = cycles;
-    SET_CYCLES(0);
-}
-
 /* ---- the frame driver (md.c): the game's code run as functions, not time-sliced ----
  * The game sits in its reset code's loop (0x45C) between frames; everything it does
  * runs from its frame routine (the vertical blank, 0x98E) and its band routines (the
  * line interrupts, through 0xFFC0B0). */
 static int idle_pc(uint32_t pc) { return pc >= 0x45C && pc < 0x46A; }
-
-int cpu_idle(void) { return idle_pc(REG_PC) && !CPU_STOPPED; }
 
 /* the one place the frame routine waits for the picture: the play screen's routine
  * (0x879C) waits for the top band's routine to set 0xFF17B6 - its logic goes on while
@@ -183,7 +144,6 @@ int cpu_run_until_idle(int cycles)
     }
     int idle = idle_pc(REG_PC);
     SET_CYCLES(0);
-    carry = 0;
     return idle;
 }
 

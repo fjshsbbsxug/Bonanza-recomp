@@ -9,8 +9,6 @@
 
 vdp_t vdp;
 
-extern int md_line_cycle(void);
-
 static void update_palette(int i)
 {
     vdp.palette[i] = md_color_lut[md_color_index(vdp.cram[i])];
@@ -349,15 +347,12 @@ uint16_t vdp_read_data(void)
 uint16_t vdp_read_ctrl(void)
 {
     USED();
-    uint16_t s = 0x3400 | 0x0200; /* FIFO empty */
-    int cyc = md_line_cycle();
+    uint16_t s = 0x3400 | 0x0200 | 0x04; /* FIFO empty; no time is kept within a line: in its blank */
     vdp.pending = 0;
     if (vdp.vint_flag)
         s |= 0x80;
     if (vdp.in_vblank || !(vdp.reg[1] & 0x40))
         s |= 0x08;
-    if (cyc >= 400 || cyc < 20)
-        s |= 0x04;
     vdp.vint_flag = 0;
     return s;
 }
@@ -366,9 +361,7 @@ uint16_t vdp_read_hv(void)
 {
     int line = md.line;
     int v = line <= 0xEA ? line : line - 6; /* NTSC jump EA -> E5 */
-    int h = md_line_cycle() * 342 / MD_CYC68K_LINE;
-    int hc = vdp_width() == 320 ? (h < 0xB7 ? h : h + (0xE4 - 0xB7)) : (h < 0x94 ? h : h + (0xE9 - 0x94));
-    return (uint16_t)(((v & 0xFF) << 8) | ((hc >> 1) & 0xFF));
+    return (uint16_t)((v & 0xFF) << 8);     /* no time is kept within a line (the game never reads it) */
 }
 
 /* ---------------------------------------------------------------- render */
