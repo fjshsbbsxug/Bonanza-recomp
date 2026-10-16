@@ -16,7 +16,6 @@
 #include "recomp_rt.h"
 #include "game.h"
 #include "draw.h"
-#include "sndmix.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -44,7 +43,6 @@ static int span(uint32_t a, uint32_t b)
 }
 
 static int jumped;      /* the routine ended in a jmp to the game's code (REG_PC): 2 */
-static int stops_z80;   /* the routine holds the Z80 (its bus): it must not run past a line */
 static int mask_floor;  /* the lowest interrupt mask the routine sets (7: it sets none) */
 
 /* may the routine, taking this long (its rts too), run in one go? */
@@ -56,10 +54,6 @@ static int may_run(int cost)
     int left = GET_CYCLES();
     if (cost <= left && !(mask_floor < 7 && vdp_irq_level() > mask_floor))
         return 1;
-    /* while the Z80 runs (no recorded sounds) it would run in the lines the game's
-     * routine keeps it stopped */
-    if (stops_z80 && !snd_ready())
-        return 0;
     int mask = (FLAG_INT_MASK >> 8) & 7;
     if (mask_floor < mask) mask = mask_floor;
     return !vdp_irq_within((cost - left) / MD_CYC68K_LINE + 2, mask);
@@ -73,7 +67,7 @@ static int run(void (*body)(void))
     if (trace && md.frame >= (uint32_t)trace)
         fprintf(stderr, "run frame %u body %ld sp %06X line %d left %d\n", md.frame, (long)((char *)body - (char *)run), REG_A[7], md.line, GET_CYCLES());
     m68ki_cpu_core saved = m68ki_cpu;  /* the dry run may change registers: put back */
-    dry = 1; cyc = 0; stops_z80 = 0; mask_floor = 7;
+    dry = 1; cyc = 0; mask_floor = 7;
     body();
     m68ki_cpu = saved;
     if (!may_run(cyc)) {
@@ -729,7 +723,6 @@ static uint16_t entry_sr;
 
 static void save_sr(void)                                /* move.w sr,-(a7) */
 {
-    stops_z80 = 1;
     if (!dry) { entry_sr = (uint16_t)m68ki_get_sr(); WR16(REG_A[7] - 2, entry_sr); }
 }
 
@@ -854,7 +847,6 @@ int draw_hex_digits(void) { return run(hex_digits); }
 /* sub_28200: d5 bytes of video memory copied by the chip from d7 to d6 */
 static void vram_copy(void)
 {
-    stops_z80 = 1;
     uint16_t len = (uint16_t)REG_D[5], from = (uint16_t)REG_D[7], to = (uint16_t)REG_D[6];
     uint16_t status = 0;
     COST(span(0x28200, 0x2827C));
@@ -1428,7 +1420,6 @@ static void dma_from_ram(uint32_t at, uint32_t src, uint16_t n, uint16_t first, 
  * player's new columns (0xFFC10C / 0xFFC110, by the frame 0xFF17A0) to call */
 static void vblank_sprites(void)
 {
-    stops_z80 = 1;
     dma_from_ram(0xA2C, 0xFF0000u, 0x100, 0x7E00, 0x82);
     reach(0xA6E);
     if (!dry) vdp_command(0x01, 0xBE00);
@@ -1459,7 +1450,6 @@ static void vblank_palette(void)
     COST(16);
     flags_move(changed, 16);
     if (!changed) { COST(10); go_on(0xB58); return; }
-    stops_z80 = 1;
     COST(10 + CYC_BCC_NOTAKE_W + span(0xADC, 0xAE6));
     uint8_t ver = (uint8_t)(RD8(0xA10001u) & 0x40);
     REG_D[1] = (REG_D[1] & 0xFFFFFF00u) | ver;          /* move.b, andi.b: the low byte */

@@ -66,7 +66,8 @@ int  md_audio_take(int16_t *out, int max_frames);
 void md_snd_begin(int ym_mute, int psg_mute);
 void md_snd_command(uint8_t id);
 void md_snd_pause(uint8_t v);
-void md_snd_frame(void);
+void md_snd_frame(void);            /* one frame of it (also the game's sound, after its frame,
+                                       when there are no recorded sounds) */
 #define MD_SND_STEMS 4              /* other channels, FM5, FM6, PSG3 + noise */
 int  md_snd_take(int16_t *out[MD_SND_STEMS], int max);
 void md_snd_end(void);

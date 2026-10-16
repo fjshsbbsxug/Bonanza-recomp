@@ -153,7 +153,8 @@ static void ym_sync(uint64_t target)
 }
 
 static uint64_t now_z80(void) { return master_line_start + (uint64_t)z80_line_cyc * 15; }
-static uint64_t now_68k(void) { return master_line_start + (uint64_t)cpu_line_cycles() * 7; }
+/* the 68000's frame takes no sound time: the sound chips run after it (md_snd_frame) */
+static uint64_t now_68k(void) { return master_line_start; }
 
 void md_audio_set_rate(int rate) { out_rate = rate; }
 
@@ -495,7 +496,7 @@ static void md_run_frame_lines(void);
 void md_run_frame(void)
 {
     if (line_mode < 0) line_mode = getenv("LINEMODE") != NULL;
-    if (line_mode || !snd_ready()) { vdp_frame_driver = 0; md_run_frame_lines(); return; }
+    if (line_mode) { vdp_frame_driver = 0; md_run_frame_lines(); return; }
     vdp_frame_driver = 1;
     for (int line = 0; line < 224; line++) {
         md.line = line;
@@ -512,14 +513,18 @@ void md_run_frame(void)
     for (int line = 225; line < MD_LINES; line++)
         vdp_line_start(line);           /* the line counter starts again (as the routine set it) */
     md.line = 0;
-    static double due;                  /* this frame's sound from the player */
-    int16_t buf[2048 * 2];
-    due += (double)out_rate * MASTER_LINE * MD_LINES / 53693175.0;
-    int n = (int)due;
-    if (n > 2048) n = 2048;
-    due -= n;
-    snd_render(buf, n, out_rate);
-    for (int i = 0; i < n; i++) push_output(buf[i * 2], buf[i * 2 + 1]);
+    if (snd_ready()) {                  /* this frame's sound from the player */
+        static double due;
+        int16_t buf[2048 * 2];
+        due += (double)out_rate * MASTER_LINE * MD_LINES / 53693175.0;
+        int n = (int)due;
+        if (n > 2048) n = 2048;
+        due -= n;
+        snd_render(buf, n, out_rate);
+        for (int i = 0; i < n; i++) push_output(buf[i * 2], buf[i * 2 + 1]);
+    } else {
+        md_snd_frame();                 /* no recorded sounds: the sound chips, for this frame */
+    }
     md.frame++;
 }
 
@@ -646,7 +651,8 @@ void md_snd_end(void) { snd_stems = 0; }
 void md_snd_command(uint8_t id) { md.zram[0x1C0A] = id; }
 void md_snd_pause(uint8_t v) { md.zram[0x1C10] = v; }
 
-/* one video frame's time of sound (output in md_audio_take) */
+/* one video frame's time of sound (output in md_audio_take): for the recorder, and for
+ * the game without recorded sounds, after the 68000's frame */
 void md_snd_frame(void)
 {
     for (int line = 0; line < MD_LINES; line++) {
