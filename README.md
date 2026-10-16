@@ -110,7 +110,7 @@ builder/      the HTML builder page
   interrupt check runs and the line's cycle count is updated as in md.c's step loop.
   md.c runs the program it finds in Z80 RAM (`z80r_program`); writing over its code
   bytes makes it look again. The sound chips (YM2612, PSG) are simulated only to record
-  the sounds (below).
+  the sounds, or to play them when there is no recording (below).
 * **Drawing** (`port/src/draw.c`, `vdp.c`):
   * The game's drawing routines are written in C: tile loading (raw and packed), lines
     of text and the queued text, the HUD (frame, stage name, time, scores, counters),
