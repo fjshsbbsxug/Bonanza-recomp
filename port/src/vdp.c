@@ -94,15 +94,9 @@ int vdp_irq_within(int n, int mask)
 
 /* ---------------------------------------------------------------- ports */
 
-static void vram_log(uint16_t a, uint8_t old, uint8_t now);
-static void state_log(int kind, int i, uint16_t old);   /* 0 register, 1 palette, 2 vertical scroll */
-
 static inline void vram_set(uint16_t a, uint8_t v)
 {
-    if (vdp.vram[a] != v) {
-        vram_log(a, vdp.vram[a], v);
-        vdp.vram[a] = v;
-    }
+    vdp.vram[a] = v;
 }
 
 static void vram_write_word(uint16_t a, uint16_t w)
@@ -121,7 +115,6 @@ static void port_write(uint16_t w)
         break;
     case 3: {
         int i = (vdp.addr >> 1) & 0x3F;
-        state_log(1, i, vdp.cram[i]);
         vdp.cram[i] = w & 0x0EEE;
         update_palette(i);
         break;
@@ -129,7 +122,6 @@ static void port_write(uint16_t w)
     case 5: {
         int i = (vdp.addr >> 1) & 0x3F;
         if (i < 40) {
-            state_log(2, i, vdp.vsram[i]);
             vdp.vsram[i] = w & 0x07FF;
         }
         break;
@@ -235,7 +227,6 @@ void vdp_write_ctrl(uint16_t w)
     if ((w & 0xC000) == 0x8000) {
         int r = (w >> 8) & 0x1F;
         if (r < 24) {
-            state_log(0, r, vdp.reg[r]);
             vdp.reg[r] = (uint8_t)w;
             if (r == 0 || r == 1)
                 cpu_set_irq(vdp_irq_level());
@@ -258,7 +249,6 @@ void vdp_set_reg(int r, uint8_t v)
         return;
     }
     USED();
-    state_log(0, r, vdp.reg[r]);
     vdp.reg[r] = v;
     if (r == 0 || r == 1)
         cpu_set_irq(vdp_irq_level());
@@ -1001,96 +991,6 @@ typedef struct {
 } line_state;
 static line_state lines[224];
 
-/* tiles and maps the game changes while the picture is shown (its frame's work goes on
- * into the top of the screen, and the split screen's bands reuse rows of the planes):
- * each change made during the shown lines, with what was there before, so the picture
- * is drawn with what each line had */
-typedef struct { uint16_t a; uint8_t old, now, line; } vram_change;
-static vram_change *changes;
-static int nchanges, changes_cap, changes_lost;
-
-/* a routine in C (draw.c) runs in one go: how far into it (68000 cycles past the end of
- * the current line, negative: within it) a change is made, so it goes with the line the
- * game's routine would have made it in */
-int vdp_ahead = VDP_AHEAD_NONE;
-
-/* the line a change by a routine in C goes with (past MD_LINES: in the next frame) */
-static int ahead_line(void)
-{
-    int line = md.line;
-    if (vdp_ahead != VDP_AHEAD_NONE && vdp_ahead >= 0)
-        line += 1 + vdp_ahead / MD_CYC68K_LINE;
-    return line;
-}
-
-/* changes that go with the next frame's lines (a routine in C that runs on past the
- * end of this one): moved to the logs when this frame's picture is done */
-static vram_change next_changes[4096];
-static int nnext_changes;
-
-static void vram_add(vram_change c)
-{
-    if (nchanges == changes_cap) {
-        int n2 = changes_cap ? changes_cap * 2 : 4096;
-        vram_change *n = n2 <= (1 << 20) ? realloc(changes, (size_t)n2 * sizeof(*n)) : 0;
-        if (!n) { changes_lost = 1; return; }
-        changes = n; changes_cap = n2;
-    }
-    changes[nchanges++] = c;
-}
-
-/* the frame driver (md.c) runs nothing while the picture is drawn: no changes to log */
-int vdp_frame_driver;
-
-static void vram_log(uint16_t a, uint8_t old, uint8_t now)
-{
-    if (vdp_frame_driver) return;
-    int line = ahead_line();
-    if (line >= MD_LINES) {              /* in the next frame's picture */
-        if (line - MD_LINES >= 224) return;
-        vram_change c = {a, old, now, (uint8_t)(line - MD_LINES)};
-        if (md.line >= 224)              /* this frame's picture is done: the log is the next one's */
-            vram_add(c);
-        else if (nnext_changes == (int)(sizeof(next_changes) / sizeof(next_changes[0])))
-            changes_lost = 1;
-        else
-            next_changes[nnext_changes++] = c;
-        line = 224;
-    }
-    if (md.line >= 224) return;          /* between pictures: nothing shown changes */
-    if (line > 224) line = 224;          /* after the picture */
-    vram_add((vram_change){a, old, now, (uint8_t)line});
-}
-
-/* registers, palette and vertical scroll changed by a routine in C ahead of where the
- * game's routine would have changed them: until that line, the lines are taken with
- * what was there before */
-typedef struct { int line, kind, i; uint16_t old; } state_change;
-static state_change ahead[256], next_ahead[256];
-static int nahead, nnext_ahead;
-
-static void state_log(int kind, int i, uint16_t old)
-{
-    if (vdp_frame_driver || vdp_ahead == VDP_AHEAD_NONE || vdp_ahead < 0)
-        return;
-    int line = ahead_line();
-    if (line >= MD_LINES) {              /* in the next frame's picture */
-        if (line - MD_LINES >= 224) return;
-        state_change c = {line - MD_LINES, kind, i, old};
-        if (md.line >= 224) {            /* this frame's picture is done: the log is the next one's */
-            if (nahead < 256) ahead[nahead++] = c;
-            return;
-        }
-        if (nnext_ahead < 256)
-            next_ahead[nnext_ahead++] = c;
-        line = 224;                      /* and not in this frame's lines either */
-    }
-    if (md.line >= 224 || nahead == 256)
-        return;
-    if (line >= 224) line = 224;
-    ahead[nahead++] = (state_change){line, kind, i, old};
-}
-
 void vdp_line_capture(int y)
 {
     line_state *l = &lines[y];
@@ -1099,47 +999,20 @@ void vdp_line_capture(int y)
     memcpy(l->vsram, vdp.vsram, sizeof(l->vsram));
     l->hs[0] = (uint16_t)hscroll_now(y, 0);
     l->hs[1] = (uint16_t)hscroll_now(y, 1);
-    int keep = 0;
-    for (int k = nahead - 1; k >= 0; k--) {      /* not made yet at this line: as before */
-        state_change *c = &ahead[k];
-        if (c->line < y) continue;
-        if (c->kind == 0) l->reg[c->i] = (uint8_t)c->old;
-        else if (c->kind == 1) l->cram[c->i] = c->old;
-        else l->vsram[c->i] = c->old;
-    }
-    for (int k = 0; k < nahead; k++)
-        if (ahead[k].line >= y) ahead[keep++] = ahead[k];
-    nahead = keep;
 }
 
 void vdp_render_frame(void)
 {
-    static uint8_t live_vram[0x10000];
     line_state live;
     memcpy(live.reg, vdp.reg, sizeof(live.reg));
     memcpy(live.cram, vdp.cram, sizeof(live.cram));
     memcpy(live.vsram, vdp.vsram, sizeof(live.vsram));
-    int replay = nchanges && !changes_lost;
-    if (replay) {                        /* back to the tiles and maps of the first line */
-        memcpy(live_vram, vdp.vram, sizeof(live_vram));
-        for (int i = nchanges - 1; i >= 0; i--) vdp.vram[changes[i].a] = changes[i].old;
-    }
-    int k = 0;
     for (int y = 0; y < 224; y++) {
-        /* what was changed during the lines before this one is in place */
-        for (; replay && k < nchanges && changes[k].line < y; k++)
-            vdp.vram[changes[k].a] = changes[k].now;
         memcpy(vdp.reg, lines[y].reg, sizeof(live.reg));
         memcpy(vdp.cram, lines[y].cram, sizeof(live.cram));
         memcpy(vdp.vsram, lines[y].vsram, sizeof(live.vsram));
         vdp_render_line(y);
     }
-    if (replay) memcpy(vdp.vram, live_vram, sizeof(live_vram));
-    nchanges = 0; changes_lost = 0;
-    nahead = 0;
-    for (int i = 0; i < nnext_changes; i++) vram_add(next_changes[i]);
-    for (int i = 0; i < nnext_ahead; i++) ahead[nahead++] = next_ahead[i];
-    nnext_changes = nnext_ahead = 0;
     memcpy(vdp.reg, live.reg, sizeof(live.reg));
     memcpy(vdp.cram, live.cram, sizeof(live.cram));
     memcpy(vdp.vsram, live.vsram, sizeof(live.vsram));
@@ -1159,10 +1032,10 @@ static int hscroll_now(int y, int plane_b)
 }
 
 /* a line's horizontal scroll: the split screen's band routines rewrite the table while
- * the picture is shown, so the frame driver keeps each line's value as it starts */
+ * the picture is shown, so each line's value is kept as it starts */
 static int line_hscroll(int y, int plane_b)
 {
-    if (vdp_frame_driver && y >= 0 && y < 224)
+    if (y >= 0 && y < 224)
         return lines[y].hs[plane_b];
     return hscroll_now(y, plane_b);
 }

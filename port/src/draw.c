@@ -24,10 +24,8 @@ uint64_t draw_stat_c, draw_stat_translated;
 static int cyc;     /* time of the routine so far */
 static int dry;     /* only working out the time */
 
-static int left0;   /* the time left in the line when the routine began (for real) */
-
-/* the time of instructions run; video changes after it are made that far into the routine */
-#define COST(n) (cyc += (n), dry ? 0 : (vdp_ahead = cyc - left0))
+/* the time of instructions run */
+#define COST(n) ((void)(cyc += (n)))
 
 /* each instruction's time where it does not depend on the data (port/gen/m68k_costs.c,
  * with the game's code) */
@@ -76,14 +74,9 @@ static int run(void (*body)(void))
     }
     draw_stat_c++;
     dry = 0; cyc = 0; jumped = 0;
-    left0 = GET_CYCLES();
-    vdp_ahead = -left0;
     vdp_in_c = 1;
     body();
     vdp_in_c = 0;
-    if (getenv("DRAWLOG") && md.line < 224 && cyc > left0)
-        fprintf(stderr, "draw frame %u line %d body %ld cyc %d left %d\n", md.frame, md.line, (long)((char *)body - (char *)run), cyc, left0);
-    vdp_ahead = VDP_AHEAD_NONE;
     USE_CYCLES(cyc);
     return jumped ? 2 : 1;
 }
@@ -93,7 +86,7 @@ static uint32_t pc_now;
 static void from(uint32_t a) { pc_now = a; }
 static void reach(uint32_t a);
 
-static void put(uint16_t w) { if (!dry) { vdp_ahead = cyc - left0; vdp_write_data(w); } }
+static void put(uint16_t w) { if (!dry) vdp_write_data(w); }
 
 /* move.l to the control port: two command words */
 static void ctrl_long(uint32_t v)
@@ -333,7 +326,7 @@ static void registers(void)
             COST(8 + (1 << CYC_SHIFT));                  /* lsr.l #1,d0 */
             if (x) {
                 COST(10 + CYC_BCC_NOTAKE_W);             /* bcc */
-                if (!dry) { vdp_ahead = cyc - left0; vdp_reg_word((uint16_t)RD16(0xFFC07Au + 2u * r)); }
+                if (!dry) vdp_reg_word((uint16_t)RD16(0xFFC07Au + 2u * r));
                 COST(12);                                /* move.w (a0),(a1) */
             } else {
                 COST(10);
@@ -596,7 +589,6 @@ static uint16_t dma_fill0(int inc1, uint8_t len_lo, uint8_t len_hi, uint8_t code
         vdp_set_reg(20, len_hi);
         vdp_set_reg(23, 0x80);
         vdp_command(code, addr);
-        vdp_ahead = cyc - left0;
         vdp_write_data(0);                               /* the fill */
     }
     COST(20);

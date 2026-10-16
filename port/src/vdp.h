@@ -43,9 +43,9 @@ extern void     vdp_set_reg(int r, uint8_t v);            /* a register (decoded
 extern void     vdp_command(uint8_t code, uint16_t addr); /* where data goes (decoded command) */
 extern void     vdp_reg_word(uint16_t w);                 /* a register word the game keeps in RAM */
 extern void     vdp_command_long(uint32_t v);             /* a command (or two register words) made at run time */
-extern unsigned long vdp_raw_words;
-extern int vdp_in_c;                               /* a drawing routine in C is running */
-extern unsigned long vdp_uses_c, vdp_uses_translated;   /* chip uses by C / by translated code */                /* control words that needed the port's two-word latch */
+extern unsigned long vdp_raw_words;                     /* control words that needed the port's two-word latch */
+extern int vdp_in_c;                                    /* a drawing routine in C is running */
+extern unsigned long vdp_uses_c, vdp_uses_translated;   /* chip uses by C / by translated code */
 extern uint16_t vdp_read_ctrl(void);
 extern uint16_t vdp_read_data(void);
 uint16_t vdp_read_hv(void);
@@ -58,10 +58,7 @@ int      vdp_out_width(void);   /* width of the picture in vdp.fb */
 int      vdp_irq_level(void);   /* highest pending & enabled interrupt (0, 4 or 6) */
 void     vdp_ack_irq(int level);
 void     vdp_line_start(int line); /* raster bookkeeping (HINT/VINT) */
-int      vdp_irq_within(int lines, int mask);
-#define VDP_AHEAD_NONE (-0x40000000)
-extern int vdp_frame_driver;        /* md.c's frame driver runs (nothing changes during the picture) */
-extern int vdp_ahead;               /* see vdp.c */ /* an interrupt at one of the next line starts? */
+int      vdp_irq_within(int lines, int mask); /* an interrupt at one of the next line starts? */
 
 /* online games: the player at this screen (0 or 1), -1 = local game. Each player sees
  * their own view at the bottom and the floor above them at the top. Display only. */

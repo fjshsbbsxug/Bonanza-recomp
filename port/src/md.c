@@ -484,7 +484,6 @@ static void z80_line(void)
  * from that line. No time is kept within a frame. */
 void md_run_frame(void)
 {
-    vdp_frame_driver = 1;
     for (int line = 0; line < 224; line++) {
         md.line = line;
         vdp_line_capture(line);
