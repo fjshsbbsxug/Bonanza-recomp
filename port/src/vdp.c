@@ -625,7 +625,7 @@ static int char_part(int ch, int c, int row, int lx, const char_info *ci)
 
 static wobj_sprite wobj_list[256];
 /* Prop Hunt: the hider (drawn as his disguise instead of himself), the disguise's pieces */
-static int ph_hide = -1;
+static int ph_hide = -1, ph_blip = -1;   /* ph_blip: the hider's marker on the HUD map (tile) */
 static wobj_sprite ph_list[32];
 static int ph_count;
 static int wobj_count;
@@ -684,8 +684,11 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
             } else {
                 seen_nonzero_x = 1;
             }
-            /* Prop Hunt: the hider's own pieces are not drawn (his disguise is) */
+            /* Prop Hunt: the hider's own pieces are not drawn (his disguise is), nor, on the
+             * seeker's screen, his marker on the HUD map */
             if (ph_hide >= 0 && char_of(attr) >= 0 && wobj_player_of(attr) == ph_hide)
+                continue;
+            if (ph_blip >= 0 && (attr & 0x07FF) == ph_blip)
                 continue;
             /* player colours only for the players' own pieces */
             int ch = chars && char_of(attr) >= 0 ? wobj_player_of(attr) : -1;
@@ -1234,6 +1237,7 @@ void vdp_render_line(int y)
     if (y == 0) {                         /* Prop Hunt: the hider's disguise */
         uint16_t f, at;
         ph_hide = ph_hidden_player();
+        ph_blip = ph_hide >= 0 && vdp_local_player >= 0 && vdp_local_player != ph_hide ? 0x510 + ph_hide : -1;
         ph_count = ph_hide >= 0 && ph_disguise(&f, &at)
                  ? wobj_build_disguise(ph_hide, f, at, ph_list, (int)(sizeof(ph_list) / sizeof(ph_list[0]))) : 0;
     }

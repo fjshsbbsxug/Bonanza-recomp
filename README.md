@@ -236,9 +236,11 @@ builder/      the HTML builder page
     the hider wins. Roles swap every round and the stage starts again. The first 10
     seconds only the hider moves (the seeker's screen is dark). Guards ignore the
     hider, who never attacks; as a guard he moves as guards do (half a pixel per frame,
-    no jumping), as a treasure or gadget he runs 1.1 times as fast as a player, jumps
-    1.1 times sooner and changes lanes 1.1 times slower. Nobody loses lives and the
-    exit stays shut. The rules run in lockstep on both machines around every frame
+    lanes a step a frame, no jumping; the disguise walks with the real guards' walking
+    frames), as a treasure or gadget he runs 1.1 times as fast as a player, jumps 1.1
+    times sooner and changes lanes 1.1 times slower. The seeker's HUD map does not show
+    the hider. Guards leave the seeker alone while he waits; afterwards a caught seeker
+    is only knocked dizzy for a moment. Nobody loses lives and the exit stays shut. The rules run in lockstep on both machines around every frame
     (they read only the pads and RAM); the disguise and the banner are drawn by each
     machine for itself. `PH_OFFLINE=minutes` runs the rules offline in the headless
     runner (tests).

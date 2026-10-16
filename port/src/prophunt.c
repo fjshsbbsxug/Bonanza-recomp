@@ -54,6 +54,9 @@ static struct {
     uint8_t last_pad[2];
     int dir;                    /* the hider's facing: -1 / +1 */
     int16_t lane_before;
+    int prev_state;             /* the hider's state (low byte) the frame before */
+    int lane_pause;             /* a treasure/gadget lane change still owes its pause frame */
+    int seeker_safe;            /* the seeker is protected (while he waits) */
     disguise_t list[16];
     int nlist, cur;
 } ph;
@@ -61,6 +64,24 @@ static struct {
 static uint16_t rw(uint32_t a) { return (uint16_t)(md.ram[a & 0xFFFF] << 8 | md.ram[(a + 1) & 0xFFFF]); }
 static void ww(uint32_t a, uint16_t v) { md.ram[a & 0xFFFF] = (uint8_t)(v >> 8); md.ram[(a + 1) & 0xFFFF] = (uint8_t)v; }
 static int16_t rs(uint32_t a) { return (int16_t)rw(a); }
+
+/* a player caught by a guard (state 0x0B, which ends in losing a life) is knocked
+ * dizzy instead - the stars of state 7, about a second, as sub_0986A changes state -
+ * then blinks, safe from guards, for two seconds: no lives, no respawning */
+static void spare_caught_player(int p)
+{
+    uint32_t o = (uint32_t)p * 0xAA;
+    if ((rw(0x5688 + o) & 0xFF) != 0x0B) return;
+    uint32_t tbl = p ? 0xD996 : 0xB492;
+    ww(0x568E + o, rw(0x5688 + o));
+    ww(0x5690 + o, rw(0x568A + o));
+    ww(0x5692 + o, rw(0x568C + o));
+    ww(0x5688 + o, 0x8007);
+    ww(0x568A + o, (uint16_t)(md.rom[tbl + 28] << 8 | md.rom[tbl + 29]));
+    ww(0x568C + o, (uint16_t)(md.rom[tbl + 30] << 8 | md.rom[tbl + 31]));
+    ww(0x56BE + o, 1);
+    ww(0x56C0 + o, 180);
+}
 
 void ph_reset(void) { memset(&ph, 0, sizeof(ph)); ph.dir = 1; }
 
@@ -105,11 +126,38 @@ static void collect(void)
     ph.cur = 0;
 }
 
+/* (the picture only, once per picture) a guard disguise walks: the frames the real
+ * guards of that look show while they move, in turn while the hider moves */
+static struct {
+    uint16_t walk[8], attr;
+    int nwalk, steps;
+    int16_t gx[70], hx;
+} anim;
+
 int ph_disguise(uint16_t *frame, uint16_t *attr)
 {
     if (!ph_active() || ph.nlist == 0) return 0;
-    *frame = ph.list[ph.cur].frame;
-    *attr = ph.list[ph.cur].attr;
+    const disguise_t *d = &ph.list[ph.cur];
+    *frame = d->frame;
+    *attr = d->attr;
+    if (d->kind != D_GUARD) return 1;
+    if (anim.attr != d->attr) { anim.nwalk = 0; anim.attr = d->attr; }
+    for (int o = 6; o < 38; o++) {
+        int16_t x = rs(0x304E + o * 2);
+        uint16_t f = rw(0x3252 + o * 2);
+        if (rw(0x2EF6 + o * 2) && f && x != anim.gx[o] && rw(0x3C66 + o * 2) == d->attr && anim.nwalk < 8) {
+            int known = 0;
+            for (int i = 0; i < anim.nwalk; i++) known |= anim.walk[i] == f;
+            if (!known) anim.walk[anim.nwalk++] = f;
+        }
+        anim.gx[o] = x;
+    }
+    int16_t hx = rs(0x304E + ph.hider * 2);
+    if (hx != anim.hx && anim.nwalk) {
+        anim.steps++;
+        *frame = anim.walk[(anim.steps / 8) % anim.nwalk];
+    }
+    anim.hx = hx;
     return 1;
 }
 
@@ -198,10 +246,19 @@ void ph_pre_frame(void)
         ww(0x385E + ho, (uint16_t)(ph.frame & 1 ? 0 : ph.dir));           /* half a pixel */
     else if (ph.nlist)
         ww(0x385E + ho, (uint16_t)(ph.frame % 10 == 0 ? 2 * ph.dir : ph.dir)); /* 1.1 */
-    /* jumping: the crouch before the jump 1.1 times shorter (9 frames -> 8) */
-    if (!guard && (rw(0x5688 + hp) & 0xFF) == 2 && rw(0x567C + hp) == 9)
-        ww(0x567C + hp, 8);
     ph.lane_before = rs(0x31A6 + ho);
+    /* the seeker is safe from guards while he waits (frozen, his screen dark) */
+    uint32_t sp = (uint32_t)sk * 0xAA;
+    int sst = rw(0x5688 + sp) & 0xFF;
+    if ((ph.phase == PH_HIDE || ph.phase == PH_END) && sst != 0x05 && sst != 0x18) {
+        ww(0x56BE + sp, 2);
+        ww(0x56C0 + sp, 0x7FFF);
+        ph.seeker_safe = 1;
+    } else if (ph.seeker_safe) {
+        ww(0x56BE + sp, 0);                 /* the hunt is on: guards see him again */
+        ww(0x56C0 + sp, 0);
+        ph.seeker_safe = 0;
+    }
     show_clock();
 }
 
@@ -231,14 +288,30 @@ void ph_post_frame(void)
     if (!on() || ph.phase == PH_OFF || ph.phase == PH_WAIT) return;
     int h = ph.hider;
     uint32_t hp = (uint32_t)h * 0xAA, ho = (uint32_t)h * 2;
-    /* lane changes: some steps undone (never the last one, which ends the move) */
-    if ((rw(0x5688 + hp) & 0xFF) == 0x19 && ph.nlist) {
-        int guard = ph.list[ph.cur].kind == D_GUARD;
-        int16_t z = rs(0x31A6 + ho);
-        int undo = guard ? (ph.frame & 1) : (ph.frame % 11 == 0);
-        if (undo && z != ph.lane_before && z > 0 && z < 0x10)
-            ww(0x31A6 + ho, (uint16_t)ph.lane_before);
+    spare_caught_player(0);
+    spare_caught_player(1);
+    int st = rw(0x5688 + hp) & 0xFF;
+    int guard = ph.nlist && ph.list[ph.cur].kind == D_GUARD;
+    /* lane changes (state 0x19 moves the lane height 0 <-> 0x10 by 2-3 a frame): as a
+     * guard one a frame, as guards do; as a treasure or gadget one frame's pause each
+     * time (9 frames -> 10, 1.1 times slower) */
+    if (st == 0x19 && ph.nlist) {
+        int16_t z = rs(0x31A6 + ho), was = ph.lane_before;
+        if (ph.prev_state != 0x19) ph.lane_pause = 1;
+        if (z != was) {
+            if (guard)
+                ww(0x31A6 + ho, (uint16_t)(was + (z > was ? 1 : -1)));
+            else if (ph.lane_pause && z > 0 && z < 0x10) {
+                ww(0x31A6 + ho, (uint16_t)was);
+                ph.lane_pause = 0;
+            }
+        }
     }
+    /* jumping: the crouch before the jump 1.1 times shorter (9 frames -> 8; the game
+     * sets 9 and counts the first frame at once) */
+    if (!guard && st == 2 && ph.prev_state != 2 && rw(0x567C + hp) == 8)
+        ww(0x567C + hp, 7);
+    ph.prev_state = st;
     switch (ph.phase) {
     case PH_HIDE:
         if (--ph.timer <= 0) { ph.phase = PH_SEEK; ph.timer = round_frames(); }
