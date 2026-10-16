@@ -8,6 +8,7 @@
 #include "prophunt.h"
 
 vdp_t vdp;
+static int pic_out_w;       /* the width the last picture was drawn at (0: none yet) */
 
 static void update_palette(int i)
 {
@@ -25,6 +26,7 @@ void vdp_reset(void)
     if (!md_color_lut_ready)
         settings_apply(); /* default colours (all-zero settings are the defaults) */
     memset(&vdp, 0, sizeof(vdp));
+    pic_out_w = 0;
     vdp_refresh_palette();
 }
 
@@ -749,7 +751,7 @@ int vdp_margin(void) { return margin_for(vdp_width()); }
 
 int vdp_out_width(void)
 {
-    return vdp_width() + 2 * vdp_margin();
+    return pic_out_w ? pic_out_w : vdp_width() + 2 * vdp_margin();
 }
 
 #include <stdlib.h>
@@ -1026,8 +1028,12 @@ static void render_line(int y);
 void vdp_render_frame(void)
 {
     V = vdp.vram;
+    pic_out_w = 0;
     for (int b = 0; b < pic.n; b++) {
         cur = &pic.band[b].look;
+        int width = (cur->reg[12] & 0x01) ? 320 : 256;
+        if (width + 2 * margin_for(width) > pic_out_w)
+            pic_out_w = width + 2 * margin_for(width);
         for (int y = pic.band[b].y0; y < pic.band[b].y1; y++)
             render_line(y);
     }

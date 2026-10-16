@@ -53,7 +53,7 @@ void     vdp_line_capture(int y);  /* line y's look, as it starts (while the fra
 void     vdp_render_frame(void);   /* the picture: video memory now, and the lines' looks */
 int      vdp_width(void);       /* real screen width (256/320) */
 int      vdp_margin(void);      /* widescreen extra pixels per side */
-int      vdp_out_width(void);   /* width of the picture in vdp.fb */
+int      vdp_out_width(void);   /* width of the last picture in vdp.fbmd (as it was drawn) */
 int      vdp_irq_level(void);   /* highest pending & enabled interrupt (0, 4 or 6) */
 void     vdp_ack_irq(int level);
 void     vdp_line_start(int line); /* raster bookkeeping (HINT/VINT) */
