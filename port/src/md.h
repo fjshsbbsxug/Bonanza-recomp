@@ -81,6 +81,11 @@ void     md_write16(uint32_t a, uint32_t v);
 void cpu_init(void);
 void cpu_reset(void);
 void cpu_run(int cycles);       /* run until the cycle budget is used */
+int  cpu_run_until_idle(int cycles); /* the frame driver: run the code until it is idle */
+void cpu_run_interrupt(void);   /* a waiting interrupt's routine, run to its return */
+int  cpu_idle(void);
+int  cpu_waiting(void);          /* paused where the frame routine waits for the picture */
+int  cpu_wait_over(void);        /* ... and what it waits for has happened */
 void cpu_set_irq(int level);
 uint32_t cpu_get_pc(void);
 

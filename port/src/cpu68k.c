@@ -139,3 +139,65 @@ void cpu_run(int cycles)
     line_budget = cycles;
     SET_CYCLES(0);
 }
+
+/* ---- the frame driver (md.c): the game's code run as functions, not time-sliced ----
+ * The game sits in its reset code's loop (0x45C) between frames; everything it does
+ * runs from its frame routine (the vertical blank, 0x98E) and its band routines (the
+ * line interrupts, through 0xFFC0B0). */
+static int idle_pc(uint32_t pc) { return pc >= 0x45C && pc < 0x46A; }
+
+int cpu_idle(void) { return idle_pc(REG_PC) && !CPU_STOPPED; }
+
+/* the one place the frame routine waits for the picture: the play screen's routine
+ * (0x879C) waits for the top band's routine to set 0xFF17B6 - its logic goes on while
+ * the next picture is drawn, below its top band */
+static int at_wait(void) { return REG_PC >= 0x879C && REG_PC < 0x87A4 && !CPU_STOPPED; }
+static int wait_flag(void) { return md.ram[0x17B6] | md.ram[0x17B7]; }
+int cpu_waiting(void) { return at_wait() && !wait_flag(); }
+int cpu_wait_over(void) { return at_wait() && wait_flag(); }
+
+static void step(void)
+{
+    if (cpu_irq_dirty)
+        cpu_apply_irq();
+    if (CPU_STOPPED)
+        return;
+    recomp_fn fn = game.recomp_find(REG_PC);
+    if (fn)
+        fn();
+    else
+        no_code();
+}
+
+/* run until the code is back in the idle loop, or up to the given time (a routine that
+ * takes longer, such as a stage being set up, goes on next time): 1 when idle */
+int cpu_run_until_idle(int cycles)
+{
+    SET_CYCLES(cycles);
+    if (cpu_irq_dirty)
+        cpu_apply_irq();
+    while (GET_CYCLES() > 0 && !CPU_STOPPED) {
+        if ((idle_pc(REG_PC) || cpu_waiting()) && !cpu_irq_dirty)
+            break;
+        step();
+    }
+    int idle = idle_pc(REG_PC);
+    SET_CYCLES(0);
+    carry = 0;
+    return idle;
+}
+
+/* take a waiting interrupt (if the code accepts it now) and run its routine until it
+ * returns to what it interrupted: a function call at that point */
+void cpu_run_interrupt(void)
+{
+    uint32_t pc0 = REG_PC, sp0 = REG_SP;
+    cpu_apply_irq();
+    if (REG_PC == pc0 && REG_SP == sp0)
+        return;                              /* not taken (masked, or none) */
+    SET_CYCLES(MD_CYC68K_LINE * MD_LINES);
+    while (GET_CYCLES() > 0 && !CPU_STOPPED && !(REG_PC == pc0 && REG_SP == sp0))
+        step();
+    SET_CYCLES(0);
+}
+

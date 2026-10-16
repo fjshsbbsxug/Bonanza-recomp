@@ -481,7 +481,49 @@ static void z80_line(void)
     }
 }
 
+/* The frame, as a game runs it: the picture's lines, where the game's band routines
+ * (its line interrupts) set up the split screen's views, the HUD and the backgrounds -
+ * each run as a function at its line - then the picture is drawn at once, then the
+ * game's frame routine runs (the vertical blank: the whole game). A frame routine that
+ * takes longer than a frame (a stage being set up) goes on in the next one. The play
+ * screen's routine waits for the next picture's top band (cpu_waiting) and goes on
+ * from that line. No time is kept within a frame. */
+static int line_mode = -1;      /* LINEMODE=1: the old line-by-line machine (tests) */
+
+static void md_run_frame_lines(void);
+
 void md_run_frame(void)
+{
+    if (line_mode < 0) line_mode = getenv("LINEMODE") != NULL;
+    if (line_mode || !snd_ready()) { vdp_frame_driver = 0; md_run_frame_lines(); return; }
+    vdp_frame_driver = 1;
+    for (int line = 0; line < 224; line++) {
+        md.line = line;
+        vdp_line_capture(line);
+        vdp_line_start(line);           /* the line counter: a band routine may be due */
+        cpu_run_interrupt();
+        if (cpu_wait_over())            /* the band it waited for: the logic goes on */
+            cpu_run_until_idle(MD_CYC68K_LINE * MD_LINES);
+    }
+    md.line = 224;
+    vdp_render_frame();
+    vdp_line_start(224);                /* the frame routine */
+    cpu_run_until_idle(MD_CYC68K_LINE * MD_LINES);
+    for (int line = 225; line < MD_LINES; line++)
+        vdp_line_start(line);           /* the line counter starts again (as the routine set it) */
+    md.line = 0;
+    static double due;                  /* this frame's sound from the player */
+    int16_t buf[2048 * 2];
+    due += (double)out_rate * MASTER_LINE * MD_LINES / 53693175.0;
+    int n = (int)due;
+    if (n > 2048) n = 2048;
+    due -= n;
+    snd_render(buf, n, out_rate);
+    for (int i = 0; i < n; i++) push_output(buf[i * 2], buf[i * 2 + 1]);
+    md.frame++;
+}
+
+static void md_run_frame_lines(void)
 {
     for (int line = 0; line < MD_LINES; line++) {
         md.line = line;

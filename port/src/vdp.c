@@ -404,15 +404,8 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
     static const int sizes[4] = {32, 64, 32, 128};
     int pw = sizes[vdp.reg[16] & 3], ph = sizes[(vdp.reg[16] >> 4) & 3];
     uint32_t name = plane_b ? (vdp.reg[4] & 0x07) << 13 : (vdp.reg[2] & 0x38) << 10;
-    uint32_t hsbase = (vdp.reg[13] & 0x3F) << 10;
-    uint32_t hsa;
-    switch (vdp.reg[11] & 3) {
-    case 2: hsa = hsbase + (y & ~7) * 4; break;
-    case 3: hsa = hsbase + y * 4; break;
-    default: hsa = hsbase; break;
-    }
-    hsa += plane_b ? 2 : 0;
-    int hs = ((vdp.vram[hsa & 0xFFFF] << 8) | vdp.vram[(hsa + 1) & 0xFFFF]) & 0x3FF;
+    extern int line_hscroll_pub(int y, int plane_b);
+    int hs = line_hscroll_pub(y, plane_b);
     int column_vs = vdp.reg[11] & 4;
     if (ovr_hs >= 0) { hs = ovr_hs; column_vs = 0; }
     int wmask = pw * 8 - 1, hmask = ph * 8 - 1;
@@ -998,6 +991,7 @@ static int line_opaque(const uint8_t *buf, int m, int width)
 }
 
 static int line_hscroll(int y, int plane_b);
+static int hscroll_now(int y, int plane_b);
 int line_hscroll_pub(int y, int plane_b) { return line_hscroll(y, plane_b); }
 
 /* ---------------------------------------------------------------- the frame, drawn at once
@@ -1010,6 +1004,7 @@ typedef struct {
     uint8_t  reg[24];
     uint16_t cram[64];
     uint16_t vsram[40];
+    uint16_t hs[2];          /* the line's horizontal scroll (the frame driver) */
 } line_state;
 static line_state lines[224];
 
@@ -1051,8 +1046,12 @@ static void vram_add(vram_change c)
     changes[nchanges++] = c;
 }
 
+/* the frame driver (md.c) runs nothing while the picture is drawn: no changes to log */
+int vdp_frame_driver;
+
 static void vram_log(uint16_t a, uint8_t old, uint8_t now)
 {
+    if (vdp_frame_driver) return;
     int line = ahead_line();
     if (line >= MD_LINES) {              /* in the next frame's picture */
         if (line - MD_LINES >= 224) return;
@@ -1079,7 +1078,7 @@ static int nahead, nnext_ahead;
 
 static void state_log(int kind, int i, uint16_t old)
 {
-    if (vdp_ahead == VDP_AHEAD_NONE || vdp_ahead < 0)
+    if (vdp_frame_driver || vdp_ahead == VDP_AHEAD_NONE || vdp_ahead < 0)
         return;
     int line = ahead_line();
     if (line >= MD_LINES) {              /* in the next frame's picture */
@@ -1105,6 +1104,8 @@ void vdp_line_capture(int y)
     memcpy(l->reg, vdp.reg, sizeof(l->reg));
     memcpy(l->cram, vdp.cram, sizeof(l->cram));
     memcpy(l->vsram, vdp.vsram, sizeof(l->vsram));
+    l->hs[0] = (uint16_t)hscroll_now(y, 0);
+    l->hs[1] = (uint16_t)hscroll_now(y, 1);
     int keep = 0;
     for (int k = nahead - 1; k >= 0; k--) {      /* not made yet at this line: as before */
         state_change *c = &ahead[k];
@@ -1151,7 +1152,8 @@ void vdp_render_frame(void)
     memcpy(vdp.vsram, live.vsram, sizeof(live.vsram));
 }
 
-static int line_hscroll(int y, int plane_b)
+/* the horizontal scroll in the table in video memory, as it is now */
+static int hscroll_now(int y, int plane_b)
 {
     uint32_t hsbase = (vdp.reg[13] & 0x3F) << 10, hsa;
     switch (vdp.reg[11] & 3) {
@@ -1161,6 +1163,15 @@ static int line_hscroll(int y, int plane_b)
     }
     hsa += plane_b ? 2 : 0;
     return ((vdp.vram[hsa & 0xFFFF] << 8) | vdp.vram[(hsa + 1) & 0xFFFF]) & 0x3FF;
+}
+
+/* a line's horizontal scroll: the split screen's band routines rewrite the table while
+ * the picture is shown, so the frame driver keeps each line's value as it starts */
+static int line_hscroll(int y, int plane_b)
+{
+    if (vdp_frame_driver && y >= 0 && y < 224)
+        return lines[y].hs[plane_b];
+    return hscroll_now(y, plane_b);
 }
 
 /* Shadow / highlight (register 12 bit 3), used for the spotlights of the story and
