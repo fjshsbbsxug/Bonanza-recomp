@@ -1084,9 +1084,11 @@ static void plan_line(int y, line_plan *P)
         /* The floor above player 1, following his camera - but never above the top of
          * the level (the exit floor / roof): from there on it stays still, and as it
          * then shows player 1's own floor, he is seen in it (escaping, too). */
+        above_roof(0, -1);                    /* (works out roof_row for this level) */
+        int top = roof_row > 0 ? roof_row * 16 : 0;
         room_above_wy = view_rec[focus].vsA - VIEW_H;
-        if (room_above_wy < 0) {
-            room_above_wy = view_rec[focus].vsA < 0 ? view_rec[focus].vsA : 0;
+        if (room_above_wy < top) {
+            room_above_wy = view_rec[focus].vsA < top ? view_rec[focus].vsA : top;
             stacked_frame = md.frame + 1;     /* player 1's view: the floor below */
             stacked_top = room_above_wy;
         }
