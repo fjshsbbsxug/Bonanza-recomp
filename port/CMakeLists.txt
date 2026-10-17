@@ -12,7 +12,7 @@ set(BONANZA_SDL_URL "https://github.com/libsdl-org/SDL/releases/download/release
     CACHE STRING "SDL2 source archive used with BONANZA_FETCH_SDL")
 
 set(CORE_SOURCES
-  src/md.c src/vdp.c src/video.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c src/extrastages.c src/cheats.c src/net.c src/mods.c
+  src/md.c src/vdp.c src/video.c src/render.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c src/extrastages.c src/cheats.c src/net.c src/mods.c
   src/m68k_rt.c src/sndbank.c src/sndrec.c src/sndmix.c src/crt.c src/prophunt.c
   ext/nuked-opn2/ym3438.c
 )

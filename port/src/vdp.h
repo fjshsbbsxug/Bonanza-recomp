@@ -41,6 +41,7 @@ extern uint16_t video_port_hv(void);
 extern unsigned long video_port_words;  /* words through it */
 void     vdp_line_capture(int y);  /* line y's look, as it starts (while the frame runs) */
 void     vdp_render_frame(void);   /* the picture: video memory now, and the lines' looks */
+void     render_reset(void);       /* render.c: no picture drawn yet */
 int      vdp_width(void);       /* real screen width (256/320) */
 int      vdp_margin(void);      /* widescreen extra pixels per side */
 int      vdp_out_width(void);   /* width of the last picture in vdp.fbmd (as it was drawn) */
