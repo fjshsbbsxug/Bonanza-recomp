@@ -12,7 +12,7 @@ set(BONANZA_SDL_URL "https://github.com/libsdl-org/SDL/releases/download/release
     CACHE STRING "SDL2 source archive used with BONANZA_FETCH_SDL")
 
 set(CORE_SOURCES
-  src/md.c src/vdp.c src/video.c src/render.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c src/extrastages.c src/cheats.c src/net.c src/mods.c
+  src/md.c src/vdp.c src/video.c src/render.c src/render_gl.c src/psg.c src/sha1.c src/cpu68k.c src/settings.c src/menu.c src/wideobj.c src/gamemods.c src/extrastages.c src/cheats.c src/net.c src/mods.c
   src/m68k_rt.c src/sndbank.c src/sndrec.c src/sndmix.c src/crt.c src/prophunt.c
   ext/nuked-opn2/ym3438.c
 )
@@ -121,7 +121,7 @@ endif()
 
 if(EMSCRIPTEN)
   add_executable(bonanza src/main_sdl.c)
-  set(EMFLAGS "-sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sEXPORTED_RUNTIME_METHODS=['FS','callMain','ccall'] -sINVOKE_RUN=0 -sENVIRONMENT=web -sSTACK_SIZE=1048576")
+  set(EMFLAGS "-sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sEXPORTED_RUNTIME_METHODS=['FS','callMain','ccall'] -sINVOKE_RUN=0 -sENVIRONMENT=web -sSTACK_SIZE=1048576 -sMIN_WEBGL_VERSION=1 -sMAX_WEBGL_VERSION=2 -sGL_ENABLE_GET_PROC_ADDRESS=1")
   if(BONANZA_FETCH_SDL)
     include(FetchContent)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
@@ -222,6 +222,13 @@ endif()
 if(BONANZA_HEADLESS)
   add_executable(bonanza-headless src/main_headless.c)
   target_link_libraries(bonanza-headless bonanza_core)
+  # --gpu: the picture drawn on the graphics card too (an off-screen OpenGL ES context
+  # through EGL, e.g. Mesa's software one), each frame checked against the CPU's
+  find_library(EGL_LIBRARY EGL)
+  if(EGL_LIBRARY AND NOT WIN32)
+    target_compile_definitions(bonanza-headless PRIVATE BONANZA_EGL=1)
+    target_link_libraries(bonanza-headless ${EGL_LIBRARY})
+  endif()
 endif()
 
 # The game's sounds, recorded from the ROM by the build (sounds.bbs next to the game:

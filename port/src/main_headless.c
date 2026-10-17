@@ -15,6 +15,10 @@
  * Online testing: --net-host PORT / --net-join ADDR play a lockstep game against another
  * runner (only this player's --input entries are used; frames count from the start of the
  * online game). --player N renders player N's screen as in an online game.
+ *
+ * --gpu: the picture drawn on the graphics card (render_gl.c, an off-screen OpenGL ES
+ * context) as well as on the CPU, every frame compared; the graphics card's picture is
+ * the one hashed and saved.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +32,27 @@
 #include "sndmix.h"
 #include "sndrec.h"
 #include "sndbank.h"
+#include "scene.h"
+#include "render_gl.h"
+#ifdef BONANZA_EGL
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+static void *egl_proc(const char *name) { return (void *)eglGetProcAddress(name); }
+/* an off-screen OpenGL ES 3 context (no window, no display) */
+static int gpu_context(void)
+{
+    EGLDisplay d = eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY, NULL);
+    EGLint major, minor, n = 0;
+    if (d == EGL_NO_DISPLAY || !eglInitialize(d, &major, &minor)) return 1;
+    eglBindAPI(EGL_OPENGL_ES_API);
+    EGLint ca[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT, EGL_NONE};
+    EGLConfig c;
+    eglChooseConfig(d, ca, &c, 1, &n);
+    EGLint cx[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_NONE};
+    EGLContext ctx = eglCreateContext(d, n ? c : (EGLConfig)0, EGL_NO_CONTEXT, cx);
+    return !ctx || !eglMakeCurrent(d, EGL_NO_SURFACE, EGL_NO_SURFACE, ctx);
+}
+#endif
 extern unsigned long z80_stat_no_code;
 #include "vdp.h"
 #include "settings.h"
@@ -143,7 +168,8 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    int frames = 600, hash = 0, picture_hash = 0;
+    int frames = 600, hash = 0, picture_hash = 0, gpu = 0;
+    unsigned long gpu_frames = 0, gpu_differ = 0;
     const char *dumpvdp = NULL;
     struct { int frame; char path[256]; } shots[64];
     struct { int frame, pad; uint8_t b; } inputs[256];
@@ -157,6 +183,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--hash")) hash = 1;
         else if (!strcmp(argv[i], "--picture-hash")) picture_hash = 1;
+        else if (!strcmp(argv[i], "--gpu")) gpu = 1;
         else if (!strcmp(argv[i], "--lossless") || !strcmp(argv[i], "--opus")) { /* above */ }
         else if (!strcmp(argv[i], "--dumpvdp") && i + 1 < argc) dumpvdp = argv[++i];
         else if (!strcmp(argv[i], "--ini") && i + 1 < argc) {
@@ -251,6 +278,18 @@ int main(int argc, char **argv)
         vdp_local_player = net_local_player();
         fprintf(stderr, "net: playing as player %d\n", vdp_local_player + 1);
     }
+    if (gpu) {
+#ifdef BONANZA_EGL
+        if (gpu_context() || render_gl_init(egl_proc, 1)) {
+            fprintf(stderr, "gpu: %s\n", render_gl_error()[0] ? render_gl_error() : "no OpenGL ES 3 context");
+            return 1;
+        }
+        scene_cpu_too = 1;
+#else
+        fprintf(stderr, "gpu: this runner was built without EGL\n");
+        return 1;
+#endif
+    }
     md_reset();
     ph_reset();
     if (play_extra > 0) xs_play(play_extra - 1);
@@ -283,6 +322,25 @@ int main(int argc, char **argv)
         ph_pre_frame();                         /* Prop Hunt (online, if the host chose it) */
         md_run_frame();
         ph_post_frame();
+        if (gpu && render_gl_frame()) {         /* the graphics card's picture, checked */
+            static uint16_t codes[MD_SCREEN_H * VDP_FB_W];
+            render_gl_read_codes(codes);
+            gpu_frames++;
+            int bad = 0;
+            for (int k = 0; k < MD_SCREEN_H * VDP_FB_W; k++)
+                if (codes[k] != (&vdp.fbmd[0][0])[k]) {
+                    if (!bad && gpu_differ < 5)
+                        fprintf(stderr, "gpu: frame %d differs first at x %d row %d: %04x, CPU %04x\n", fr,
+                                k % VDP_FB_W, k / VDP_FB_W, codes[k], (&vdp.fbmd[0][0])[k]);
+                    bad++;
+                }
+            if (bad) gpu_differ++;
+            if (getenv("GPUDUMP") && atoi(getenv("GPUDUMP")) == fr) {    /* both pictures (tests) */
+                FILE *d = fopen("gpudump.bin", "wb");
+                if (d) { fwrite(codes, 2, MD_SCREEN_H * VDP_FB_W, d); fwrite(vdp.fbmd, 2, MD_SCREEN_H * VDP_FB_W, d); fclose(d); }
+            }
+            memcpy(vdp.fbmd, codes, sizeof(codes));
+        }
         cheat_frame();                          /* does nothing in an online game */
         int16_t abuf[4096 * 2];
         int got;
@@ -340,6 +398,8 @@ int main(int argc, char **argv)
     fprintf(stderr, "drawing routines: %llu calls in C, %llu as translated (an interrupt came within)\n",
             (unsigned long long)draw_stat_c, (unsigned long long)draw_stat_translated);
     fprintf(stderr, "video port words (a mod's own code): %lu\n", video_port_words);
+    if (gpu)
+        fprintf(stderr, "gpu: %lu pictures drawn on the graphics card, %lu differ from the CPU's\n", gpu_frames, gpu_differ);
     fprintf(stderr, "z80 instructions: %lu native, %lu lines without native code\n", *game.z80r_insns, z80_stat_no_code);
     return 0;
 }

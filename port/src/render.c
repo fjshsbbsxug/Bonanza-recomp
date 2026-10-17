@@ -11,6 +11,7 @@
 #include "wideobj.h"
 #include "prophunt.h"
 #include "picture.h"
+#include "scene.h"
 
 static int pic_out_w;       /* the width the last picture was drawn at (0: none yet) */
 void render_reset(void) { pic_out_w = 0; }
@@ -711,6 +712,154 @@ static line_plan plan[224];
 static void plan_line(int y, line_plan *P);
 static void draw_line(int y, const line_plan *P);
 
+/* ---- the scene (scene.h): the plans as plain tables, for the graphics card ---- */
+render_scene scene;
+int scene_wanted, scene_cpu_too, scene_cpu_drew;
+
+static uint16_t map_cells[1024 * 128];
+static uint8_t roof_cells[512 * 64];
+static struct { uint32_t map, meta; int w, stage; } map_key;
+
+/* the level map's cells, once per level (render.c's map_entry / above_roof, tabled) */
+static void scene_map(void)
+{
+    int stage = (md.ram[0xC05A] << 8) | md.ram[0xC05B];
+    if (map_key.map == level.map && map_key.meta == level.meta && map_key.w == level.w && map_key.stage == stage)
+        return;
+    map_key.map = level.map; map_key.meta = level.meta; map_key.w = level.w; map_key.stage = stage;
+    scene.map_gen++;
+    int w = level.w;
+    for (int cy = 0; cy < 128; cy++)
+        for (int cx = 0; cx < w * 2; cx++)
+            map_cells[cy * w * 2 + cx] = map_entry(cx * 8, cy * 8);
+    above_roof(0, -1);                      /* (works out roof_row for this level) */
+    for (int cy = 0; cy < 64; cy++)
+        for (int cx = 0; cx < w; cx++)
+            roof_cells[cy * w + cx] = (uint8_t)above_roof(cx * 16, cy * 16);
+}
+
+static void scene_pieces(scene_line *L, int list, const wobj_sprite *ws, int count, int y)
+{
+    for (int i = 0; i < count; i++) {
+        const wobj_sprite *w = &ws[i];
+        int row = y - w->y;
+        if (y < w->ymin || y >= w->ymax || row < 0 || row >= w->vsz * 8)
+            continue;
+        if (L->nwobj == SCENE_WOBJ) { scene.valid = 0; return; }
+        L->wobj[L->nwobj++] = (uint16_t)(list << 10 | i);
+    }
+}
+
+static void scene_list(int list, const wobj_sprite *ws, int count)
+{
+    scene.npieces[list] = count;
+    for (int i = 0; i < count; i++) {
+        scene_piece *p = &scene.piece[list][i];
+        p->x = (int16_t)ws[i].x; p->y = (int16_t)ws[i].y;
+        p->hsz = (int16_t)ws[i].hsz; p->vsz = (int16_t)ws[i].vsz;
+        p->ymin = (int16_t)ws[i].ymin; p->ymax = (int16_t)ws[i].ymax;
+        p->attr = ws[i].attr;
+        p->only_outside = (uint8_t)ws[i].only_outside;
+    }
+}
+
+static void scene_fill(void)
+{
+    /* the frame's logic after the picture changes video memory: keep it as drawn */
+    static uint8_t vram[0x10000];
+    memcpy(vram, V, sizeof(vram));
+    scene.valid = 1;
+    scene.vram = vram;
+    scene.out_w = pic_out_w;
+    uint32_t sat0 = 0xFFFFFFFFu;
+    int h400 = -1, map_used = 0;
+    for (int y = 0; y < 224; y++) {
+        const line_plan *P = &plan[y];
+        scene.src_line[P->fb_row] = (int16_t)y;
+        scene_line *L = &scene.line[y];
+        const pic_look *k = P->look;
+        memset(L, 0, sizeof(*L));
+        L->width = (int16_t)P->width;
+        L->m = (int16_t)P->m;
+        for (int i = 0; i < 64; i++)
+            L->pal[i] = md_color_index(k->cram[i]);
+        L->bg = L->pal[k->reg[7] & 0x3F];
+        if (P->off) { L->flags = SL_OFF; continue; }
+        static const int sizes[4] = {32, 64, 32, 128};
+        int h40 = P->width == 320;
+        L->flags = (P->a_map ? SL_A_MAP : 0) | (P->a_map_all ? SL_A_MAP_ALL : 0) | (P->b_wrap ? SL_B_WRAP : 0) |
+                   (P->room_above ? SL_ROOM_ABOVE : 0) | (P->spr == SPR_LINE ? SL_SPRITES : 0) |
+                   (P->stacked ? SL_STACKED : 0) | (P->edges == EDGE_CROP ? SL_CROP : 0) |
+                   (P->edges == EDGE_CLAMP ? SL_CLAMP : 0) | (k->reg[12] & 0x08 ? SL_SHADE : 0) |
+                   (k->reg[11] & 4 ? SL_COLUMN_VS : 0) | ((k->reg[17] & 0x9F) || (k->reg[18] & 0x9F) ? SL_WINDOW : 0);
+        L->a_camx = (int16_t)P->a_camx; L->a_wy = (int16_t)P->a_wy;
+        L->ra_hs = (int16_t)P->ra_hs; L->ra_vs = (int16_t)P->ra_vs;
+        L->ra_camx = (int16_t)P->ra_camx; L->ra_wy = (int16_t)P->ra_wy;
+        L->sky_hs = (int16_t)P->sky_hs; L->sky_vs = (int16_t)P->sky_vs;
+        L->spr_y = (int16_t)P->spr_y;
+        L->hs[0] = (int16_t)pic_hscroll(y, 0);
+        L->hs[1] = (int16_t)pic_hscroll(y, 1);
+        L->pw = (int16_t)sizes[k->reg[16] & 3];
+        L->ph = (int16_t)sizes[(k->reg[16] >> 4) & 3];
+        L->name_a = (uint16_t)((k->reg[2] & 0x38) << 10);
+        L->name_b = (uint16_t)((k->reg[4] & 0x07) << 13);
+        L->name_w = (uint16_t)((k->reg[3] & (h40 ? 0x3C : 0x3E)) << 10);
+        L->reg17 = k->reg[17];
+        L->reg18 = k->reg[18];
+        memcpy(L->vsram, k->vsram, sizeof(L->vsram));
+        if (P->a_map || P->room_above) map_used = 1;
+        if (P->spr == SPR_LINE) {
+            uint32_t sat = (k->reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
+            if (sat0 == 0xFFFFFFFFu) { sat0 = sat; h400 = h40; }
+            if (sat != sat0 || h40 != h400) { scene.valid = 0; return; }   /* one sprite table a picture */
+            cur = k;
+            sprites_read(sat, h40);
+            sprite_pick pick[20];
+            int n = sprites_on_line(P->spr_y, h40, pick);
+            L->npick = (uint8_t)n;
+            for (int i = 0; i < n; i++)
+                L->pick[i] = (uint16_t)(pick[i].k | pick[i].cols << 8);
+            scene_pieces(L, SCENE_WOBJ_LIST, wobj_list, wobj_count, P->spr_y);
+            scene_pieces(L, SCENE_PH_LIST, ph_list, ph_count, P->spr_y);
+        }
+        if (P->stacked)
+            scene_pieces(L, SCENE_STACK_LIST, stack_list, stack_count, y);
+        if (!scene.valid) return;
+    }
+    /* the sprites, with what player colours need of each */
+    scene.nsprites = sat0 == 0xFFFFFFFFu ? 0 : sprites.n;
+    int chars = any_char_colors();
+    for (int i = 0; i < scene.nsprites; i++) {
+        const sprite_obj *o = &sprites.o[i];
+        scene_sprite *d = &scene.sprite[i];
+        d->sx = (int16_t)o->sx; d->sy = (int16_t)o->sy;
+        d->hsz = (int16_t)o->hsz; d->vsz = (int16_t)o->vsz;
+        d->attr = o->attr;
+        int ch = chars && char_of(o->attr) >= 0 ? wobj_player_of(o->attr) : -1;
+        d->ch = (int8_t)ch;
+        if (ch >= 0) {
+            const char_info *ci = char_analyse(o->attr, o->hsz, o->vsz, ch);
+            d->shirt_end = ci->shirt_end;
+            d->pants_end = ci->pants_end;
+            memcpy(d->body, ci->body, sizeof(d->body));
+        }
+    }
+    scene_list(SCENE_WOBJ_LIST, wobj_list, wobj_count);
+    scene_list(SCENE_PH_LIST, ph_list, ph_count);
+    scene_list(SCENE_STACK_LIST, stack_list, stack_count);
+    for (int c = 0; c < 2; c++)
+        for (int p = 0; p < 3; p++)
+            scene.char_on[c][p] = (uint8_t)(settings.char_on[c][p] != 0);
+    scene.map_w = 0;
+    if (map_used && level.w) {
+        scene_map();
+        scene.map_w = level.w;
+        scene.roof_row = roof_row;
+        scene.map_cells = map_cells;
+        scene.roof_cells = roof_cells;
+    }
+}
+
 /* the picture, top to bottom (the port's extras carry decisions from line to line) */
 void vdp_render_frame(void)
 {
@@ -725,8 +874,13 @@ void vdp_render_frame(void)
         for (int y = pic.band[b].y0; y < pic.band[b].y1; y++)
             plan_line(y, &plan[y]);
     }
-    for (int y = 0; y < 224; y++)
-        draw_line(y, &plan[y]);
+    scene.valid = 0;
+    if (scene_wanted)
+        scene_fill();
+    scene_cpu_drew = !scene.valid || scene_cpu_too;
+    if (scene_cpu_drew)
+        for (int y = 0; y < 224; y++)
+            draw_line(y, &plan[y]);
 }
 
 /* the horizontal scroll in the table in video memory, as it is now */

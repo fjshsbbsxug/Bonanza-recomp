@@ -23,6 +23,8 @@
 #include "vdp.h"
 #include "menu.h"
 #include "mods.h"
+#include "scene.h"
+#include "render_gl.h"
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -40,8 +42,10 @@
 #define APP_NAME "Bonanza Bros"
 
 static SDL_Window *window;
-static SDL_Renderer *renderer;
-static SDL_Texture *texture;
+static SDL_Renderer *renderer;    /* drawing the window without OpenGL */
+static SDL_GLContext glctx;        /* the window drawn with OpenGL: the picture from the graphics card */
+static int cpu_drawing;            /* --cpu-drawing: no OpenGL */
+static int vsync_on;               /* presenting waits for the display's refresh */
 static SDL_AudioDeviceID audio_dev;
 static SDL_GameController *pads[2];
 static SDL_Joystick *joys[2];      /* pads SDL has no button layout for (generic USB/Bluetooth) */
@@ -51,7 +55,6 @@ static char status_msg[256] = "Drop the Bonanza Bros. ROM file onto this window"
 static uint8_t *rom_buf;          /* the original ROM */
 static size_t rom_buf_size;
 static uint8_t *mod_rom;          /* the ROM with the enabled mods applied */
-static SDL_Texture *menu_tex;
 static sndrec *recording;          /* the sounds being recorded from the ROM (first start) */
 static char sounds_path[1024];
 static int out_rate = 48000;
@@ -322,6 +325,91 @@ static void record_sounds(void)
     pending_stage = pending_extra = 0;
 }
 
+/* ------------------------------------------------------------------ drawing the window
+ * With OpenGL (render_gl.c) the game's picture is drawn on the graphics card and shown
+ * from there; the CPU-made images (menu, CRT filter, Prop Hunt text) go up as textures.
+ * Without it, SDL's renderer shows the CPU's picture. Rectangles in window pixels. */
+enum { IMG_PICTURE, IMG_CRT, IMG_MENU, IMG_OVERLAY, IMGS };
+static SDL_Texture *img_tex[IMGS];
+static int img_w[IMGS], img_h[IMGS];
+
+static void out_size(int *w, int *h)
+{
+    if (glctx)
+        SDL_GL_GetDrawableSize(window, w, h);
+    else
+        SDL_GetRendererOutputSize(renderer, w, h);
+}
+
+static void scr_begin(int w, int h)
+{
+    if (glctx) {
+        render_gl_screen_begin(w, h);
+        return;
+    }
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+}
+
+/* an image (0xAARRGGBB, iw x ih; its top-left sw x sh shown) */
+static void scr_image(int slot, const uint32_t *px, int iw, int ih, int sw, int sh, SDL_Rect dst, int linear, int blend)
+{
+    if (glctx) {
+        render_gl_screen_image(slot, px, iw, ih, sw, sh, dst.x, dst.y, dst.w, dst.h, linear, blend);
+        return;
+    }
+    if (!img_tex[slot] || img_w[slot] != iw || img_h[slot] != ih) {
+        if (img_tex[slot]) SDL_DestroyTexture(img_tex[slot]);
+        img_tex[slot] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, iw, ih);
+        img_w[slot] = iw;
+        img_h[slot] = ih;
+        if (!img_tex[slot]) return;
+    }
+    SDL_UpdateTexture(img_tex[slot], NULL, px, iw * 4);
+    SDL_SetTextureBlendMode(img_tex[slot], blend ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+    SDL_SetTextureScaleMode(img_tex[slot], linear ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+#endif
+    SDL_Rect src = {0, 0, sw, sh};
+    SDL_RenderCopy(renderer, img_tex[slot], &src, &dst);
+}
+
+static void scr_fill(SDL_Rect r, uint32_t argb)
+{
+    if (glctx) {
+        render_gl_screen_fill(r.x, r.y, r.w, r.h, argb);
+        return;
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, (argb >> 16) & 255, (argb >> 8) & 255, argb & 255, argb >> 24);
+    SDL_RenderFillRect(renderer, &r);
+}
+
+static void scr_outline(SDL_Rect r, uint32_t argb)
+{
+    SDL_Rect e[4] = {{r.x, r.y, r.w, 1}, {r.x, r.y + r.h - 1, r.w, 1}, {r.x, r.y + 1, 1, r.h - 2}, {r.x + r.w - 1, r.y + 1, 1, r.h - 2}};
+    for (int i = 0; i < 4; i++)
+        scr_fill(e[i], argb);
+}
+
+static void scr_end(void)
+{
+    if (glctx)
+        SDL_GL_SwapWindow(window);
+    else
+        SDL_RenderPresent(renderer);
+}
+
+/* the picture into vdp.fbmd when the CPU needs it (menu, CRT filter) and the last
+ * frame was drawn only on the graphics card */
+static void picture_to_cpu(void)
+{
+    if (glctx && !scene_cpu_drew && render_gl_frame()) {
+        render_gl_read_codes(&vdp.fbmd[0][0]);
+        scene_cpu_drew = 1;
+    }
+}
+
 static void present_recording(void)
 {
     int done, total;
@@ -337,15 +425,13 @@ static void present_recording(void)
         for (int y = 140; y < 148; y++)
             menu_buf[y * MENU_W + x] = x - 24 < (MENU_W - 48) * done / (total ? total : 1) ? 0xFFFFD040 : 0xFF404050;
     int ww, wh;
-    SDL_GetRendererOutputSize(renderer, &ww, &wh);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+    out_size(&ww, &wh);
+    scr_begin(ww, wh);
     int mh = wh, mw = wh * 4 / 3;
     if (mw > ww) { mw = ww; mh = ww * 3 / 4; }
     SDL_Rect r = { (ww - mw) / 2, (wh - mh) / 2, mw, mh };
-    SDL_UpdateTexture(menu_tex, NULL, menu_buf, MENU_W * 4);
-    SDL_RenderCopy(renderer, menu_tex, NULL, &r);
-    SDL_RenderPresent(renderer);
+    scr_image(IMG_MENU, menu_buf, MENU_W, MENU_H, MENU_W, MENU_H, r, 0, 0);
+    scr_end();
 }
 
 static int try_rom(const char *path, int report)
@@ -562,7 +648,7 @@ static void touch_event(SDL_Event *e)
     show_touch = 1;
     if (e->type == SDL_FINGERDOWN) {
         int ww, wh;
-        SDL_GetRendererOutputSize(renderer, &ww, &wh);
+        out_size(&ww, &wh);
         if (menu_is_open()) {
             int mx = (int)((e->tfinger.x * ww - menu_rect.x) * MENU_W / (menu_rect.w ? menu_rect.w : 1));
             int my = (int)((e->tfinger.y * wh - menu_rect.y) * MENU_H / (menu_rect.h ? menu_rect.h : 1));
@@ -601,22 +687,18 @@ static void touch_event(SDL_Event *e)
 
 static void draw_touch(int ww, int wh)
 {
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     for (int i = 0; i < NTB; i++) {
         touch_btn *b = &tbtns[i];
         if (!b->label[0])
             continue;
         SDL_Rect r = {(int)(b->x * ww), (int)(b->y * wh), (int)(b->w * ww), (int)(b->h * wh)};
         int on = b->bits && (touch_pad & b->bits) == b->bits;
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, on ? 110 : 45);
-        SDL_RenderFillRect(renderer, &r);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 120);
-        SDL_RenderDrawRect(renderer, &r);
+        scr_fill(r, on ? 0x6EFFFFFFu : 0x2DFFFFFFu);
+        scr_outline(r, 0x78FFFFFFu);
         if (!b->bits) { /* menu button: three bars */
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
             for (int k = 0; k < 3; k++) {
                 SDL_Rect bar = {r.x + r.w / 4, r.y + r.h * (k + 1) / 4 - r.h / 24, r.w / 2, r.h / 12 + 1};
-                SDL_RenderFillRect(renderer, &bar);
+                scr_fill(bar, 0xC8FFFFFFu);
             }
         }
     }
@@ -627,7 +709,6 @@ static void draw_touch(int ww, int wh)
 /* The CRT filter (crt.c) works out every screen pixel the picture covers, on a few
  * threads: the main one and workers that each take a share of the rows. */
 #define CRT_MAX_THREADS 8
-static SDL_Texture *crt_tex;
 static int crt_tex_w, crt_tex_h;
 static uint32_t *crt_buf;
 static struct {
@@ -692,53 +773,26 @@ static void present_crt(const uint32_t *fb, int sw, SDL_Rect dst)
     while (dst.w / div > 2560 || dst.h / div > 1600) div++;
     int w = dst.w / div, h = dst.h / div;
     if (w < 4 || h < 4) return;
-    if (!crt_tex || w != crt_tex_w || h != crt_tex_h) {
-        if (crt_tex) SDL_DestroyTexture(crt_tex);
+    if (!crt_buf || w != crt_tex_w || h != crt_tex_h) {
         free(crt_buf);
-        crt_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
         crt_buf = malloc((size_t)w * h * 4);
-        crt_tex_w = w;
-        crt_tex_h = h;
-        if (!crt_tex || !crt_buf) {
-            if (crt_tex) SDL_DestroyTexture(crt_tex);
-            free(crt_buf);
-            crt_tex = NULL;
-            crt_buf = NULL;
-            crt_tex_w = crt_tex_h = 0;
-            return;
-        }
+        crt_tex_w = crt_buf ? w : 0;
+        crt_tex_h = crt_buf ? h : 0;
+        if (!crt_buf) return;
     }
     crt_render(settings.crt, fb, MD_FB_W, sw, MD_SCREEN_H, crt_buf, w, h, crt_parallel_rows);
-    SDL_UpdateTexture(crt_tex, NULL, crt_buf, w * 4);
-#if SDL_VERSION_ATLEAST(2, 0, 12)
-    SDL_SetTextureScaleMode(crt_tex, div > 1 ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
-#endif
-    SDL_RenderCopy(renderer, crt_tex, NULL, &dst);
+    scr_image(IMG_CRT, crt_buf, w, h, w, h, dst, div > 1, 0);
 }
+
+static int crt_on(void) { return settings.crt > 0 && settings.crt < CRT_COUNT; }
 
 static void present(void)
 {
     int ww, wh;
-    SDL_GetRendererOutputSize(renderer, &ww, &wh);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+    out_size(&ww, &wh);
+    scr_begin(ww, wh);
     if (have_rom) {
         int sw = md_screen_width();
-        uint32_t *fb = (uint32_t *)md_framebuffer();
-        int hl = menu_highlight();
-        if (hl >= 0 && (SDL_GetTicks() / 200) % 2) {
-            /* flash the colour being recoloured */
-            const uint16_t *fm = md_framebuffer_md();
-            for (int i = 0; i < MD_SCREEN_H * MD_FB_W; i++)
-                if (VDP_COLOR(fm[i]) == hl)
-                    fb[i] = 0xFFFFFFFFu ^ (fb[i] & 0x00FFFFFF);
-        }
-        ph_overlay(fb, MD_FB_W, sw, MD_SCREEN_H, net_state() == NET_PLAYING ? net_local_player() : -1);
-        SDL_UpdateTexture(texture, NULL, fb, MD_FB_W * 4);
-#if SDL_VERSION_ATLEAST(2, 0, 12)
-        SDL_SetTextureScaleMode(texture, settings.smooth ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
-#endif
-        SDL_Rect src = {0, 0, sw, MD_SCREEN_H};
         SDL_Rect dst = {0, 0, ww, wh};
         if (settings.screen != SCREEN_STRETCH) {
             /* the picture keeps its TV shape: 4:3, or wider in widescreen modes */
@@ -753,10 +807,34 @@ static void present(void)
             dst.w = dw;
             dst.h = dh;
         }
-        if (settings.crt > 0 && settings.crt < CRT_COUNT)
-            present_crt(fb, sw, dst);
-        else
-            SDL_RenderCopy(renderer, texture, &src, &dst);
+        int hl = menu_highlight();
+        int flash = hl >= 0 && (SDL_GetTicks() / 200) % 2;
+        int me = net_state() == NET_PLAYING ? net_local_player() : -1;
+        if (glctx && !flash && !crt_on() && render_gl_frame()) {
+            /* the graphics card's picture, and the Prop Hunt text over it */
+            static uint32_t over[MD_SCREEN_H * MD_FB_W];
+            render_gl_screen_picture(sw, dst.x, dst.y, dst.w, dst.h, settings.smooth);
+            if (me >= 0) {
+                memset(over, 0, sizeof(over));
+                ph_overlay(over, MD_FB_W, sw, MD_SCREEN_H, me);
+                scr_image(IMG_OVERLAY, over, MD_FB_W, MD_SCREEN_H, sw, MD_SCREEN_H, dst, settings.smooth, 1);
+            }
+        } else {
+            picture_to_cpu();
+            uint32_t *fb = (uint32_t *)md_framebuffer();
+            if (flash) {
+                /* flash the colour being recoloured */
+                const uint16_t *fm = md_framebuffer_md();
+                for (int i = 0; i < MD_SCREEN_H * MD_FB_W; i++)
+                    if (VDP_COLOR(fm[i]) == hl)
+                        fb[i] = 0xFFFFFFFFu ^ (fb[i] & 0x00FFFFFF);
+            }
+            ph_overlay(fb, MD_FB_W, sw, MD_SCREEN_H, me);
+            if (crt_on())
+                present_crt(fb, sw, dst);
+            else
+                scr_image(IMG_PICTURE, fb, MD_FB_W, MD_SCREEN_H, sw, MD_SCREEN_H, dst, settings.smooth, 0);
+        }
         if (show_touch && !menu_is_open())
             draw_touch(ww, wh);
     }
@@ -771,11 +849,11 @@ static void present(void)
     menu_rect.w = mw;
     menu_rect.h = mh;
     if (menu_is_open()) {
+        picture_to_cpu();                       /* its colour list reads the picture */
         menu_draw(menu_buf);
-        SDL_UpdateTexture(menu_tex, NULL, menu_buf, MENU_W * 4);
-        SDL_RenderCopy(renderer, menu_tex, NULL, &menu_rect);
+        scr_image(IMG_MENU, menu_buf, MENU_W, MENU_H, MENU_W, MENU_H, menu_rect, 0, 1);
     }
-    SDL_RenderPresent(renderer);
+    scr_end();
 }
 
 static void set_title(void)
@@ -788,6 +866,33 @@ static void set_title(void)
         SDL_SetWindowTitle(window, t);
     } else
         SDL_SetWindowTitle(window, paused ? "Bonanza Bros (paused)" : "Bonanza Bros");
+}
+
+/* The window drawn with OpenGL: 3.3 on desktops, OpenGL ES 3 on phones, WebGL 2 on the
+ * web. If it cannot be had, SDL's renderer draws the window instead. */
+static void gl_start(void)
+{
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+    const int es = 1;
+#else
+    const int es = 0;
+#endif
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, es ? SDL_GL_CONTEXT_PROFILE_ES : SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, es ? 0 : 3);
+    if (!es)
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    glctx = SDL_GL_CreateContext(window);
+    if (glctx && SDL_GL_MakeCurrent(window, glctx) == 0 && render_gl_init(SDL_GL_GetProcAddress, es) == 0) {
+        vsync_on = SDL_GL_SetSwapInterval(1) == 0;
+        return;
+    }
+    SDL_Log("drawing on the CPU: %s", glctx ? render_gl_error() : SDL_GetError());
+    if (glctx)
+        SDL_GL_DeleteContext(glctx);
+    glctx = NULL;
+    SDL_GL_ResetAttributes();
 }
 
 /* ------------------------------------------------------------------ loop */
@@ -919,7 +1024,7 @@ static void handle_events(void)
                 break;
             if (menu_is_open() && e.button.button == SDL_BUTTON_LEFT) {
                 int ww, wh, winw, winh;
-                SDL_GetRendererOutputSize(renderer, &ww, &wh);
+                out_size(&ww, &wh);
                 SDL_GetWindowSize(window, &winw, &winh);
                 /* window coordinates -> renderer pixels (high-DPI) -> menu coordinates */
                 int px = e.button.x * ww / (winw ? winw : 1), py = e.button.y * wh / (winh ? winh : 1);
@@ -967,7 +1072,6 @@ static void handle_events(void)
 }
 
 static SDL_AudioSpec have;
-static int vsync_on;              /* the renderer waits for the display's refresh */
 
 /* The picture is shown at the display's refresh rate, which is rarely exactly the
  * Mega Drive's 59.92 Hz; the audio queue absorbs the difference by dropping or
@@ -1173,6 +1277,7 @@ static void frame(void)
         return;
     }
     net_update();
+    scene_cpu_too = menu_is_open() || crt_on();    /* they read the CPU's picture */
     int locked = vsync_on && avg > 15.6 && avg < 17.6;
     if (locked) {
         acc = 0;
@@ -1230,7 +1335,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--make-sounds") && i + 1 < argc) {
             make_sounds_only = 1;           /* only record the sounds into this file */
             snprintf(sounds_path, sizeof(sounds_path), "%s", argv[++i]);
-        } else if (!strcmp(argv[i], "--opus"))
+        } else if (!strcmp(argv[i], "--cpu-drawing"))
+            cpu_drawing = 1;                /* the picture drawn on the CPU, shown by SDL's renderer */
+        else if (!strcmp(argv[i], "--opus"))
             sb_write_lossless = 0;          /* record them in Opus (small), not lossless */
     }
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
@@ -1247,24 +1354,23 @@ int main(int argc, char **argv)
     const int win_w = 960;
 #endif
     window = SDL_CreateWindow(APP_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, win_w, 720,
-                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (cpu_drawing ? 0 : SDL_WINDOW_OPENGL));
     if (!window) {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
         return 1;
     }
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer)
-        renderer = SDL_CreateRenderer(window, -1, 0);
-    {
+    if (!cpu_drawing)
+        gl_start();
+    if (!glctx) {
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+        if (!renderer)
+            renderer = SDL_CreateRenderer(window, -1, 0);
         SDL_RendererInfo ri;
         vsync_on = renderer && SDL_GetRendererInfo(renderer, &ri) == 0 && (ri.flags & SDL_RENDERER_PRESENTVSYNC);
-#ifdef __EMSCRIPTEN__
-        vsync_on = 1;   /* requestAnimationFrame */
-#endif
     }
-    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, MD_FB_W, MD_SCREEN_H);
-    menu_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, MENU_W, MENU_H);
-    SDL_SetTextureBlendMode(menu_tex, SDL_BLENDMODE_BLEND);
+#ifdef __EMSCRIPTEN__
+    vsync_on = 1;   /* requestAnimationFrame */
+#endif
 #ifdef __EMSCRIPTEN__
     menu_allow_quit = 0;
 #endif

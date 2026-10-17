@@ -147,6 +147,15 @@ builder/      the HTML builder page
   * Checked against the build with no routines in C: the same game state, sound and
     picture in every frame of the reference runs (`--picture-hash` in the headless
     runner).
+  * The picture is drawn on the graphics card (`port/src/render_gl.c`: OpenGL 3.3 on
+    desktops, OpenGL ES 3 on Android, WebGL 2 on the web). `render.c` plans each line
+    (planes, window, which sprites it shows, the port's extra pieces, widescreen sides
+    from the level map) and lists it all as the frame's scene (`port/src/scene.h`); a
+    shader works out every pixel's colour code from it as the CPU drawing does, and a
+    second pass turns codes into colours. `bonanza-headless --gpu` draws each frame both
+    ways and compares them (no pixel differs in any of the reference runs). The CRT
+    filter, the menu's recolouring and `--cpu-drawing` (or no OpenGL) use the CPU's
+    drawing.
 * **CRT filter** (`port/src/crt.c`; menu: CRT filter, `crt =` in bonanza.ini: off,
   scanlines, tv, monitor): the picture as a CRT shows it, worked out for every screen pixel
   it covers, in linear light (the tube's gamma 2.4). Across a line each pixel is a flat
