@@ -471,6 +471,9 @@ int wobj_build_shifted(int v, int shift, int l0, int ymin, int ymax, wobj_sprite
         for (int i = 0; i < NOBJ; i++) {
             const obj_t *b = &s->o[i];
             if (b->st != pass || !b->frame) continue;
+            /* a guard the game does not draw keeps its last picture (its ghost stands in
+             * for it beside the 4:3 picture): only those it draws */
+            if (is_guard(s, i) && !(b->vis & (1 << v))) continue;
             /* line of its feet in the game's view of that player, then in the view shown */
             int feet = b->y - b->z - s->cam[v][0] + (v ? 0x85 : 0x105) + 0x14 - 128;
             int fv = feet + shift;
