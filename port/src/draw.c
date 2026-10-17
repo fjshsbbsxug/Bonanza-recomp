@@ -6,13 +6,10 @@
  * a routine finishing sooner would move every frame's work). The recompiler calls them
  * where the routines start (tools/recomp.py DRAW); the rts is done there.
  *
- * A routine runs in one go, so it is used only when nothing could have stopped the
- * game's routine part way: an interrupt the game lets in (the split screen's line
- * effects change where the video data goes, so a tile copy they cut into is sent partly
- * elsewhere, as on the console). Each routine first works out its time without doing
- * anything (dry: registers may change, they are put back; memory and video are not
- * written); when an interrupt would come within it, it returns 0 and the game's
- * routine runs as translated, to be stopped where the console stops it. */
+ * A routine runs in one go, between the frame's lines: nothing the game lets in can
+ * come within it, except where it lowers the interrupt mask itself (map_column: with an
+ * interrupt waiting there, the game's routine runs as translated, to be stopped where
+ * the console stops it). */
 #include "recomp_rt.h"
 #include "game.h"
 #include "draw.h"
@@ -23,7 +20,6 @@
 uint64_t draw_stat_c, draw_stat_translated;
 
 static int cyc;     /* time of the routine so far */
-static int dry;     /* only working out the time */
 
 /* the time of instructions run */
 #define COST(n) ((void)(cyc += (n)))
@@ -42,39 +38,16 @@ static int span(uint32_t a, uint32_t b)
 }
 
 static int jumped;      /* the routine ended in a jmp to the game's code (REG_PC): 2 */
-static int mask_floor;  /* the lowest interrupt mask the routine sets (7: it sets none) */
 
-/* may the routine, taking this long (its rts too), run in one go? */
-static int may_run(int cost)
-{
-    cost += 20;                         /* its return (rts 16, rte 20) */
-    if (cpu_irq_dirty)
-        return 0;
-    int left = GET_CYCLES();
-    if (cost <= left && !(mask_floor < 7 && vdp_irq_level() > mask_floor))
-        return 1;
-    int mask = (FLAG_INT_MASK >> 8) & 7;
-    if (mask_floor < mask) mask = mask_floor;
-    return !vdp_irq_within((cost - left) / MD_CYC68K_LINE + 2, mask);
-}
-
-/* runs body dry, then (if it may) for real */
+/* runs a routine in C; its time is used after it */
 static int run(void (*body)(void))
 {
     static int trace = -1;
     if (trace < 0) trace = getenv("DRAWTRACE") ? atoi(getenv("DRAWTRACE")) : 0;
     if (trace && md.frame >= (uint32_t)trace)
         fprintf(stderr, "run frame %u body %ld sp %06X line %d left %d\n", md.frame, (long)((char *)body - (char *)run), REG_A[7], md.line, GET_CYCLES());
-    m68ki_cpu_core saved = m68ki_cpu;  /* the dry run may change registers: put back */
-    dry = 1; cyc = 0; mask_floor = 7;
-    body();
-    m68ki_cpu = saved;
-    if (!may_run(cyc)) {
-        draw_stat_translated++;
-        return 0;
-    }
     draw_stat_c++;
-    dry = 0; cyc = 0; jumped = 0;
+    cyc = 0; jumped = 0;
     body();
     USE_CYCLES(cyc);
     return jumped ? 2 : 1;
@@ -85,19 +58,18 @@ static uint32_t pc_now;
 static void from(uint32_t a) { pc_now = a; }
 static void reach(uint32_t a);
 
-static void put(uint16_t w) { if (!dry) video_put(w); }
+static void put(uint16_t w) { video_put(w); }
 
 /* move.l to the control port: two command words */
 static void ctrl_long(uint32_t v)
 {
-    if (dry) return;
     video_at_long(v);
 }
 
 /* movem.l of n registers to / from the stack, as the routines save and restore them */
 static void push_regs(const int *regs, int n)
 {
-    if (!dry) {
+    {
         uint32_t a = REG_A[7] - 4u * n;
         for (int i = 0; i < n; i++)
             WR32(a + 4u * i, REG_DA[regs[i]]);
@@ -113,7 +85,6 @@ static void reach(uint32_t a) { COST(span(pc_now, a)); pc_now = a; }
 
 static void flags_move(uint32_t v, int bits)
 {
-    if (dry) return;
     FLAG_N = bits == 32 ? NFLAG_32(v) : bits == 16 ? NFLAG_16(v) : NFLAG_8(v);
     FLAG_Z = v;
     FLAG_V = VFLAG_CLEAR;
@@ -175,7 +146,6 @@ static void tiles_packed(void)
         COST(dbra_cost(t == count - 1));
     }
     pop_cost(6);
-    if (dry) return;
     for (int i = 0; i < 32; i++)                         /* the work buffer as left */
         WR8(0xFF17DAu + i, tile[i]);
     REG_A[6] = src;
@@ -193,7 +163,7 @@ static void tiles_raw(void)
     COST(12);                                            /* lea */
     for (int t = 0; t < count; t++) {
         for (int i = 0; i < 8; i++) {
-            if (!dry) {
+            {
                 v = RD32(src);
                 put((uint16_t)(v >> 16));
                 put((uint16_t)v);
@@ -203,7 +173,6 @@ static void tiles_raw(void)
         }
         COST(dbra_cost(t == count - 1));
     }
-    if (dry) return;
     REG_A[1] = 0xC00000u;
     REG_A[6] = src;
     REG_D[7] |= 0xFFFF;
@@ -226,7 +195,6 @@ static void text_chars(uint32_t *src, uint16_t base, int count, uint16_t offset)
         put((uint16_t)sum);
         COST(8 + 4 + dbra_cost(i == count - 1));         /* move.w d6,(a5); move.w d7,d6; dbra */
     }
-    if (dry) return;
     flags_move(base, 16);
     FLAG_X = sum > 0xFFFF ? XFLAG_SET : XFLAG_CLEAR;
 }
@@ -244,7 +212,7 @@ static void text(void)
     COST(28 + 12 + 8 + 4 + 8);                           /* move.l, lea, move.w, move.w, move.w */
     text_chars(&src, base, count, 0x500);
     pop_cost(4);
-    if (!dry) REG_A[6] = src;
+    REG_A[6] = src;
 }
 int draw_text(void) { return run(text); }
 
@@ -259,7 +227,7 @@ static void text_d7(void)
     COST(28 + 12 + 4 + 8);                               /* move.l, lea, move.w, move.w */
     text_chars(&src, (uint16_t)REG_D[7], count, 0x500);
     pop_cost(4);
-    if (!dry) REG_A[6] = src;
+    REG_A[6] = src;
 }
 int draw_text_d7(void) { return run(text_d7); }
 
@@ -283,7 +251,6 @@ static void text_queue(void)
             COST(12 + 28 + 12 + 8 + 4 + 8);              /* movea, move.l, lea, move.w x3 */
             text_chars(&src, base, n + 1, queue_offset);
             COST(20);                                    /* clr.l (a0) */
-            if (dry) return;
             REG_A[0] = slot;
             REG_D[0] = (REG_D[0] & 0xFFFF0000u) | (uint16_t)(3 - i);
             REG_A[6] = src;
@@ -297,7 +264,6 @@ static void text_queue(void)
         }
         COST(12 + 10 + CYC_BCC_NOTAKE_W + 8 + dbra_cost(i == 3));
     }
-    if (dry) return;
     REG_A[0] = slot;
     REG_D[0] |= 0xFFFF;
     FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
@@ -325,21 +291,20 @@ static void registers(void)
             COST(8 + (1 << CYC_SHIFT));                  /* lsr.l #1,d0 */
             if (x) {
                 COST(10 + CYC_BCC_NOTAKE_W);             /* bcc */
-                if (!dry) video_reg_word((uint16_t)RD16(0xFFC07Au + 2u * r));
+                video_reg_word((uint16_t)RD16(0xFFC07Au + 2u * r));
                 COST(12);                                /* move.w (a0),(a1) */
             } else {
                 COST(10);
             }
             COST(4 + dbra_cost(r == 18));                /* addq.w #2,a0; dbra */
         }
-        if (!dry) {
+        {
             REG_D[0] = d0;
             REG_D[1] |= 0xFFFF;
             FLAG_X = x ? XFLAG_SET : XFLAG_CLEAR;
         }
     }
     COST(28);                                            /* clr.l */
-    if (dry) return;
     if (!mask) REG_D[0] = 0;
     REG_A[0] = mask ? 0xFFC0A0u : 0xFFC07Au;
     REG_A[1] = 0xC00004u;
@@ -357,13 +322,13 @@ int draw_registers(void) { return run(registers); }
  * which one that is. Top to bottom: player 2's view (or the 2P panel), the HUD between
  * them, player 1's view, the bottom border. The rte is done by the caller. */
 
-static void at_vscroll(void) { if (!dry) video_at(VIDEO_VSRAM, 0x0000); COST(28); }   /* move.l #$40000010 */
-static void at_hscroll(void) { if (!dry) video_at(VIDEO_VRAM, 0xB000); COST(28); }   /* move.l #$70000002 */
+static void at_vscroll(void) { video_at(VIDEO_VSRAM, 0x0000); COST(28); }   /* move.l #$40000010 */
+static void at_hscroll(void) { video_at(VIDEO_VRAM, 0xB000); COST(28); }   /* move.l #$70000002 */
 static void word(uint16_t v) { put(v); COST(20); }                                /* move.w #v */
 static void word_ram(uint32_t a) { put((uint16_t)RD16(a)); COST(28); }            /* move.w (a).l */
-static void lines_to_next(uint8_t n) { if (!dry) video_set(10, n); COST(20); }
-static void next_band(uint32_t stub) { if (!dry) WR32(0xFFC0B2u, stub); COST(28); }
-static void views_split(void) { if (!dry) WR16(0xFF17B6u, 1); COST(20); }      /* move.w #1,$ff17b6 */
+static void lines_to_next(uint8_t n) { video_set(10, n); COST(20); }
+static void next_band(uint32_t stub) { WR32(0xFFC0B2u, stub); COST(28); }
+static void views_split(void) { WR16(0xFF17B6u, 1); COST(20); }      /* move.w #1,$ff17b6 */
 
 /* tst.w / cmpi.w #1 / cmpi.w #2 of a mode, each followed by a beq: 0-3 (3: none of them) */
 static int mode_of(uint32_t a)
@@ -465,7 +430,7 @@ static void band_00F5A(void)
 {
     at_vscroll(); word_ram(0xFF1848u);
     at_hscroll(); word_ram(0xFF184Au);
-    if (!dry) WR32(0xFF1848u, RD32(0xFF1844u));           /* move.l $ff1844,$ff1848 */
+    WR32(0xFF1848u, RD32(0xFF1844u));           /* move.l $ff1844,$ff1848 */
     COST(36);
     lines_to_next(0x0E); next_band(0x010E8);
 }
@@ -513,12 +478,12 @@ static void band_010E8(void)
     lines_to_next(0x00); next_band(0x00C1E);
     uint16_t r0 = (uint16_t)(RD16(0xFFC07Au) & 0x80EF);    /* andi.w #$80ef,$ffc07a: */
     COST(24);
-    if (!dry) {
+    {
         WR16(0xFFC07Au, r0);
         video_reg_word(r0);                                /* register 0: line interrupts off */
     }
     COST(28);
-    if (!dry && FLAG_S)                                    /* andi.w #$fdff,sr */
+    if (FLAG_S)                                    /* andi.w #$fdff,sr */
         m68ki_set_sr(m68ki_get_sr() & 0xFDFF);
     COST(20);
 }
@@ -550,7 +515,6 @@ static void vram_at(void)
     uint32_t hi = (uint32_t)((a & 0x3FFF) + 0x4000) << 16;
     uint32_t cmd = hi + ((a & 0xC000u) >> 14);
     COST(4 + 14 + 8 + 2 * (8 + (8 << CYC_SHIFT)) + 14 + (6 + (8 << CYC_SHIFT)) + (6 + (6 << CYC_SHIFT)) + 6 + 20);
-    if (dry) return;
     video_at(VIDEO_VRAM, a);
     REG_D[7] = hi;
     REG_D[6] = cmd;
@@ -563,7 +527,6 @@ int draw_vram_at(void) { return run(vram_at); }
 static void no_window(void)
 {
     COST(12 + 12 + 12);
-    if (dry) return;
     video_set(17, 0x00);
     video_set(18, 0x00);
     REG_A[0] = 0xC00004u;
@@ -578,11 +541,11 @@ int draw_no_window(void) { return run(no_window); }
 static uint16_t dma_fill0(int inc1, uint8_t len_lo, uint8_t len_hi, uint8_t code, uint16_t addr, int inc2)
 {
     uint16_t status = 0;
-    if (inc1) { if (!dry) video_set(15, 1); COST(12); }
+    if (inc1) { video_set(15, 1); COST(12); }
     uint16_t r1 = (uint16_t)(RD16(0xFFC07Cu) | 0x10);    /* the DMA allowed */
     COST(16 + 8 + 8);                                    /* move.w, ori.b, move.w d7,(a6) */
     COST(20 + 12 + 20);                                  /* length, mode, command */
-    if (!dry) {
+    {
         uint32_t len = (uint32_t)(len_lo | len_hi << 8);
         video_reg_word(r1);
         (void)code;                                      /* (0x21: video memory) */
@@ -590,14 +553,14 @@ static uint16_t dma_fill0(int inc1, uint8_t len_lo, uint8_t len_hi, uint8_t code
     }
     COST(20);
     for (;;) {                                           /* move.w (a6),d7; andi.w #2; bne.s */
-        if (!dry) status = video_status() & 2;
+        status = video_status() & 2;
         COST(8 + 8);
         if (!status) { COST(10 + CYC_BCC_NOTAKE_B); break; }
         COST(10);
     }
-    if (!dry) video_reg_word((uint16_t)RD16(0xFFC07Cu));
+    video_reg_word((uint16_t)RD16(0xFFC07Cu));
     COST(20);
-    if (inc2) { if (!dry) video_set(15, 2); COST(12); }
+    if (inc2) { video_set(15, 2); COST(12); }
     return status;
 }
 
@@ -606,7 +569,6 @@ static void clear_vram_00628(void)
 {
     COST(12);                                            /* lea */
     uint16_t s = dma_fill0(1, 0xFF, 0x00, 0x21, 0x0000, 1);
-    if (dry) return;
     REG_A[6] = 0xC00004u;
     REG_D[7] = (REG_D[7] & 0xFFFF0000u) | s;
     flags_move(0x8F02, 16);
@@ -628,17 +590,16 @@ static void clear_planes(void)
     dma_fill0(0, 0xFF, 0x01, 0x21, 0xB000, 0);
     COST(12 + 8 + 4);                                    /* lea, move.w, moveq */
     for (int i = 0; i < 0x200; i++) {
-        if (!dry) WR16(0xFF0280u + 2u * i, 0);
+        WR16(0xFF0280u + 2u * i, 0);
         COST(8 + dbra_cost(i == 0x1FF));
     }
     COST(12 + 8 + 4);
     for (int i = 0; i < 0x50; i++) {
-        if (!dry) WR16(0xFF0680u + 2u * i, 0);
+        WR16(0xFF0680u + 2u * i, 0);
         COST(8 + dbra_cost(i == 0x4F));
     }
     COST(28 + 28);                                       /* the vertical scroll: 0, 0 */
     pop_cost(2);
-    if (dry) return;
     video_at(VIDEO_VSRAM, 0x0000);
     video_put(0);
     video_put(0);
@@ -657,18 +618,17 @@ static void video_init(void)
     COST(12 + 12 + 8 + 12 + 4);                          /* lea x4, moveq */
     for (int i = 0; i < 19; i++) {
         uint16_t w = (uint16_t)RD16(0x4FCu + 2u * i);
-        if (!dry) { video_reg_word(w); WR16(0xFFC07Au + 2u * i, w); }
+        { video_reg_word(w); WR16(0xFFC07Au + 2u * i, w); }
         COST(12 + 12 + dbra_cost(i == 18));
     }
     COST(4 + 28 + 8);                                    /* moveq, the palette at 0, move.w */
-    if (!dry) video_at(VIDEO_CRAM, 0x0000);
+    video_at(VIDEO_CRAM, 0x0000);
     for (int i = 0; i < 64; i++) {
-        if (!dry) video_put(0);
+        video_put(0);
         COST(8 + dbra_cost(i == 63));
     }
     COST(12);
     uint16_t s = dma_fill0(1, 0xFF, 0xFF, 0x21, 0x0000, 1);
-    if (dry) return;
     REG_A[0] = 0xC00004u;
     REG_A[1] = 0xC00000u;
     REG_A[2] = 0x522u;
@@ -689,13 +649,12 @@ int draw_video_init(void) { return run(video_init); }
  * flag 0xFFC10C; player 2: 0xFF22C8 / 0xFF27C8, 0xFFC118, 0xFFC110. The Z80 is held
  * off the bus while the chip copies. */
 
-static void z80_bus(uint16_t v) { if (!dry) WR16(0xA11100u, v); }
+static void z80_bus(uint16_t v) { WR16(0xA11100u, v); }
 
 /* a copy from RAM (src) to plane memory at v, n words: the chip told the length, the
  * source and the destination, register 1 with DMA allowed, then put back */
 static void dma_to_plane(uint32_t src, uint16_t v, uint8_t len_hi, uint8_t len_lo)
 {
-    if (dry) return;
     video_reg_word((uint16_t)(RD16(0xFFC07Cu) | 0x10));
     uint16_t second = (uint16_t)((v >> 14) | 0x80);      /* the copy starts with it */
     WR16(0xFF17CAu, second);
@@ -708,12 +667,12 @@ static uint16_t entry_sr;
 
 static void save_sr(void)                                /* move.w sr,-(a7) */
 {
-    if (!dry) { entry_sr = (uint16_t)m68ki_get_sr(); WR16(REG_A[7] - 2, entry_sr); }
+    { entry_sr = (uint16_t)m68ki_get_sr(); WR16(REG_A[7] - 2, entry_sr); }
 }
 
 static void restore_sr(void)                             /* move.w (a7)+,sr */
 {
-    if (!dry) m68ki_set_sr(entry_sr);
+    m68ki_set_sr(entry_sr);
 }
 
 static void column_regs(uint16_t v)                      /* as the routines leave d6, d7 */
@@ -734,15 +693,14 @@ static void columns(void)
     save_sr();
     uint16_t v = (uint16_t)RD16(col_at);
     z80_bus(0x100);
-    if (!dry) video_set(15, 0x80);
+    video_set(15, 0x80);
     dma_to_plane(col_src1, v, 0x00, 0x1E);
     z80_bus(0x000);
     z80_bus(0x100);
     v += 2;
     dma_to_plane(col_src2, v, 0x00, 0x1E);
-    if (!dry) video_set(15, 0x02);
+    video_set(15, 0x02);
     z80_bus(0x000);
-    if (dry) return;
     WR32(col_done, 0);
     restore_sr();
     column_regs(v);
@@ -773,10 +731,9 @@ static void rows(void)
     save_sr();
     uint16_t v = second ? rows_v1 : rows_v0;
     z80_bus(0x100);
-    if (!dry) video_set(15, 0x02);
+    video_set(15, 0x02);
     dma_to_plane(col_src1, v, 0x02, 0x80);
     z80_bus(0x000);
-    if (dry) return;
     WR16(rows_flag, 0);
     WR32(col_done, 0);
     restore_sr();
@@ -818,7 +775,6 @@ static void hex_digits(void)
         put(lo);
         COST(8 + dbra_cost(i == 3));
     }
-    if (dry) return;
     REG_A[4] = 0xC00000u;
     REG_A[6] = src;
     REG_D[5] = (REG_D[5] & 0xFFFF0000u) | 0xFFFF;
@@ -835,7 +791,7 @@ static void vram_copy(void)
     uint16_t len = (uint16_t)REG_D[5], from = (uint16_t)REG_D[7], to = (uint16_t)REG_D[6];
     uint16_t status = 0;
     COST(span(0x28200, 0x2827C));
-    if (!dry) {
+    {
         uint32_t sp = REG_A[7];
         WR16(sp - 2, (uint16_t)m68ki_get_sr());              /* move.w sr,-(a7) */
         WR32(sp - 10, REG_D[4]);                              /* movem.l d4/a6,-(a7) */
@@ -850,13 +806,12 @@ static void vram_copy(void)
         REG_D[6] = d6;
     }
     for (;;) {                                               /* lea; move.w (a6),d7; andi; bne.s */
-        if (!dry) status = video_status() & 2;
+        status = video_status() & 2;
         COST(12 + 8 + 8);
         if (!status) { COST(10 + CYC_BCC_NOTAKE_B); break; }
         COST(10);
     }
     COST(span(0x2828A, 0x282A2));
-    if (dry) return;
     video_reg_word((uint16_t)RD16(0xFFC07Cu));
     video_set(15, 0x02);
     WR16(0xA11100u, 0);
@@ -886,7 +841,7 @@ static uint16_t tiles_plus_500(uint32_t *src, int n, int before, int after)
         put((uint16_t)sum);
         COST(after + (after ? dbra_cost(i == n - 1) : 0));  /* the move.w; dbra (in a loop) */
     }
-    if (!dry) FLAG_X = sum > 0xFFFF ? XFLAG_SET : XFLAG_CLEAR;
+    FLAG_X = sum > 0xFFFF ? XFLAG_SET : XFLAG_CLEAR;
     return (uint16_t)sum;
 }
 
@@ -903,10 +858,9 @@ static void hud_stage_name(void)
     COST(span(0x1050C, 0x1052C));
     for (int r = 0; r < 4; r++) {
         if (r) COST(28 + 8);                             /* the next row's command, move.w #9 */
-        if (!dry) video_at(VIDEO_VRAM, rows[r]);
+        video_at(VIDEO_VRAM, rows[r]);
         last = tiles_plus_500(&src, 10, 16, 16);
     }
-    if (dry) return;
     set_low_word(0, 0xFFFF);
     set_low_word(1, last);
     REG_A[0] = src;
@@ -920,7 +874,7 @@ static void hud_frame(void)
 {
     uint16_t d0 = (uint16_t)(RD16(0xFFC04Eu) << 1);
     COST(span(0x1044A, 0x10482));
-    if (!dry) {
+    {
         WR32(0xFF6C4Au, 0x30000);
         WR8(0xFF6C4Au, RD8(0x110F4u + (uint32_t)(int16_t)d0));
         video_at(VIDEO_VRAM, 0xFD00);
@@ -929,7 +883,7 @@ static void hud_frame(void)
     tiles_plus_500(&src, 0x180, 16, 8);
     from(0x1048E);
     reach(0x104B2);
-    if (!dry) video_at(VIDEO_VRAM, 0xFEB2);
+    video_at(VIDEO_VRAM, 0xFEB2);
     src = 0x10D84u + (uint16_t)(RD16(0xFFC05Au) << 2);   /* the stage number: 2 tiles */
     tiles_plus_500(&src, 1, 16, 0);
     COST(8);
@@ -938,16 +892,16 @@ static void hud_frame(void)
     from(0x104C2);
     reach(0x104E8);
     uint8_t t[3];
-    for (int i = 0; i < 3; i++) t[i] = dry ? 0 : (uint8_t)RD8(0xFF6C4Bu + i);
-    if (!dry) video_at(VIDEO_VRAM, 0xFE8A);                 /* the time: minutes, then seconds */
+    for (int i = 0; i < 3; i++) t[i] = (uint8_t)RD8(0xFF6C4Bu + i);
+    video_at(VIDEO_VRAM, 0xFE8A);                 /* the time: minutes, then seconds */
     put((uint16_t)(t[0] + 0x8520));
-    if (!dry) video_at(VIDEO_VRAM, 0xFE8E);
+    video_at(VIDEO_VRAM, 0xFE8E);
     reach(0x104FE);
     put((uint16_t)(t[1] + 0x8520));
     reach(0x1050A);
     put((uint16_t)(t[2] + 0x8520));
     reach(0x1050C);
-    if (!dry) {
+    {
         REG_A[1] = 0xC00000u;
         REG_D[0] = 0;                                    /* andi.l #$ffff: upper word 0 */
     }
@@ -1004,7 +958,7 @@ static void hud_number(void)
     W(d6, (uint16_t)d6 << 8);
     W(d7, (uint16_t)d7 + (uint16_t)d6);
     COST(span(L->after, L->bne1));
-    if (!dry) {
+    {
         WR16(L->store_at, (uint16_t)d7);
         video_at(VIDEO_VRAM, L->blank_at);
         for (int i = 0; i < 4; i++) video_put(L->blank);
@@ -1013,7 +967,7 @@ static void hud_number(void)
     uint32_t sum = 0;
     int k;                                                /* the next digit's place */
 #define DIGIT(r, place) do { sum = (uint32_t)(uint16_t)RD16(L->table + (uint32_t)(int16_t)(uint16_t)(r)) + 0x500; \
-        W(r, sum); if (!dry) { if (L->digit_at[place]) video_at(VIDEO_VRAM, L->digit_at[place]); \
+        W(r, sum); { if (L->digit_at[place]) video_at(VIDEO_VRAM, L->digit_at[place]); \
         video_put((uint16_t)sum); } } while (0)
 #define NEXT_BYTE() do { B(d7, RD8(a6)); a6++; B(d6, d7); W(d7, ((uint16_t)d7 & 0xF0) >> 3); } while (0)
     NEXT_BYTE();
@@ -1052,7 +1006,6 @@ hi2:
 done:
 #undef DIGIT
 #undef NEXT_BYTE
-    if (dry) return;
     WR16(L->done_flag, 0);
     REG_D[4] = 0;
     REG_D[5] = 1;
@@ -1086,7 +1039,7 @@ static void call(void (*body)(void), uint32_t ret, int jsr_cost)
     uint32_t pc = pc_now;
     COST(jsr_cost);
     REG_A[7] -= 4;
-    if (!dry) WR32(REG_A[7], ret);
+    WR32(REG_A[7], ret);
     body();
     REG_A[7] += 4;
     COST(16);
@@ -1102,10 +1055,9 @@ static void hud_score(void)
     COST(12 + 8 + 28);                                   /* lea, lea, the command */
     REG_A[6] = score_at;
     REG_A[5] = score_table;
-    if (!dry) video_at(VIDEO_VRAM, score_vram);
+    video_at(VIDEO_VRAM, score_vram);
     call(hex_digits, score_ret, 18);
     COST(20);                                            /* clr.w */
-    if (dry) return;
     WR16(score_done, 0);
     FLAG_N = NFLAG_CLEAR; FLAG_Z = ZFLAG_SET; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
 }
@@ -1136,7 +1088,7 @@ static void tile_loads(void)
         uint32_t d0 = REG_D[0];
         COST(span(0x1364, 0x136A));                      /* movem.l d0,-(a7); tst.w (a0) */
         REG_A[7] -= 4;
-        if (!dry) WR32(REG_A[7], d0);
+        WR32(REG_A[7], d0);
         uint16_t busy = (uint16_t)RD16(a0);
         flags_move(busy, 16);
         if (!busy) {
@@ -1148,7 +1100,7 @@ static void tile_loads(void)
             uint32_t d7 = (v & 0xFFFF0000u) | (((uint16_t)v & 0xC000) >> 14);
             uint64_t sum = (uint64_t)d7 + d6;
             d7 = (uint32_t)sum;
-            if (!dry) video_at_long(d7);
+            video_at_long(d7);
             REG_A[6] = RD32(a0 + 2);
             W(d6, RD16(a0 + 0xA));                       /* tiles left */
             W(d7, RD16(a0 + 0xC));                       /* a frame's share */
@@ -1168,7 +1120,7 @@ static void tile_loads(void)
             REG_D[6] = d6; REG_D[7] = d7;
             uint32_t a5 = REG_A[5];
             REG_A[7] -= 12;
-            if (!dry) { WR32(REG_A[7], d6); WR32(REG_A[7] + 4, d7); WR32(REG_A[7] + 8, a5); }
+            { WR32(REG_A[7], d6); WR32(REG_A[7] + 4, d7); WR32(REG_A[7] + 8, a5); }
             x = (uint16_t)REG_D[7] == 0;                 /* subq.w #1,d7 */
             W(REG_D[7], (uint16_t)REG_D[7] - 1);
             FLAG_X = x ? XFLAG_SET : XFLAG_CLEAR;
@@ -1188,7 +1140,7 @@ static void tile_loads(void)
                 REG_D[6] = 0;
                 uint32_t c = (uint16_t)RD16(0xFF554Eu);
                 uint32_t r = c - 1;
-                if (!dry) { WR16(a0, 0); WR16(0xFF554Eu, (uint16_t)r); }
+                { WR16(a0, 0); WR16(0xFF554Eu, (uint16_t)r); }
                 FLAG_N = NFLAG_16(r);
                 FLAG_Z = MASK_OUT_ABOVE_16(r);
                 FLAG_V = VFLAG_SUB_16(1, c, r);
@@ -1199,7 +1151,7 @@ static void tile_loads(void)
                 FLAG_X = (w >> 11) & 1 ? XFLAG_SET : XFLAG_CLEAR;   /* lsl.w #5 */
                 W(REG_D[7], (uint16_t)(w << 5));
                 REG_A[5] = RD32(a0 + 6) + (uint32_t)(int16_t)(uint16_t)REG_D[7];
-                if (!dry) { WR32(a0 + 2, REG_A[6]); WR32(a0 + 6, REG_A[5]); WR16(a0 + 0xA, (uint16_t)d6); }
+                { WR32(a0 + 2, REG_A[6]); WR32(a0 + 6, REG_A[5]); WR16(a0 + 0xA, (uint16_t)d6); }
                 flags_move((uint16_t)d6, 16);
             }
         }
@@ -1222,7 +1174,7 @@ int draw_tile_loads(void) { return run(tile_loads); }
 static void scroll_word(uint32_t at, uint8_t code, uint16_t addr, uint16_t v)
 {
     reach(at);
-    if (!dry) video_at(code, addr);
+    video_at(code, addr);
     reach(at + 10);
     put(v);
 }
@@ -1247,7 +1199,7 @@ static void jump_by_state(uint32_t state, uint32_t table, int clear_d0)
 static void frame_113E6(void)
 {
     from(0x113E6);
-    if (!dry) WR16(0xFF17A4u, 0);
+    WR16(0xFF17A4u, 0);
     scroll_word(0x113EC, 0x05, 0x0000, (uint16_t)RD16(0xFF0680u));
     scroll_word(0x11400, 0x05, 0x0002, (uint16_t)RD16(0xFF0680u));
     scroll_word(0x11414, 0x01, 0xB000, (uint16_t)RD16(0xFF0280u));
@@ -1261,7 +1213,7 @@ int draw_frame_113E6(void) { return run(frame_113E6); }
 static void frame_03420(void)
 {
     from(0x03420);
-    if (!dry) WR16(0xFF17A4u, 0);
+    WR16(0xFF17A4u, 0);
     scroll_word(0x03426, 0x05, 0x0000, (uint16_t)RD16(0xFF6C54u));
     scroll_word(0x0343A, 0x05, 0x0002, 0);
     scroll_word(0x0344C, 0x01, 0xB002, 0);
@@ -1274,7 +1226,7 @@ int draw_frame_03420(void) { return run(frame_03420); }
 static void frame_122FE(void)
 {
     from(0x122FE);
-    if (!dry) {
+    {
         WR16(0xFF17A4u, 0);
         WR16(0xFF5546u, (uint16_t)(RD16(0xFF5546u) + 1));
     }
@@ -1291,7 +1243,7 @@ int draw_frame_122FE(void) { return run(frame_122FE); }
 static void frame_248DE(void)
 {
     from(0x248DE);
-    if (!dry) {
+    {
         WR16(0xFF17A0u, (uint16_t)(RD16(0xFF17A0u) + 1));
         WR16(0xFF17A4u, 0);
     }
@@ -1322,13 +1274,13 @@ static void vblank_entry(void)
     COST(10 + CYC_BCC_NOTAKE_W);
     from(0x998);
     uint16_t r0 = (uint16_t)(RD16(0xFFC07Au) | 0x8010);
-    if (!dry) WR32(0xFFC0B2u, 0x00C1E);
+    WR32(0xFFC0B2u, 0x00C1E);
     reach(0x9A2);
-    if (!dry) video_set(10, 0x00);
+    video_set(10, 0x00);
     reach(0x9AA);
-    if (!dry) WR16(0xFFC07Au, r0);
+    WR16(0xFFC07Au, r0);
     reach(0x9B2);
-    if (!dry) video_reg_word(r0);
+    video_reg_word(r0);
     reach(0x9BC);
     flags_move(r0, 16);
     go_on(0x9BC);
@@ -1342,13 +1294,13 @@ static void vblank_scroll(void)
 {
     uint16_t busy = (uint16_t)RD16(0xFF17B4u);
     from(0x9C6);
-    if (!dry) video_at(VIDEO_VSRAM, 0x0000);
+    video_at(VIDEO_VSRAM, 0x0000);
     reach(0x9D0);
     put((uint16_t)RD16(0xFF0680u));
     reach(0x9DA);
     put(0x01CF);
     reach(0x9E2);
-    if (!dry) video_at(VIDEO_VRAM, 0xB000);
+    video_at(VIDEO_VRAM, 0xB000);
     reach(0x9EC);
     put((uint16_t)RD16(0xFF0280u));
     reach(0x9F6);
@@ -1359,9 +1311,9 @@ static void vblank_scroll(void)
     COST(10 + CYC_BCC_NOTAKE_W);
     from(0xA08);
     uint16_t r1 = (uint16_t)(RD16(0xFFC07Cu) & 0x81BF);
-    if (!dry) { WR16(0xFF17B4u, 1); WR16(0xFFC07Cu, r1); }
+    { WR16(0xFF17B4u, 1); WR16(0xFFC07Cu, r1); }
     reach(0xA18);
-    if (!dry) video_reg_word(r1);
+    video_reg_word(r1);
     reach(0xA22);
     flags_move(r1, 16);
     go_on(0xA22);
@@ -1369,7 +1321,7 @@ static void vblank_scroll(void)
 static void vblank_scroll_9C0(void)
 {
     COST(20);
-    if (!dry) WR16(0xFF17B6u, 0);
+    WR16(0xFF17B6u, 0);
     vblank_scroll();
 }
 int draw_vblank_scroll(void) { return run(vblank_scroll); }
@@ -1382,21 +1334,21 @@ int draw_vblank_scroll_9C0(void) { return run(vblank_scroll_9C0); }
 static void dma_from_ram(uint32_t at, uint32_t src, uint16_t n, uint16_t first, uint16_t second)
 {
     from(at);
-    if (!dry) WR16(0xA11100u, 0x100);
+    WR16(0xA11100u, 0x100);
     reach(at + 0x18);
-    if (!dry) video_reg_word((uint16_t)(RD16(0xFFC07Cu) | 0x10));
+    video_reg_word((uint16_t)(RD16(0xFFC07Cu) | 0x10));
     reach(at + 0x1A);                                    /* the length */
     reach(at + 0x20);                                    /* the source */
     reach(at + 0x26);
     reach(at + 0x36);                                    /* the first word at + 0x2A, the second here */
-    if (!dry) {
+    {
         WR16(0xFF17CAu, second);
         uint16_t lo = (uint16_t)RD16(0xFF17CAu);
         int to = ((first >> 14) & 3) | ((lo >> 2) & 0x1C);
         video_from_ram(to, (uint16_t)((first & 0x3FFF) | ((lo & 3) << 14)), src, n ? n : 0x10000, vdp.reg[15]);
     }
     reach(at + 0x3C);
-    if (!dry) video_reg_word((uint16_t)RD16(0xFFC07Cu));
+    video_reg_word((uint16_t)RD16(0xFFC07Cu));
 }
 
 /* 0xA2C: the sprite table (0xFF0000, 0x100 words) to video memory 0xBE00; then which
@@ -1405,11 +1357,11 @@ static void vblank_sprites(void)
 {
     dma_from_ram(0xA2C, 0xFF0000u, 0x100, 0x7E00, 0x82);
     reach(0xA6E);
-    if (!dry) video_at(VIDEO_VRAM, 0xBE00);
+    video_at(VIDEO_VRAM, 0xBE00);
     reach(0xA78);
     put((uint16_t)RD16(0xFF0000u));
     reach(0xA82);
-    if (!dry) WR16(0xA11100u, 0);
+    WR16(0xA11100u, 0);
     reach(0xA94);
     REG_A[6] = 0xC00004u;
     uint16_t odd = (uint16_t)(RD16(0xFF17A0u) & 1);
@@ -1444,11 +1396,11 @@ static void vblank_palette(void)
     }
     dma_from_ram(0xAF4, 0xFF0200u, 0x40, 0xC000, 0x80);
     reach(0xB36);
-    if (!dry) video_at(VIDEO_CRAM, 0x0000);
+    video_at(VIDEO_CRAM, 0x0000);
     reach(0xB40);
     put((uint16_t)RD16(0xFF0200u));
     reach(0xB4A);
-    if (!dry) { WR16(0xA11100u, 0); WR16(0xFF17C4u, 0); }
+    { WR16(0xA11100u, 0); WR16(0xFF17C4u, 0); }
     reach(0xB58);
     REG_A[6] = 0xC00004u;
     W(REG_D[7], RD16(0xFFC07Cu) | 0x10);
@@ -1494,15 +1446,15 @@ static void vblank_hud(void)
         COST(10 + CYC_BCC_NOTAKE_W);
         from(0xBAE);
         uint16_t r1 = (uint16_t)(RD16(0xFFC07Cu) | 0x8140);
-        if (!dry) WR16(0xFFC07Cu, r1);
+        WR16(0xFFC07Cu, r1);
         reach(0xBB6);
-        if (!dry) video_reg_word(r1);
+        video_reg_word(r1);
         reach(0xBC0);
     }
     COST(span(0xBC0, 0xBE8));
     uint16_t b1 = (uint16_t)(RD16(0xFF17BAu) | RD16(0xFF17BCu));
     uint16_t b2 = (uint16_t)(RD16(0xFF17C0u) | RD16(0xFF17C2u));
-    if (!dry) { WR16(0xFF17B8u, b1); WR16(0xFF17BEu, b2); }
+    { WR16(0xFF17B8u, b1); WR16(0xFF17BEu, b2); }
     REG_D[7] = b2;
     flags_move(b2, 16);
     go_on(0xBE8);
@@ -1524,7 +1476,7 @@ static void hud_time(void)
     static const uint8_t write_at[3] = {0x1C, 0x32, 0x3E};   /* the move.w d1,(a1) */
     for (int i = 0; i < 3; i++) {
         d1 = (uint16_t)((uint8_t)RD8(a0++) + 0x8520);
-        if (!dry && place[i]) video_at(VIDEO_VRAM, place[i]);
+        if (place[i]) video_at(VIDEO_VRAM, place[i]);
         reach(time_at + write_at[i]);
         put(d1);
     }
@@ -1548,7 +1500,7 @@ static void vram_at_d6(void)
     COST(span(0x28AD0, 0x28AF2));
     REG_D[6] = (uint32_t)((a & 0x3FFF) | 0x4000);
     REG_D[5] = (uint32_t)((a & 0xC000) >> 14);
-    if (!dry) video_at_long((uint32_t)(uint16_t)REG_D[6] << 16 | (uint16_t)REG_D[5]);
+    video_at_long((uint32_t)(uint16_t)REG_D[6] << 16 | (uint16_t)REG_D[5]);
     flags_move(REG_D[5], 16);
     FLAG_X = XFLAG_CLEAR;
 }
@@ -1604,9 +1556,7 @@ int draw_map_rect(void) { return run(map_rect); }
  * moved on 2 rows (0x100) and the source a map row */
 static void set_sr_imm(uint16_t v)
 {
-    if (((v >> 8) & 7) < mask_floor) mask_floor = (v >> 8) & 7;
-    if (!dry) m68ki_set_sr(v);
-    else m68ki_set_sr_noint(v);
+    m68ki_set_sr(v);
 }
 
 static void map_column(void)
@@ -1618,7 +1568,7 @@ static void map_column(void)
         uint16_t v = (uint16_t)(at + (half ? 0x80 : 0));
         uint32_t d7 = (uint32_t)((v & 0x3FFF) + 0x4000) << 16;
         uint32_t d6 = d7 + ((v & 0xC000u) >> 14);
-        if (!dry) video_at_long(d6);
+        video_at_long(d6);
         int n = (int)(uint16_t)RD16(a0 + 0xC) + 1;
         uint32_t a6 = RD32(a0 + 2), a5 = RD32(a0 + 6);
         set_sr_imm(0x2700);
@@ -1644,7 +1594,7 @@ static void map_column(void)
     uint32_t src = (uint16_t)RD16(a0 + 0x10);           /* move.w $10(a0),d7; add.w d7,d7 */
     uint32_t res = src + src;
     uint32_t a6 = RD32(a0 + 2) + (uint32_t)(int16_t)(uint16_t)res;
-    if (!dry) { WR16(a0 + 0xA, (uint16_t)(at + 0x100)); WR32(a0 + 2, a6); }
+    { WR16(a0 + 0xA, (uint16_t)(at + 0x100)); WR32(a0 + 2, a6); }
     REG_A[6] = a6;
     W(REG_D[7], res);
     FLAG_N = NFLAG_16(res);
@@ -1652,7 +1602,16 @@ static void map_column(void)
     FLAG_V = VFLAG_ADD_16(src, src, res);
     FLAG_X = FLAG_C = CFLAG_16(res);
 }
-int draw_map_column(void) { return run(map_column); }
+/* it lets interrupts in part way (move #$2300,sr): with one waiting above that, the
+ * game's routine runs as translated, to be stopped where the console stops it */
+int draw_map_column(void)
+{
+    if (vdp_irq_level() > 3) {
+        draw_stat_translated++;
+        return 0;
+    }
+    return run(map_column);
+}
 
 /* ---------------------------------------------------------------- sprites cleared */
 
@@ -1666,7 +1625,7 @@ static void sprite_list(void)
     int n = (int)(uint16_t)REG_D[7] + 1;
     uint32_t d5 = 1;
     for (int i = 0; i < n; i++) {
-        if (!dry) {
+        {
             WR16(a6, 1); WR16(a6 + 2, (uint16_t)d5); WR16(a6 + 4, 0); WR16(a6 + 6, 1);
         }
         a6 += 8;
@@ -1698,7 +1657,7 @@ static void sprites_clear(void)
     COST(12);
     dma_fill0(1, 0xFF, 0x01, 0x21, 0xBE00, 1);
     COST(20);
-    if (!dry) video_set(15, 0x02);
+    video_set(15, 0x02);
     pop_cost(2);
     REG_A[6] = 0xC00004u;
     REG_D[6] = d6; REG_D[7] = d7;
@@ -1717,7 +1676,7 @@ static void targets_picture(void)
     uint16_t at = 0xC28C, last = 0;
     uint32_t src = 0x80, dst = 0, res = 0;
     for (int r = 0; r < 18; r++) {
-        if (!dry) video_at_long((uint32_t)((at & 0x3FFF) | 0x4000) << 16 | ((at & 0xC000) >> 14));
+        video_at_long((uint32_t)((at & 0x3FFF) | 0x4000) << 16 | ((at & 0xC000) >> 14));
         COST(span(0x11512, 0x1153A));
         for (int c = 0; c < 20; c++) {
             last = (uint16_t)RD16(a5);
@@ -1780,7 +1739,7 @@ static void map_block(void)
             W(REG_D[7], RD16(a0 + 8));
             if (half) {
                 W(REG_D[7], add_w(0x80, (uint16_t)REG_D[7]));
-                if (!dry) WR16(a0 + 8, (uint16_t)REG_D[7]);
+                WR16(a0 + 8, (uint16_t)REG_D[7]);
             }
             W(REG_D[2], REG_D[7]);
             reach(row_at + (half ? 0x0E : 0x06));        /* the jsr */
@@ -1828,10 +1787,10 @@ static void map_block(void)
         }
         from(0x28362);
         W(REG_D[7], add_w(0x80, (uint16_t)RD16(a0 + 8)));
-        if (!dry) WR16(a0 + 8, (uint16_t)REG_D[7]);
+        WR16(a0 + 8, (uint16_t)REG_D[7]);
         W(REG_D[7], add_w((uint16_t)RD16(0xFF2CCCu), (uint16_t)RD16(0xFF2CCCu)));
         REG_A[6] = RD32(a0) + (uint32_t)(int16_t)(uint16_t)REG_D[7];
-        if (!dry) WR32(a0, REG_A[6]);
+        WR32(a0, REG_A[6]);
         flags_move(REG_A[6], 32);
         reach(0x28380);
         COST(dbra_cost(r == rows - 1));
@@ -1860,7 +1819,7 @@ static void map_block_each(void)
             W(REG_D[7], RD16(a0 + 8));
             if (half) {
                 W(REG_D[7], add_w(0x80, (uint16_t)REG_D[7]));
-                if (!dry) WR16(a0 + 8, (uint16_t)REG_D[7]);
+                WR16(a0 + 8, (uint16_t)REG_D[7]);
             }
             W(REG_D[2], REG_D[7]);
             reach(loop);
@@ -1912,10 +1871,10 @@ static void map_block_each(void)
         }
         from(0x28468);
         W(REG_D[7], add_w(0x80, (uint16_t)RD16(a0 + 8)));
-        if (!dry) WR16(a0 + 8, (uint16_t)REG_D[7]);
+        WR16(a0 + 8, (uint16_t)REG_D[7]);
         W(REG_D[7], add_w((uint16_t)RD16(0xFF2CCCu), (uint16_t)RD16(0xFF2CCCu)));
         REG_A[6] = RD32(a0) + (uint32_t)(int16_t)(uint16_t)REG_D[7];
-        if (!dry) WR32(a0, REG_A[6]);
+        WR32(a0, REG_A[6]);
         flags_move(REG_A[6], 32);
         reach(0x28486);
         COST(dbra_cost(r == rows - 1));
@@ -1983,7 +1942,7 @@ static void tile_stream(void)
     int n = (int)(uint16_t)REG_D[7] + 1;
     for (int t = 0; t < n; t++) {
         for (int i = 0; i < 8; i++) {
-            if (!dry) {
+            {
                 uint32_t v = RD32(src);
                 put((uint16_t)(v >> 16));
                 put((uint16_t)v);
@@ -1998,7 +1957,7 @@ static void tile_stream(void)
     from(b + 0x30);
     reach(b + 0x3A);                                     /* lea; clr.w $c(a0) */
     REG_A[0] = ts_sent;
-    if (!dry) WR16(ts_sent + 0xC, 0);
+    WR16(ts_sent + 0xC, 0);
     reach(b + 0x40);                                     /* tst.w (pending).l */
     uint32_t pending = set + 0x12;
     uint16_t p = (uint16_t)RD16(pending);
@@ -2026,7 +1985,7 @@ static void tile_stream(void)
     REG_A[6] = a6;
     COST(20 + 12);                                       /* subq.w #1,(pending).l; lea */
     uint32_t r = (uint32_t)p - 1;
-    if (!dry) WR16(pending, (uint16_t)r);
+    WR16(pending, (uint16_t)r);
     FLAG_N = NFLAG_16(r);
     FLAG_Z = MASK_OUT_ABOVE_16(r);
     FLAG_V = VFLAG_SUB_16(1, p, r);
@@ -2053,9 +2012,9 @@ static void window_regs(void)
     from(0x6EA);
     REG_A[0] = 0xC00004u;
     reach(0x6F4);
-    if (!dry) video_set(17, 0x00);
+    video_set(17, 0x00);
     reach(0x6F8);
-    if (!dry) video_set(18, 0x03);
+    video_set(18, 0x03);
     flags_move(0x9203, 16);
 }
 int draw_window_regs(void) { return run(window_regs); }
@@ -2077,7 +2036,7 @@ static void hex_buffer(void)
     for (int i = 0; i < n; i++) {
         uint8_t b = (uint8_t)RD8(src++);
         uint16_t hi = (uint16_t)RD16(0x12F8 + (b >> 4) * 2), lo = (uint16_t)RD16(0x12F8 + (b & 15) * 2);
-        if (!dry) { WR16(buf, hi); WR16(buf + 2, lo); }
+        { WR16(buf, hi); WR16(buf + 2, lo); }
         buf += 4;
         v = lo;
         COST(span(0x12B4, 0x12CA) + dbra_cost(i == n - 1));
@@ -2100,7 +2059,7 @@ static void hex_buffer(void)
             FLAG_V = VFLAG_SUB_16(w, 0x530, r); FLAG_C = CFLAG_16(r);
             COST(8);
             if (w != 0x530) { COST(10); break; }         /* bne.w taken */
-            if (!dry) WR16(a, 0x502);
+            WR16(a, 0x502);
             a += 2;
             flags_move(0x502, 16);
             COST(12 + 12 + dbra_cost(i == 0));           /* bne; move.w #$502,(a5)+; dbra */
@@ -2169,31 +2128,31 @@ static void ram_op16(uint32_t a, char op, uint16_t m)
 {
     uint16_t v = (uint16_t)RD16(a);
     v = op == '&' ? (uint16_t)(v & m) : (uint16_t)(v | m);
-    if (!dry) WR16(a, v);
+    WR16(a, v);
     flags_move(v, 16);
 }
 /* move.b / move.w / move.l #v,(a).l and clr */
-static void ram_set8(uint32_t a, uint8_t v) { if (!dry) WR8(a, v); flags_move(v, 8); }
-static void ram_set16(uint32_t a, uint16_t v) { if (!dry) WR16(a, v); flags_move(v, 16); }
-static void ram_set32(uint32_t a, uint32_t v) { if (!dry) WR32(a, v); flags_move(v, 32); }
+static void ram_set8(uint32_t a, uint8_t v) { WR8(a, v); flags_move(v, 8); }
+static void ram_set16(uint32_t a, uint16_t v) { WR16(a, v); flags_move(v, 16); }
+static void ram_set32(uint32_t a, uint32_t v) { WR32(a, v); flags_move(v, 32); }
 /* move.w (s).l,(d).l */
 static void ram_copy16(uint32_t d, uint32_t s)
 {
     uint16_t v = (uint16_t)RD16(s);
-    if (!dry) WR16(d, v);
+    WR16(d, v);
     flags_move(v, 16);
 }
 /* bset #n,dr */
 static void bset_d(int r, int n)
 {
-    if (!dry) FLAG_Z = (REG_D[r] >> n) & 1 ? ZFLAG_CLEAR : ZFLAG_SET;
+    FLAG_Z = (REG_D[r] >> n) & 1 ? ZFLAG_CLEAR : ZFLAG_SET;
     REG_D[r] |= 1u << n;
 }
 /* move.w #v / (a).l to the control port: a register word */
-static void reg_word(uint16_t v) { if (!dry) video_reg_word(v); flags_move(v, 16); }
+static void reg_word(uint16_t v) { video_reg_word(v); flags_move(v, 16); }
 static void reg_word_ram(uint32_t a) { reg_word((uint16_t)RD16(a)); }
 /* move.l #v to the control port: a command */
-static void command(uint32_t v) { if (!dry) video_at_long(v); flags_move(v, 32); }
+static void command(uint32_t v) { video_at_long(v); flags_move(v, 32); }
 /* move.w #v / (a).l to the data port */
 static void data_word(uint16_t v) { put(v); flags_move(v, 16); }
 static void data_word_ram(uint32_t a) { data_word((uint16_t)RD16(a)); }
@@ -2202,7 +2161,7 @@ static void jsr_game(uint32_t target, uint32_t ret)
 {
     COST(m68k_cost[(ret - 6) >> 1]);
     REG_A[7] -= 4;
-    if (!dry) WR32(REG_A[7], ret);
+    WR32(REG_A[7], ret);
     go_on(target);
 }
 
@@ -2261,7 +2220,7 @@ static void seg_02E4C(void)
     reach(0x2E5E); ram_set16(0xFFC09AU, 0x9001);    /* move.w #$9001, $ffc09a.l */
     reach(0x2E66); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
     reach(0x2E6C); bset_d(0, 16);    /* bset.b #$10, d0 */
-    reach(0x2E70); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x2E70); WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
     reach(0x2E76); call(no_window, 0x2E7C, m68k_cost[0x2E76 >> 1]);    /* jsr $6fa.l */
     from(0x2E7C);
     reach(0x2E7C);
@@ -2319,7 +2278,7 @@ static void seg_031A8(void)
     reach(0x31C0); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
     reach(0x31C8); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
     reach(0x31CE); bset_d(0, 16);    /* bset.b #$10, d0 */
-    reach(0x31D2); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x31D2); WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
     reach(0x31D8); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
     reach(0x31E0); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
     reach(0x31EA); W(REG_D[0], 0x85); flags_move(0x85, 16);    /* move.w #$85, d0 */
@@ -2410,7 +2369,7 @@ static void seg_03A78(void)
     reach(0x3AA2); ram_set16(0xFFC09AU, 0x9001);    /* move.w #$9001, $ffc09a.l */
     reach(0x3AAA); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
     reach(0x3AB0); bset_d(0, 16);    /* bset.b #$10, d0 */
-    reach(0x3AB4); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x3AB4); WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
     reach(0x3ABA); ram_op16(0xFFC07CU, '|', 0x8140);    /* ori.w #$8140, $ffc07c.l */
     reach(0x3AC2); reg_word_ram(0xFFC07CU);    /* move.w $ffc07c.l, $c00004.l */
     reach(0x3ACC); jsr_game(0x1928, 0x3AD2);    /* jsr $1928.l */
@@ -2710,7 +2669,7 @@ static void seg_120E4(void)
     reach(0x12108); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
     reach(0x12110); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
     reach(0x12116); bset_d(0, 16);    /* bset.b #$10, d0 */
-    reach(0x1211A); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x1211A); WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
     reach(0x12120); call(no_window, 0x12126, m68k_cost[0x12120 >> 1]);    /* jsr $6fa.l */
     from(0x12126);
     reach(0x12126); call(screen_clear, 0x1212C, m68k_cost[0x12126 >> 1]);    /* jsr $522.l */
@@ -2982,7 +2941,7 @@ static void seg_2396C(void)
     reach(0x23984); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
     reach(0x2398C); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
     reach(0x23992); bset_d(0, 16);    /* bset.b #$10, d0 */
-    reach(0x23996); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x23996); WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
     reach(0x2399C); jsr_game(0xFF22, 0x239A2);    /* jsr $ff22.l */
 }
 int draw_seg_2396C(void) { return run(seg_2396C); }
@@ -3194,7 +3153,7 @@ static void seg_24572(void)
     reach(0x24584); ram_set16(0xFFC09AU, 0x9011);    /* move.w #$9011, $ffc09a.l */
     reach(0x2458C); REG_D[0] = RD32(0xFFC0A0U); flags_move(REG_D[0], 32);    /* move.l $ffc0a0.l, d0 */
     reach(0x24592); bset_d(0, 16);    /* bset.b #$10, d0 */
-    reach(0x24596); if (!dry) WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
+    reach(0x24596); WR32(0xFFC0A0U, REG_D[0]); flags_move(REG_D[0], 32);    /* move.l d0, $ffc0a0.l */
     reach(0x2459C); REG_A[6] = 0x55100U;    /* lea.l $55100.l, a6 */
     reach(0x245A2); command(0x40000000U);    /* move.l #$40000000, $c00004.l */
     reach(0x245AC); W(REG_D[7], 0xBE); flags_move(0xBE, 16);    /* move.w #$be, d7 */
@@ -3363,7 +3322,7 @@ int draw_seg_3C07E(void) { return run(seg_3C07E); }
 static void boot_status(void)
 {
     from(0x318);
-    uint16_t v = dry ? 0 : video_status();
+    uint16_t v = video_status();
     flags_move(v, 16);
     reach(0x31E);
     go_on(0x31E);
@@ -3388,7 +3347,7 @@ static void title_rows(void)
             COST(20 + dbra_cost(i == n - 1));
         }
         uint32_t s = d0 + 0x800000u;                     /* addi.l #$800000,d0 */
-        if (!dry) {
+        {
             FLAG_N = NFLAG_32(s); FLAG_Z = s;
             FLAG_V = VFLAG_ADD_32(0x800000u, d0, s);
             FLAG_X = FLAG_C = CFLAG_ADD_32(0x800000u, d0, s);
@@ -3453,16 +3412,16 @@ static void start_up(void)
     reach(0x242);
     if (ver) {
         COST(8);                                         /* beq.b not taken */
-        if (!dry) WR32(a1 + 0x2F00, 0x53454741u);        /* move.l #'SEGA',$2f00(a1) */
+        WR32(a1 + 0x2F00, 0x53454741u);        /* move.l #'SEGA',$2f00(a1) */
         COST(24);
     } else
         COST(10);
     from(0x24C);
-    uint16_t st = dry ? 0 : video_status();              /* move.w (a4),d0 */
+    uint16_t st = video_status();              /* move.w (a4),d0 */
     W(REG_D[0], st);
     reach(0x24E);
     REG_D[0] = 0; REG_A[6] = 0;                          /* moveq #0,d0; movea.l d0,a6; move a6,usp */
-    if (!dry) REG_USP = 0;
+    REG_USP = 0;
     reach(0x256);                                        /* moveq #$17,d1 */
     uint16_t d5 = (uint16_t)REG_D[5], d7 = (uint16_t)REG_D[7];
     for (int r = 0; r < 24; r++) {
@@ -3480,7 +3439,7 @@ static void start_up(void)
     flags_move(fc, 32);
     t += 4;
     COST(20);
-    if (!dry) {                                          /* move.w d0,(a3): its value */
+    {                                          /* move.w d0,(a3): its value */
         uint16_t hi = (uint16_t)(fc >> 16), lo = (uint16_t)fc;
         uint16_t at = (uint16_t)((hi & 0x3FFF) | ((lo & 3) << 14));
         uint32_t len = (uint32_t)(vdp.reg[19] | vdp.reg[20] << 8);
@@ -3491,28 +3450,28 @@ static void start_up(void)
     }
     flags_move(0, 16);
     COST(8);
-    if (!dry) { WR16(a1, d7); WR16(a2, d7); }            /* the Z80: bus, out of reset */
+    { WR16(a1, d7); WR16(a2, d7); }            /* the Z80: bus, out of reset */
     COST(8 + 8);
     for (;;) {                                           /* btst.l d0,(a1); bne.b */
-        int busy = dry ? 0 : RD8(a1) & 1;               /* granted at once (the bus request written) */
+        int busy = RD8(a1) & 1;               /* granted at once (the bus request written) */
         COST(8);
         if (!busy) { COST(8); break; }
         COST(10);
     }
     COST(4);                                             /* moveq #$25,d2 */
     for (int i = 0; i < 38; i++) {                       /* move.b (a5)+,(a0)+ */
-        if (!dry) WR8(a0 + i, ROM8(t + i));
+        WR8(a0 + i, ROM8(t + i));
         COST(12 + dbra_cost(i == 37));
     }
     t += 38;
     REG_A[0] = a0 + 38;
-    if (!dry) { WR16(a2, 0); WR16(a1, 0); WR16(a2, d7); }
+    { WR16(a2, 0); WR16(a1, 0); WR16(a2, d7); }
     COST(8 + 8 + 8);
     int n = (int)(uint16_t)REG_D[6] + 1;                 /* move.l d0,-(a6), d6+1 times */
     uint32_t a6 = 0;
     for (int i = 0; i < n; i++) {
         a6 -= 4;
-        if (!dry) WR32(a6, 0);
+        WR32(a6, 0);
         COST(12 + dbra_cost(i == n - 1));
     }
     REG_A[6] = a6;
@@ -3533,10 +3492,10 @@ static void start_up(void)
     }
     COST(4);
     for (int i = 0; i < 4; i++) {                        /* move.b (a5)+,$11(a3): the PSG */
-        if (!dry) WR8(0xC00011u, ROM8(t + i));
+        WR8(0xC00011u, ROM8(t + i));
         COST(16 + dbra_cost(i == 3));
     }
-    if (!dry) WR16(a2, 0);                               /* the Z80 in reset */
+    WR16(a2, 0);                               /* the Z80 in reset */
     COST(8);
     for (int i = 0; i < 15; i++)                         /* movem.l (a6),d0-d7/a0-a6 */
         REG_DA[i] = RD32(a6 + 4u * i);

@@ -121,11 +121,10 @@ builder/      the HTML builder page
     routines (or the parts of a routine) start.
   * Each does what the game's routine does (the same video memory, registers, palette
     and scroll, the same RAM, stack, registers and flags left behind) and takes the same
-    time: `tools/recomp.py` writes each instruction's time to `port/gen/m68k_costs.c`.
-    Before running, a routine works out its time without doing anything; when an
-    interrupt the game lets in would come within it (the split screen's line effects
-    change where video data goes: on the console a tile copy they cut into is partly
-    sent elsewhere, as happens once in stage 9), the game's routine runs as translated
+    time: `tools/recomp.py` writes each instruction's time to `port/gen/m68k_costs.c`
+    (the game's frame routine gets a frame's time; a stage being set up takes several).
+    A routine runs in one go, between the frame's lines. The one routine that lets
+    interrupts in part way (a map column) runs as translated when one is waiting then,
     so it is stopped at the same instruction.
   * They write the video stores directly (`port/src/video.h`): a word to video memory,
     the palette or the vertical scroll at a cursor, a register by number, copies from RAM,
