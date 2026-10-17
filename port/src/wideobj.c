@@ -12,7 +12,10 @@
  * would look like guards vanishing in plain view. With the option on, a "ghost"
  * of the guard is shown instead, walking back to its post with the walk animation
  * the guard was last seen using, and standing there once it arrives - which is
- * where (and how) the game really has it.
+ * where (and how) the game really has it. A guard knocked down when it leaves is
+ * put back a little later, still lying (it is drawn so until met again): its ghost
+ * gets up, walks back and stands at its post too. A post on another floor: the
+ * ghost is standing there.
  *
  * Object tables (word per object, index = object * 2):
  *   $2EF6 state (0 = none)     $304E x      $30FA y      $31A6 height above floor
@@ -64,6 +67,7 @@ static int cur;             /* snaps[cur] = start of this frame, then the two be
 #define SEQ 48
 #define GHOST_SPEED 3       /* ghosts walk back three times as fast as guards walk */
 #define RECOVER_FRAMES 60   /* a knocked down ghost: 40 frames down, 20 standing */
+#define LEFT_FRAMES 120     /* how long after leaving the picture the game may put it back */
 
 static int in_seq(const uint16_t *seq, int n, uint16_t f)
 {
@@ -80,6 +84,8 @@ typedef struct {
     int seen;               /* was drawn by the game in the previous snapshot */
     int16_t lx, ly, lz;     /* last position drawn by the game */
     uint16_t lframe, lflip;
+    int lview;              /* the view it was last drawn in */
+    int left;               /* frames since it left the picture (0: not lately) */
     int still;              /* frames without moving */
     int age;                /* frames it has been drawn by the game */
     anim_t a;
@@ -261,8 +267,12 @@ static void learn(const snap_t *s, const snap_t *prev)
             g->age++;
             g->lx = b->x; g->ly = b->y; g->lz = b->z;
             g->lframe = b->frame; g->lflip = b->flip;
+            g->lview = (b->vis & 1) ? 0 : 1;
             g->ghost = 0;
+            g->left = 0;
         } else {
+            if (g->seen) g->left = 1;
+            else if (g->left && ++g->left > LEFT_FRAMES) g->left = 0;
             g->seen = 0;
         }
     }
@@ -283,7 +293,7 @@ static const anim_t *anim_for(const snap_t *s, int i, int walking)
     return NULL;
 }
 
-static void ghosts(const snap_t *s, const snap_t *prev, int extra, int width)
+static void ghosts(const snap_t *s, int extra, int width)
 {
     for (int i = FIRST_GUARD; i < FIRST_GUARD + s->nguards; i++) {
         const obj_t *b = &s->o[i];
@@ -299,24 +309,32 @@ static void ghosts(const snap_t *s, const snap_t *prev, int extra, int width)
         }
         if (g->ghost == 3 && (b->frame || b->x != s->post[i][0])) g->ghost = 0;
         if (!g->ghost) {
-            /* just left the picture: the game has put it back at its post */
-            const obj_t *p = &prev->o[i];
-            if (!(p->vis & 3) || !p->frame) continue;
-            int v = (p->vis & 1) ? 0 : 1;
-            /* only if the game really moved it to its post (otherwise it just waits where
-             * it is, and is drawn there), and the post is on the same floor */
-            if (b->x != s->post[i][0] || b->y != s->post[i][1] || b->x == g->lx) continue;
-            if (abs(s->post[i][1] - g->ly) >= 40) continue;
-            g->ghost = 1;
-            g->gx16 = g->lx * 16;
-            g->gy = g->ly;
+            /* it left the picture and the game has put it back at its post (at once, or
+             * a little later - a guard knocked down keeps lying there, as the game has
+             * it, until met again) */
+            if (!g->left || b->x != s->post[i][0] || b->y != s->post[i][1]) continue;
+            g->left = 0;
+            if (b->x == g->lx && b->y == g->ly) continue;   /* it was there already */
+            g->gview = g->lview;
             g->gz = g->lz;
-            g->gview = v;
             g->gstep = 0;
-            /* knocked down or getting up when it left: it stands up before walking */
-            const anim_t *wa = anim_for(s, i, 1), *ia = anim_for(s, i, 0);
-            g->recover = in_seq(wa ? wa->walk : NULL, wa ? wa->nwalk : 0, g->lframe) ||
-                         in_seq(ia ? ia->idle : NULL, ia ? ia->nidle : 0, g->lframe) ? 0 : RECOVER_FRAMES;
+            g->recover = 0;
+            if (abs(s->post[i][1] - g->ly) >= 40) {
+                /* its post is on another floor: it is standing there */
+                g->ghost = 2;
+                g->gx16 = s->post[i][0] * 16;
+                g->gy = s->post[i][1];
+                g->gz = b->z;
+            } else {
+                /* it walks back from where it was last seen */
+                g->ghost = 1;
+                g->gx16 = g->lx * 16;
+                g->gy = g->ly;
+                /* knocked down or getting up when it left: it stands up before walking */
+                const anim_t *wa = anim_for(s, i, 1), *ia = anim_for(s, i, 0);
+                g->recover = in_seq(wa ? wa->walk : NULL, wa ? wa->nwalk : 0, g->lframe) ||
+                             in_seq(ia ? ia->idle : NULL, ia ? ia->nidle : 0, g->lframe) ? 0 : RECOVER_FRAMES;
+            }
         }
         int v = g->gview;
         if (g->ghost == 3 && view_on(s, 1) && !in_range(s, 0, b->x, b->y, b->z, b->w, b->h, extra))
@@ -399,7 +417,7 @@ int wobj_build(int margin, int width, int patrol_return, wobj_sprite *list, int 
     int extra = margin + 16;
     memset(ghost_on, 0, sizeof(ghost_on));
     if (patrol_return)
-        ghosts(s, older, extra, width);
+        ghosts(s, extra, width);
     else
         for (int i = 0; i < NOBJ; i++) guards[i].ghost = 0;
     doors_update(s);
