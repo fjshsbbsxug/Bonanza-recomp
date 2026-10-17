@@ -709,6 +709,20 @@ typedef struct {
 } line_plan;
 static line_plan plan[224];
 
+/* A view on lines l0 .. l0+79 showing the level from world y vtop, while player 1's
+ * camera (the game's sprites) starts at world y cam_wy: the objects for the lines his
+ * camera does not cover (the stack list) */
+static void shifted_pieces(int l0, int vtop, int cam_wy)
+{
+    int real_y0 = focus ? VIEW_TOP_Y0 : VIEW_BOT_Y0;
+    int cov0 = l0 + cam_wy - vtop;          /* the lines his camera covers: cov0 .. +79 */
+    int u0 = l0, u1 = l0 + VIEW_H;
+    if (cov0 > l0) { if (cov0 < u1) u1 = cov0; }
+    else u0 = cov0 + VIEW_H > l0 ? cov0 + VIEW_H : l0;
+    stack_count = wobj_build_shifted(focus, l0 - real_y0 + cam_wy - vtop, l0, u0, u1, stack_list,
+                                     stack_count, (int)(sizeof(stack_list) / sizeof(stack_list[0])));
+}
+
 static void plan_line(int y, line_plan *P);
 static void draw_line(int y, const line_plan *P);
 
@@ -861,11 +875,34 @@ static void scene_fill(void)
 }
 
 /* the picture, top to bottom (the port's extras carry decisions from line to line) */
+/* The views' cameras in this picture, before its lines are planned: the floor above
+ * (lines 7-86) comes before player 1's view (135-214) and must follow this picture's
+ * camera, not the last one's (when it moves, the two would not line up) */
+static void view_prime(void)
+{
+    if (!level_load())
+        return;
+    for (int vi = 0; vi < 2; vi++) {
+        if (view_rec[vi].frame != md.frame)    /* not a view of the last picture */
+            continue;
+        int y0 = vi ? VIEW_TOP_Y0 : VIEW_BOT_Y0;
+        const pic_look *k = &pic.band[pic.band_of[y0]].look;
+        int camx, wy0;
+        view_camera(vi, y0, k->hs[0], k->vsram[0], &camx, &wy0);
+        view_rec[vi].hsA = camx;
+        view_rec[vi].vsA = wy0 + views[vi].dwy;
+        view_rec[vi].hsB = k->hs[1];
+        view_rec[vi].vsB = k->vsram[1];
+    }
+}
+
 void vdp_render_frame(void)
 {
     V = vdp.vram;
     picture_gen++;
     pic_out_w = 0;
+    stack_count = 0;
+    view_prime();
     for (int b = 0; b < pic.n; b++) {
         cur = &pic.band[b].look;
         int width = (cur->reg[12] & 0x01) ? 320 : 256;
@@ -1124,12 +1161,16 @@ static void plan_line(int y, line_plan *P)
             P->spr_y = yb;
         else
             P->spr = SPR_NONE;
+        /* where his camera does not reach, the characters of that floor come from the
+         * objects - also the part of one that stands across the edge of his view */
+        if (y == other_y0)
+            shifted_pieces(other_y0, room_above_wy, view_rec[focus].vsA);
+        P->stacked = 1;
     } else if (stacked) {
-        /* the characters of player 1's view that are on the floor shown here, and the
-         * objects of that floor his view does not cover (they would vanish) */
+        /* the characters of player 1's view that are on the floor shown here: the game's
+         * sprites where his camera covers it, the rest from the objects */
         if (y == real_y0)
-            stack_count = wobj_build_stacked(focus, stacked_top + VIEW_H, wy0, stack_list,
-                                             (int)(sizeof(stack_list) / sizeof(stack_list[0])));
+            shifted_pieces(real_y0, stacked_top + VIEW_H, wy0);
         P->stacked = 1;
         int yb = real_y0 + P->a_wy - wy0;
         if (yb >= real_y0 && yb < real_y0 + VIEW_H)

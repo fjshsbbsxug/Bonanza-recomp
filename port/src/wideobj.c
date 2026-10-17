@@ -461,28 +461,27 @@ void wobj_reset(void)
  * game's camera is elsewhere (on the last stair, on the exit floor). Objects on that
  * floor that the game's own view does not cover are drawn here, at their place in it:
  * line = their line in the game's view + (real_wy0 - vtop). */
-int wobj_build_stacked(int v, int vtop, int real_wy0, wobj_sprite *list, int max)
+int wobj_build_shifted(int v, int shift, int l0, int ymin, int ymax, wobj_sprite *list, int n, int max)
 {
     const snap_t *s = &snaps[cur];
-    if (!s->valid || !view_on(s, v))
-        return 0;
-    out_list = list; out_n = 0; out_max = max;
-    int shift = real_wy0 - vtop;
-    int y0 = v ? 7 : 135;
+    if (!s->valid || !view_on(s, v) || ymin >= ymax)
+        return n;
+    out_list = list; out_n = n; out_max = max;
     for (int pass = 2; pass >= 1; pass--)
         for (int i = 0; i < NOBJ; i++) {
             const obj_t *b = &s->o[i];
             if (b->st != pass || !b->frame) continue;
-            /* line of its feet in the game's view of that player */
+            /* line of its feet in the game's view of that player, then in the view shown */
             int feet = b->y - b->z - s->cam[v][0] + (v ? 0x85 : 0x105) + 0x14 - 128;
-            int inside_real = (b->vis & (1 << v)) && feet >= y0 && feet < y0 + 80;
-            if (inside_real) continue;                 /* the game draws it */
             int fv = feet + shift;
-            if (fv < y0 || fv >= y0 + 80 + 48) continue;  /* not on the floor shown */
+            if (fv < l0 || fv >= l0 + 80 + 48) continue;  /* not on the floor shown */
             int n0 = out_n;
             emit_frame(s, v, b->frame, b->x, b->y, b->z, b->flip != 0, b->attr, 0, 0);
-            for (int k = n0; k < out_n; k++)
+            for (int k = n0; k < out_n; k++) {
                 list[k].y += shift;
+                list[k].ymin = ymin;
+                list[k].ymax = ymax;
+            }
         }
     return out_n;
 }
