@@ -333,62 +333,78 @@ static void sprites_read(uint32_t sat, int h40)
     } while (link && ++count < max_sprites);
 }
 
+/* The sprites a line shows, as the console picks them: at most 16 (20 at 320 wide) on
+ * a line, at most 256 (320) of their pixels from the left of each in the game's order,
+ * none after a sprite at x 0 that follows one elsewhere (masking). Each pick: sprite k,
+ * its first cols columns. Prop Hunt leaves out the hider's own pieces (his disguise is
+ * drawn instead) and, on the seeker's screen, his marker on the HUD map. */
+typedef struct { uint8_t k, cols; } sprite_pick;
+
+static int sprites_on_line(int y, int h40, sprite_pick *pick)
+{
+    int max_line = h40 ? 20 : 16, max_px = h40 ? 320 : 256;
+    int n = 0, line_count = 0, pixels = 0, masked = 0, seen_nonzero_x = 0;
+    for (int k = 0; k < sprites.n && pixels < max_px; k++) {
+        const sprite_obj *o = &sprites.o[k];
+        int row = y + 128 - o->sy;
+        if (row < 0 || row >= o->vsz * 8)
+            continue;
+        if (++line_count > max_line)
+            break;
+        if (o->sx == 0) {
+            if (seen_nonzero_x)
+                masked = 1;
+        } else {
+            seen_nonzero_x = 1;
+        }
+        if (ph_hide >= 0 && char_of(o->attr) >= 0 && wobj_player_of(o->attr) == ph_hide)
+            continue;
+        if (ph_blip >= 0 && (o->attr & 0x07FF) == ph_blip)
+            continue;
+        int cols = o->hsz * 8;
+        if (cols > max_px - pixels)
+            cols = max_px - pixels;
+        pixels += cols;
+        if (!masked)
+            pick[n++] = (sprite_pick){(uint8_t)k, (uint8_t)cols};
+    }
+    return n;
+}
+
 static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
 {
     int h40 = width == 320;
     sprites_read((cur->reg[5] & (h40 ? 0x7E : 0x7F)) << 9, h40);
-    int max_line = h40 ? 20 : 16, max_px = h40 ? 320 : 256;
-    int line_count = 0, pixels = 0, masked = 0, seen_nonzero_x = 0;
+    sprite_pick pick[20];
+    int npick = sprites_on_line(y, h40, pick);
     int chars = any_char_colors();
     memset(out, 0, width + 2 * m);
     memset(part, 0, width + 2 * m);
-    for (int k = 0; k < sprites.n; k++) {
-        const sprite_obj *o = &sprites.o[k];
-        int sy = o->sy, vsz = o->vsz, hsz = o->hsz, sx = o->sx;
+    for (int i = 0; i < npick; i++) {
+        const sprite_obj *o = &sprites.o[pick[i].k];
+        int vsz = o->vsz, hsz = o->hsz, sx = o->sx;
         uint16_t attr = o->attr;
-        int row = y + 128 - sy;
-        if (row >= 0 && row < vsz * 8) {
-            if (++line_count > max_line)
-                break;
-            if (sx == 0) {
-                if (seen_nonzero_x)
-                    masked = 1;
-            } else {
-                seen_nonzero_x = 1;
-            }
-            /* Prop Hunt: the hider's own pieces are not drawn (his disguise is), nor, on the
-             * seeker's screen, his marker on the HUD map */
-            if (ph_hide >= 0 && char_of(attr) >= 0 && wobj_player_of(attr) == ph_hide)
-                continue;
-            if (ph_blip >= 0 && (attr & 0x07FF) == ph_blip)
-                continue;
-            /* player colours only for the players' own pieces */
-            int ch = chars && char_of(attr) >= 0 ? wobj_player_of(attr) : -1;
-            const char_info *ci = ch >= 0 ? char_analyse(attr, hsz, vsz, ch) : NULL;
-            int cy = row >> 3, py = row & 7;
-            if (attr & 0x1000) { cy = vsz - 1 - cy; py = 7 - py; }
-            for (int cx = 0; cx < hsz; cx++) {
-                int tcx = (attr & 0x0800) ? hsz - 1 - cx : cx;
-                uint16_t tile = (attr & 0xF800) | ((attr + tcx * vsz + cy) & 0x07FF);
-                for (int px = 0; px < 8; px++) {
-                    if (pixels >= max_px)
-                        goto done;
-                    pixels++;
-                    if (masked)
-                        continue;
-                    int x = sx - 128 + cx * 8 + px;
-                    if (x < -m || x >= width + m || (out[x + m] & 0x0F))
-                        continue;
-                    /* flip already applied to py; tile_pixel would flip again */
-                    uint16_t e = tile & ~0x1000;
-                    out[x + m] = (uint8_t)tile_pixel(e, px, py);
-                    if (ci && (out[x + m] & 0x0F))
-                        part[x + m] = (uint8_t)char_part(ch, out[x + m] & 0x0F, row, cx * 8 + px, ci);
-                }
+        int row = y + 128 - o->sy;
+        /* player colours only for the players' own pieces */
+        int ch = chars && char_of(attr) >= 0 ? wobj_player_of(attr) : -1;
+        const char_info *ci = ch >= 0 ? char_analyse(attr, hsz, vsz, ch) : NULL;
+        int cy = row >> 3, py = row & 7;
+        if (attr & 0x1000) { cy = vsz - 1 - cy; py = 7 - py; }
+        for (int cx = 0; cx < hsz; cx++) {
+            int tcx = (attr & 0x0800) ? hsz - 1 - cx : cx;
+            uint16_t tile = (attr & 0xF800) | ((attr + tcx * vsz + cy) & 0x07FF);
+            for (int px = 0; px < 8 && cx * 8 + px < pick[i].cols; px++) {
+                int x = sx - 128 + cx * 8 + px;
+                if (x < -m || x >= width + m || (out[x + m] & 0x0F))
+                    continue;
+                /* flip already applied to py; tile_pixel would flip again */
+                uint16_t e = tile & ~0x1000;
+                out[x + m] = (uint8_t)tile_pixel(e, px, py);
+                if (ci && (out[x + m] & 0x0F))
+                    part[x + m] = (uint8_t)char_part(ch, out[x + m] & 0x0F, row, cx * 8 + px, ci);
             }
         }
     }
-done:
     draw_wobj(out, y, width, m, wobj_list, wobj_count);
     draw_wobj(out, y, width, m, ph_list, ph_count);
 }
