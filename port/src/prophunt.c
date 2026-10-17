@@ -4,8 +4,8 @@
  * other seeks and wins the round by shooting the disguised player. The hider wins if
  * the round's time runs out. The roles swap every round, and the stage starts again.
  *   - the first 10 seconds of a round only the hider moves (the seeker's screen is dark)
- *   - the hider: guards ignore him; he never attacks (Shoot does nothing); A changes
- *     the disguise. As a guard he moves as guards do (half a pixel per frame, lanes at
+ *   - the hider: guards ignore him; he never attacks (Shoot only opens a door he is
+ *     standing at); A changes the disguise. As a guard he moves as guards do (half a pixel per frame, lanes at
  *     about half speed, no jumping); as a treasure or gadget he runs 1.1 times as fast
  *     as a player, jumps 1.1 times sooner and changes lanes 1.1 times slower
  *   - nobody loses lives; the exit stays shut (the stage is the arena)
@@ -216,8 +216,10 @@ void ph_pre_frame(void)
         ph.cur = (ph.cur + 1) % ph.nlist;
     ph.last_pad[h] = pad;
     int guard = ph.nlist && ph.list[ph.cur].kind == D_GUARD;
-    /* the hider never attacks; as a guard he cannot jump */
-    pad &= (uint8_t)~(PAD_A | PAD_B);
+    /* the hider never attacks; as a guard he cannot jump. Shoot still opens a door he
+     * stands at: there (state 3, sub_0BFBE) the game takes it only to open the door */
+    int at_door = (rw(0x5688 + hp) & 0xFF) == 0x03;
+    pad &= (uint8_t)~(PAD_A | (at_door ? 0 : PAD_B));
     if (guard) pad &= (uint8_t)~PAD_C;
     if (ph.phase == PH_END) pad = 0;
     md.pad[h] = pad;
