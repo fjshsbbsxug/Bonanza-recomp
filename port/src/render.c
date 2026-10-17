@@ -305,22 +305,47 @@ static void draw_wobj(uint8_t *out, int y, int width, int m, const wobj_sprite *
 static wobj_sprite stack_list[256];
 static int stack_count;
 
+/* The frame's sprites, in the game's order (its sprite table in video memory, followed
+ * link by link): position (the table's, 128 = the screen's edge), size in tiles, first
+ * tile, palette, flips, priority (attr). Read once per picture. */
+typedef struct { int sx, sy, hsz, vsz; uint16_t attr; } sprite_obj;
+static struct { uint32_t gen, sat; int h40, n; sprite_obj o[80]; } sprites;
+static uint32_t picture_gen;            /* counts the pictures drawn */
+
+static void sprites_read(uint32_t sat, int h40)
+{
+    if (sprites.gen == picture_gen && sprites.sat == sat && sprites.h40 == h40)
+        return;
+    sprites.gen = picture_gen;
+    sprites.sat = sat;
+    sprites.h40 = h40;
+    sprites.n = 0;
+    int max_sprites = h40 ? 80 : 64, link = 0, count = 0;
+    do {
+        const uint8_t *s = &V[(sat + link * 8) & 0xFFFF];
+        sprite_obj *o = &sprites.o[sprites.n++];
+        o->sy = ((s[0] << 8) | s[1]) & 0x3FF;
+        o->vsz = (s[2] & 3) + 1;
+        o->hsz = ((s[2] >> 2) & 3) + 1;
+        link = s[3] & 0x7F;
+        o->attr = (uint16_t)((s[4] << 8) | s[5]);
+        o->sx = ((s[6] << 8) | s[7]) & 0x1FF;
+    } while (link && ++count < max_sprites);
+}
+
 static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
 {
     int h40 = width == 320;
-    uint32_t sat = (cur->reg[5] & (h40 ? 0x7E : 0x7F)) << 9;
-    int max_sprites = h40 ? 80 : 64, max_line = h40 ? 20 : 16, max_px = h40 ? 320 : 256;
-    int link = 0, count = 0, line_count = 0, pixels = 0, masked = 0, seen_nonzero_x = 0;
+    sprites_read((cur->reg[5] & (h40 ? 0x7E : 0x7F)) << 9, h40);
+    int max_line = h40 ? 20 : 16, max_px = h40 ? 320 : 256;
+    int line_count = 0, pixels = 0, masked = 0, seen_nonzero_x = 0;
     int chars = any_char_colors();
     memset(out, 0, width + 2 * m);
     memset(part, 0, width + 2 * m);
-    do {
-        const uint8_t *s = &V[(sat + link * 8) & 0xFFFF];
-        int sy = ((s[0] << 8) | s[1]) & 0x3FF;
-        int vsz = (s[2] & 3) + 1, hsz = ((s[2] >> 2) & 3) + 1;
-        link = s[3] & 0x7F;
-        uint16_t attr = (s[4] << 8) | s[5];
-        int sx = ((s[6] << 8) | s[7]) & 0x1FF;
+    for (int k = 0; k < sprites.n; k++) {
+        const sprite_obj *o = &sprites.o[k];
+        int sy = o->sy, vsz = o->vsz, hsz = o->hsz, sx = o->sx;
+        uint16_t attr = o->attr;
         int row = y + 128 - sy;
         if (row >= 0 && row < vsz * 8) {
             if (++line_count > max_line)
@@ -362,7 +387,7 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
                 }
             }
         }
-    } while (link && ++count < max_sprites);
+    }
 done:
     draw_wobj(out, y, width, m, wobj_list, wobj_count);
     draw_wobj(out, y, width, m, ph_list, ph_count);
@@ -674,6 +699,7 @@ static void draw_line(int y, const line_plan *P);
 void vdp_render_frame(void)
 {
     V = vdp.vram;
+    picture_gen++;
     pic_out_w = 0;
     for (int b = 0; b < pic.n; b++) {
         cur = &pic.band[b].look;
