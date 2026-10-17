@@ -857,7 +857,35 @@ void vdp_line_capture(int y)
     pic.band_of[y] = (uint8_t)(pic.n - 1);
 }
 
-static void render_line(int y);
+/* ---- the frame's plan: what each line shows ----
+ * Planning goes down the picture making every decision (which views are shown, where
+ * their sides come from, the floor above, the stacked floors, the HUD, the cutscene
+ * crop) - some of them by looking at what a layer would show; drawing then makes the
+ * pixels from the plan alone. */
+enum { EDGE_KEEP, EDGE_CROP, EDGE_CLAMP };
+enum { SPR_NONE, SPR_LINE };
+typedef struct {
+    const pic_look *look;
+    int width, m, fb_row;
+    uint8_t off;                    /* the display is off on this line */
+    /* plane A: from video memory, its sides (or all of it) from the level map */
+    uint8_t a_map, a_map_all;
+    int a_camx, a_wy;
+    uint8_t b_wrap;                 /* plane B: the 4:3 picture's columns repeated */
+    /* the floor above (room_above): plane B scrolled as the bottom view, plane A from
+     * the map at that camera, the sky above the roof lined up with the bottom view */
+    uint8_t room_above;
+    int ra_hs, ra_vs, ra_camx, ra_wy, sky_hs, sky_vs;
+    /* sprites: those of line spr_y (another line for the floor above / stacked views) */
+    uint8_t spr;
+    int spr_y;
+    uint8_t stacked;                /* + the stacked floor's objects */
+    uint8_t edges;
+} line_plan;
+static line_plan plan[224];
+
+static void plan_line(int y, line_plan *P);
+static void draw_line(int y, const line_plan *P);
 
 /* the picture, top to bottom (the port's extras carry decisions from line to line) */
 void vdp_render_frame(void)
@@ -870,8 +898,10 @@ void vdp_render_frame(void)
         if (width + 2 * margin_for(width) > pic_out_w)
             pic_out_w = width + 2 * margin_for(width);
         for (int y = pic.band[b].y0; y < pic.band[b].y1; y++)
-            render_line(y);
+            plan_line(y, &plan[y]);
     }
+    for (int y = 0; y < 224; y++)
+        draw_line(y, &plan[y]);
 }
 
 /* the horizontal scroll in the table in video memory, as it is now */
@@ -921,11 +951,15 @@ static void shade_line(uint16_t *fb, const uint8_t *s, const uint8_t *a, const u
     }
 }
 
-static void render_line(int y)
+
+static void plan_line(int y, line_plan *P)
 {
     int width = (cur->reg[12] & 0x01) ? 320 : 256;
     int m = margin_for(width);
-    int ow = width + 2 * m;
+    memset(P, 0, sizeof(*P));
+    P->look = cur;
+    P->width = width;
+    P->m = m;
     if (y == 0) {
         /* player 2's screen in an online game: while he plays, his view (lines 7-86)
          * moves to the bottom and the floor above him takes the top */
@@ -939,17 +973,12 @@ static void render_line(int y)
     int real_y0 = focus ? VIEW_TOP_Y0 : VIEW_BOT_Y0, other_y0 = focus ? VIEW_BOT_Y0 : VIEW_TOP_Y0;
     int in_real = y >= real_y0 && y < real_y0 + VIEW_H;
     int in_other = y >= other_y0 && y < other_y0 + VIEW_H;
-    uint16_t *fb = vdp.fbmd[in_real ? VIEW_BOT_Y0 + y - real_y0 : in_other ? VIEW_TOP_Y0 + y - other_y0 : y];
-    uint16_t pal[64];
-    for (int i = 0; i < 64; i++)
-        pal[i] = md_color_index(cur->cram[i]);
-    uint16_t bg = pal[cur->reg[7] & 0x3F];
+    P->fb_row = in_real ? VIEW_BOT_Y0 + y - real_y0 : in_other ? VIEW_TOP_Y0 + y - other_y0 : y;
     if (!(cur->reg[1] & 0x40)) {
-        for (int x = 0; x < VDP_FB_W; x++)
-            fb[x] = bg;
+        P->off = 1;
         return;
     }
-    uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W], part[VDP_FB_W];
+    uint8_t a[VDP_FB_W];
     /* Widescreen during play: the side areas of each view are drawn from the level map,
      * the backdrop is repeated, the HUD rows extend their edges. In a 1-player game the
      * top view shows the floor above player 1 (also from the map). */
@@ -1059,14 +1088,14 @@ static void render_line(int y)
      * below the top view's, from the map, with the characters where they really are -
      * instead of the same floor twice. */
     int stacked = in_real && map_view && stacked_frame == md.frame + 1;
-    map_on = m && map_view;
-    map_all = 0;
-    map_camx = camx;
-    map_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
+    P->a_map = m && map_view;
+    P->a_camx = camx;
+    P->a_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
     if (stacked) {
-        map_on = map_all = 1;
-        map_wy = stacked_top + VIEW_H + (y - real_y0);
+        P->a_map = P->a_map_all = 1;
+        P->a_wy = stacked_top + VIEW_H + (y - real_y0);
     }
+    map_on = P->a_map; map_all = P->a_map_all; map_camx = P->a_camx; map_wy = P->a_wy;
     draw_plane(a, y, width, m, 0);
     map_on = map_all = 0;
     /* a real room is shown on this line (the outer 16 pixels may come from the map) */
@@ -1083,8 +1112,6 @@ static void render_line(int y)
         else if (m && playing)
             clamp_edges = 1;   /* original 2P panel: extend its edges */
     }
-    /* the backdrop repeats every 256 pixels; also on lines that show only sky (above a
-     * roof), which is what plane B to the right of the backdrop must never show */
     if (room_above) {
         /* The floor above player 1, following his camera - but never above the top of
          * the level (the exit floor / roof): from there on it stays still, and as it
@@ -1096,44 +1123,99 @@ static void render_line(int y)
             stacked_top = room_above_wy;
         }
     }
-    wrap_margins = m && playing && in_view && (room_view || map_view);
-    draw_plane(b, y, width, m, 1);
-    wrap_margins = 0;
+    P->b_wrap = m && playing && in_view && (room_view || map_view);
     if (room_above) {
-        /* the floor above player 1, straight from the level map, following his camera */
-        ovr_hs = view_rec[focus].hsB;          /* same sky/city background as below */
-        ovr_vs = (view_rec[focus].vsB + real_y0 - other_y0) & 0x3FF;
-        wrap_margins = m != 0;
-        draw_plane(b, y, width, m, 1);
-        wrap_margins = 0;
-        ovr_hs = ovr_vs = -1;
-        map_on = map_all = 1;
-        map_camx = view_rec[focus].hsA;
-        map_wy = room_above_wy + (y - other_y0);
-        draw_plane(a, y, width, m, 0);
-        map_on = map_all = 0;
-        /* Open air above the roof (at the top of the level): the background lined up with
-         * player 1's own view, as it lies in the world, and repeated upward above it (a
-         * view's height at a time) - not a copy at the top view's own place, which
-         * floated a second city above the roof. Windows and rooms keep the game's own
-         * background. */
-        uint8_t sky[VDP_FB_W];
-        int line = map_wy - view_rec[focus].vsA;
+        /* the floor above player 1, straight from the level map, following his camera
+         * (plane B: the same sky/city background as below); open air above the roof:
+         * the background lined up with player 1's own view, as it lies in the world, and
+         * repeated upward above it (a view's height at a time) */
+        P->room_above = 1;
+        P->ra_hs = view_rec[focus].hsB;
+        P->ra_vs = (view_rec[focus].vsB + real_y0 - other_y0) & 0x3FF;
+        P->ra_camx = view_rec[focus].hsA;
+        P->ra_wy = room_above_wy + (y - other_y0);
+        int line = P->ra_wy - view_rec[focus].vsA;
         line = ((line % VIEW_H) + VIEW_H) % VIEW_H;
-        ovr_hs = view_rec[focus].hsB;
-        ovr_vs = (view_rec[focus].vsB + real_y0 + line - y) & 0x3FF;
-        wrap_margins = m != 0;
-        draw_plane(sky, y, width, m, 1);
-        wrap_margins = 0;
-        ovr_hs = ovr_vs = -1;
-        for (int x = -m; x < width + m; x++)
-            if (above_roof(map_camx + x, map_wy))
-                b[x + m] = sky[x + m];
+        P->sky_hs = view_rec[focus].hsB;
+        P->sky_vs = (view_rec[focus].vsB + real_y0 + line - y) & 0x3FF;
     }
     /* a view whose map could not be matched: rather than whatever video memory holds
      * beside the picture, extend its edges */
     if (m && playing && in_view && !map_view && !room_above)
         clamp_edges = 1;
+    P->spr = SPR_LINE;
+    P->spr_y = y;
+    if (room_above) {
+        /* The 2P panel's sprites do not belong to the room. Where the top view shows
+         * the same part of the level as player 1's view (on the top floor, or on the
+         * stairs) it shows the same characters: the sprites of that line of his view. */
+        int yb = real_y0 + room_above_wy + (y - other_y0) - view_rec[focus].vsA;
+        if (yb >= real_y0 && yb < real_y0 + VIEW_H)
+            P->spr_y = yb;
+        else
+            P->spr = SPR_NONE;
+    } else if (stacked) {
+        /* the characters of player 1's view that are on the floor shown here, and the
+         * objects of that floor his view does not cover (they would vanish) */
+        if (y == real_y0)
+            stack_count = wobj_build_stacked(focus, stacked_top + VIEW_H, wy0, stack_list,
+                                             (int)(sizeof(stack_list) / sizeof(stack_list[0])));
+        P->stacked = 1;
+        int yb = real_y0 + P->a_wy - wy0;
+        if (yb >= real_y0 && yb < real_y0 + VIEW_H)
+            P->spr_y = yb;
+        else
+            P->spr = SPR_NONE;
+    }
+    P->edges = crop ? EDGE_CROP : clamp_edges ? EDGE_CLAMP : EDGE_KEEP;
+}
+
+/* a line's pixels, from its plan */
+static void draw_line(int y, const line_plan *P)
+{
+    cur = P->look;
+    int width = P->width, m = P->m, ow = width + 2 * m;
+    uint16_t *fb = vdp.fbmd[P->fb_row];
+    uint16_t pal[64];
+    for (int i = 0; i < 64; i++)
+        pal[i] = md_color_index(cur->cram[i]);
+    uint16_t bg = pal[cur->reg[7] & 0x3F];
+    if (P->off) {
+        for (int x = 0; x < VDP_FB_W; x++)
+            fb[x] = bg;
+        return;
+    }
+    uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W], part[VDP_FB_W];
+    if (!P->room_above) {
+        map_on = P->a_map; map_all = P->a_map_all; map_camx = P->a_camx; map_wy = P->a_wy;
+        draw_plane(a, y, width, m, 0);
+        map_on = map_all = 0;
+        wrap_margins = P->b_wrap;
+        draw_plane(b, y, width, m, 1);
+        wrap_margins = 0;
+    } else {
+        ovr_hs = P->ra_hs;
+        ovr_vs = P->ra_vs;
+        wrap_margins = m != 0;
+        draw_plane(b, y, width, m, 1);
+        wrap_margins = 0;
+        ovr_hs = ovr_vs = -1;
+        map_on = map_all = 1;
+        map_camx = P->ra_camx;
+        map_wy = P->ra_wy;
+        draw_plane(a, y, width, m, 0);
+        map_on = map_all = 0;
+        uint8_t sky[VDP_FB_W];
+        ovr_hs = P->sky_hs;
+        ovr_vs = P->sky_vs;
+        wrap_margins = m != 0;
+        draw_plane(sky, y, width, m, 1);
+        wrap_margins = 0;
+        ovr_hs = ovr_vs = -1;
+        for (int x = -m; x < width + m; x++)
+            if (above_roof(P->ra_camx + x, P->ra_wy))
+                b[x + m] = sky[x + m];
+    }
     /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
     if ((cur->reg[17] & 0x9F) || (cur->reg[18] & 0x9F)) {
         draw_window(wbuf, y, width, m, win);
@@ -1141,34 +1223,14 @@ static void render_line(int y)
             if (win[x])
                 a[x] = wbuf[x];
     }
-    if (room_above) {
-        /* The 2P panel's sprites do not belong to the room. Where the top view shows
-         * the same part of the level as player 1's view (on the top floor, or on the
-         * stairs) it shows the same characters: the sprites of that line of his view. */
-        int yb = real_y0 + room_above_wy + (y - other_y0) - view_rec[focus].vsA;
-        if (yb >= real_y0 && yb < real_y0 + VIEW_H) {
-            draw_sprites(s, part, yb, width, m);
-        } else {
-            memset(s, 0, sizeof(s));
-            memset(part, 0, sizeof(part));
-        }
-    } else if (stacked) {
-        /* the characters of player 1's view that are on the floor shown here, and the
-         * objects of that floor his view does not cover (they would vanish) */
-        if (y == real_y0)
-            stack_count = wobj_build_stacked(focus, stacked_top + VIEW_H, wy0, stack_list,
-                                             (int)(sizeof(stack_list) / sizeof(stack_list[0])));
-        int yb = real_y0 + map_wy - wy0;
-        if (yb >= real_y0 && yb < real_y0 + VIEW_H) {
-            draw_sprites(s, part, yb, width, m);
-        } else {
-            memset(s, 0, sizeof(s));
-            memset(part, 0, sizeof(part));
-        }
-        draw_wobj(s, y, width, m, stack_list, stack_count);
+    if (P->spr == SPR_LINE) {
+        draw_sprites(s, part, P->spr_y, width, m);
     } else {
-        draw_sprites(s, part, y, width, m);
+        memset(s, 0, sizeof(s));
+        memset(part, 0, sizeof(part));
     }
+    if (P->stacked)
+        draw_wobj(s, y, width, m, stack_list, stack_count);
     if (cur->reg[12] & 0x08) {
         shade_line(fb, s, a, b, part, pal, bg, ow);
     } else for (int x = 0; x < ow; x++) {
@@ -1183,12 +1245,12 @@ static void render_line(int y)
         else { fb[x] = bg; continue; }
         fb[x] = pal[p & 0x3F];
     }
-    if (crop) {
+    if (P->edges == EDGE_CROP) {
         for (int x = 0; x < m; x++)
             fb[x] = VDP_BLACK;
         for (int x = m + width; x < ow; x++)
             fb[x] = VDP_BLACK;
-    } else if (clamp_edges) {
+    } else if (P->edges == EDGE_CLAMP) {
         /* the edge colour; a lone different pixel at the very edge (a border's corner)
          * is not repeated across the side area */
         uint16_t l = fb[m], r = fb[m + width - 1];
