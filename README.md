@@ -156,6 +156,14 @@ builder/      the HTML builder page
     ways and compares them (no pixel differs in any of the reference runs). The CRT
     filter, the menu's recolouring and `--cpu-drawing` (or no OpenGL) use the CPU's
     drawing.
+* **Spotify** (`port/src/spotify.c`; menu: Sound tab, `spotify =` in bonanza.ini: mute,
+  off): while Spotify plays music on the same computer, the game's music is eased out and
+  its sound effects and voices stay; when Spotify stops, the music comes back. Spotify is
+  asked every two seconds (Windows: its window title, Linux: its MPRIS status through
+  `dbus-send`, macOS: `osascript`); not on Android or the web.
+* **Options menu** (`port/src/menu.c`): tabs for Game (online, mods, guards, reset, quit),
+  Screen, Colors and Sound; left / right on the tab bar (or on an item without a value)
+  changes the tab.
 * **CRT filter** (`port/src/crt.c`; menu: CRT filter, `crt =` in bonanza.ini: off,
   scanlines, tv, monitor): the picture as a CRT shows it, worked out for every screen pixel
   it covers, in linear light (the tube's gamma 2.4). Across a line each pixel is a flat

@@ -44,7 +44,7 @@ static const uint32_t skin_presets[] = {
 #define PANEL_Y 8
 #define PANEL_W (MENU_W - 24)
 #define PANEL_H (MENU_H - 16)
-#define ROW_Y0 29
+#define ROW_Y0 34
 #define ROW_H 9
 #define VALUE_X 150
 
@@ -114,7 +114,42 @@ static const char *item_label[IT_COUNT] = {
     "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
-static int main_count(void) { return menu_allow_quit ? IT_COUNT : IT_COUNT - 1; }
+/* The main page's tabs and their items */
+enum { TAB_GAME, TAB_SCREEN, TAB_COLORS, TAB_SOUND, TAB_COUNT };
+static const char *tab_name[TAB_COUNT] = { "Game", "Screen", "Colors", "Sound" };
+#define TAB_MAX 8
+static const int tab_items[TAB_COUNT][TAB_MAX] = {
+    { IT_RESUME, IT_ONLINE, IT_MODS, IT_GUARDS, IT_ALERT, IT_RESETGAME, IT_QUIT, -1 },
+    { IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_SCALING, IT_CRT, -1 },
+    { IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE, IT_CHARS, IT_RECOLOR, IT_RESETCOLORS },
+    { IT_SPOTIFY, -1 },
+};
+static int tab;                     /* the tab shown; sel -1: the tab bar itself */
+#define TAB_Y 32                    /* the tab bar */
+#define TAB_W 64
+#define MAIN_Y0 54                  /* the main page's first row */
+#define MAIN_H 12                   /* ... and its rows' height */
+
+static int main_count(void)
+{
+    int n = 0;
+    while (n < TAB_MAX && tab_items[tab][n] >= 0 && (tab_items[tab][n] != IT_QUIT || menu_allow_quit)) n++;
+    return n;
+}
+
+static int main_item(int row) { return row >= 0 && row < main_count() ? tab_items[tab][row] : -1; }
+
+/* back on the main page, at an item */
+static void go_main(int item)
+{
+    page = PAGE_MAIN;
+    for (int t = 0; t < TAB_COUNT; t++)
+        for (int i = 0; i < TAB_MAX; i++)
+            if (tab_items[t][i] == item) { tab = t; sel = i; return; }
+    sel = 0;
+}
+
+static int is_value_item(int item) { return item >= IT_SCREEN && item <= IT_HUE; }
 
 static void changed(void)
 {
@@ -289,8 +324,7 @@ static int online_activate(int row)
         return MENU_ACT_NONE;
     }
     if (net_state() != NET_OFF) { net_stop(); return MENU_ACT_NONE; }
-    page = PAGE_MAIN;
-    sel = IT_ONLINE;
+    go_main(IT_ONLINE);
     return MENU_ACT_NONE;
 }
 
@@ -336,8 +370,7 @@ static int mods_activate(int row)
         open_ = 0;
         return MENU_ACT_MODS;
     }
-    page = PAGE_MAIN;
-    sel = IT_MODS;
+    go_main(IT_MODS);
     return MENU_ACT_NONE;
 }
 
@@ -370,6 +403,7 @@ void menu_open(void)
 {
     open_ = 1;
     page = PAGE_MAIN;
+    tab = TAB_GAME;
     sel = 0;
     menu_settings_dirty = 0;
 }
@@ -394,14 +428,14 @@ static int back(void)
         edit_char = -1;
         return MENU_ACT_NONE;
     }
-    if (page == PAGE_CHARS) { page = PAGE_MAIN; sel = IT_CHARS; return MENU_ACT_NONE; }
-    if (page == PAGE_MODS) { page = PAGE_MAIN; sel = IT_MODS; return MENU_ACT_NONE; }
+    if (page == PAGE_CHARS) { go_main(IT_CHARS); return MENU_ACT_NONE; }
+    if (page == PAGE_MODS) { go_main(IT_MODS); return MENU_ACT_NONE; }
     if (page == PAGE_ONLINE) {
         if (editing) { editing = 0; return MENU_ACT_NONE; }
-        page = PAGE_MAIN; sel = IT_ONLINE; return MENU_ACT_NONE;
+        go_main(IT_ONLINE); return MENU_ACT_NONE;
     }
     if (page == PAGE_EDIT) { page = PAGE_RECOLOR; collect_colors(); return MENU_ACT_NONE; }
-    if (page == PAGE_RECOLOR) { page = PAGE_MAIN; sel = IT_RECOLOR; return MENU_ACT_NONE; }
+    if (page == PAGE_RECOLOR) { go_main(IT_RECOLOR); return MENU_ACT_NONE; }
     open_ = 0;
     return MENU_ACT_CLOSE;
 }
@@ -411,12 +445,21 @@ int menu_key(int key)
     if (!open_) return MENU_ACT_NONE;
     if (key == MK_BACK) return back();
     if (page == PAGE_MAIN) {
+        /* rows: the tab bar (-1), then the tab's items; left / right on the tab bar, or
+         * on an item that has no value, go to the next tab */
         int n = main_count();
-        if (key == MK_UP) sel = (sel + n - 1) % n;
-        else if (key == MK_DOWN) sel = (sel + 1) % n;
-        else if (key == MK_LEFT) adjust_main(sel, -1);
-        else if (key == MK_RIGHT) adjust_main(sel, 1);
-        else if (key == MK_OK) return activate_main(sel);
+        if (key == MK_UP) sel = sel < 0 ? n - 1 : sel - 1;
+        else if (key == MK_DOWN) sel = sel >= n - 1 ? -1 : sel + 1;
+        else if (key == MK_LEFT || key == MK_RIGHT) {
+            int dir = key == MK_LEFT ? -1 : 1;
+            if (sel < 0 || !adjust_main(main_item(sel), dir)) {
+                tab = (tab + dir + TAB_COUNT) % TAB_COUNT;
+                if (sel >= 0) sel = 0;
+            }
+        } else if (key == MK_OK) {
+            if (sel < 0) sel = 0;
+            else return activate_main(main_item(sel));
+        }
     } else if (page == PAGE_RECOLOR) {
         /* grid of 8 columns, then a "Back" row */
         int n = ncolors;
@@ -500,7 +543,7 @@ int menu_pointer(int x, int y)
     if (!open_) return MENU_ACT_NONE;
     if (x < PANEL_X || x >= PANEL_X + PANEL_W || y < PANEL_Y || y >= PANEL_Y + PANEL_H)
         return back();
-    if (y < ROW_Y0 - 6 && x >= PANEL_X + PANEL_W - 40) /* "Back" in the title bar */
+    if (y < (page == PAGE_MAIN ? TAB_Y - 3 : ROW_Y0 - 6) && x >= PANEL_X + PANEL_W - 40) /* "Back" in the title bar */
         return back();
     if (page == PAGE_RECOLOR) {
         int c = (x - SW_X0) / SW_W, r = (y - SW_Y0) / SW_H;
@@ -528,14 +571,19 @@ int menu_pointer(int x, int y)
         sel = row;
         return menu_key(MK_OK);
     }
+    if (page == PAGE_MAIN && y >= TAB_Y - 3 && y < TAB_Y + 11) {
+        int t = (x - (PANEL_X + 10)) / TAB_W;
+        if (x >= PANEL_X + 10 && t < TAB_COUNT) { tab = t; sel = -1; }
+        return MENU_ACT_NONE;
+    }
     int row;
     int n = page == PAGE_MAIN ? main_count() : page == PAGE_CHARS ? CHAR_COUNT * PART_COUNT + 2
           : page == PAGE_ONLINE ? online_rows() : 5;
-    int y0 = page == PAGE_EDIT ? ROW_Y0 + 40 : page == PAGE_ONLINE ? ROW_Y0 + 4 : ROW_Y0;
-    row = (y - y0) / ROW_H;
-    if (y < y0 || row < 0 || row >= n) return MENU_ACT_NONE;
+    int y0 = page == PAGE_EDIT ? ROW_Y0 + 40 : page == PAGE_ONLINE ? ROW_Y0 + 4 : page == PAGE_MAIN ? MAIN_Y0 : ROW_Y0;
+    row = (y - y0 + (page == PAGE_MAIN ? 3 : 0)) / (page == PAGE_MAIN ? MAIN_H : ROW_H);
+    if (y < y0 - (page == PAGE_MAIN ? 3 : 0) || row < 0 || row >= n) return MENU_ACT_NONE;
     sel = row;
-    int is_value = page == PAGE_MAIN ? (row >= IT_SCREEN && row <= IT_HUE)
+    int is_value = page == PAGE_MAIN ? is_value_item(main_item(row))
                  : page == PAGE_CHARS ? row < CHAR_COUNT * PART_COUNT
                  : page == PAGE_ONLINE ? 0 : row <= 2;
     if (page == PAGE_ONLINE && editing && row != OR_JOIN) editing = 0;
@@ -556,11 +604,20 @@ void menu_draw(uint32_t *buf)
     if (page == PAGE_MAIN) {
         text(buf, PANEL_X + 12, PANEL_Y + 10, "OPTIONS", C_GOLD);
         text(buf, PANEL_X + PANEL_W - 40, PANEL_Y + 10, "X", C_DIM);
-        for (int i = 0; i < main_count(); i++) {
-            int y = ROW_Y0 + i * ROW_H;
-            int s = i == sel;
-            if (s) fill(buf, PANEL_X + 4, y - 3, PANEL_W - 8, ROW_H, C_SEL);
-            if (s) fill(buf, PANEL_X + 4, y - 3, 2, ROW_H, C_ACCENT);
+        /* the tabs */
+        for (int t = 0; t < TAB_COUNT; t++) {
+            int x = PANEL_X + 10 + t * TAB_W, on = t == tab;
+            if (on) fill(buf, x, TAB_Y - 3, TAB_W - 4, 13, C_SEL);
+            if (on) fill(buf, x, TAB_Y + 9, TAB_W - 4, 2, sel < 0 ? C_GOLD : C_ACCENT);
+            text(buf, x + (TAB_W - 4 - 8 * (int)strlen(tab_name[t])) / 2, TAB_Y, tab_name[t], on ? C_TEXT : C_DIM);
+        }
+        fill(buf, PANEL_X + 4, TAB_Y + 11, PANEL_W - 8, 1, 0xFF3A3850u);
+        for (int r = 0; r < main_count(); r++) {
+            int i = main_item(r);
+            int y = MAIN_Y0 + r * MAIN_H;
+            int s = r == sel;
+            if (s) fill(buf, PANEL_X + 4, y - 3, PANEL_W - 8, MAIN_H - 1, C_SEL);
+            if (s) fill(buf, PANEL_X + 4, y - 3, 2, MAIN_H - 1, C_ACCENT);
             text(buf, PANEL_X + 14, y, item_label[i], s ? C_TEXT : C_DIM);
             switch (i) {
             case IT_SCREEN:
@@ -623,7 +680,14 @@ void menu_draw(uint32_t *buf)
                 break;
             }
         }
-        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 14, "Arrows/tap: change  Esc: close", 0xFF6E6A7Eu);
+        if (tab == TAB_SOUND) {
+            int y = MAIN_Y0 + main_count() * MAIN_H + 8;
+            text(buf, PANEL_X + 14, y, "While Spotify plays music, the", C_DIM);
+            text(buf, PANEL_X + 14, y + 10, "game's music is muted; sound", C_DIM);
+            text(buf, PANEL_X + 14, y + 20, "effects stay on.", C_DIM);
+            text(buf, PANEL_X + 14, y + 36, "Works on Windows, Linux and Mac.", C_DIM);
+        }
+        text(buf, PANEL_X + 14, PANEL_Y + PANEL_H - 14, sel < 0 ? "Left/right: tabs  Esc: close" : "Arrows/tap: change  Esc: close", 0xFF6E6A7Eu);
     } else if (page == PAGE_RECOLOR) {
         text(buf, PANEL_X + 12, PANEL_Y + 10, "RECOLOR", C_GOLD);
         text(buf, PANEL_X + PANEL_W - 48, PANEL_Y + 10, "Back", C_DIM);
