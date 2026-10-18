@@ -889,8 +889,15 @@ static void view_prime(void)
         const pic_look *k = &pic.band[pic.band_of[y0]].look;
         int camx, wy0;
         view_camera(vi, y0, k->hs[0], k->vsram[0], &camx, &wy0);
+        /* the game changes its floor number a few frames before or after the scroll
+         * (see view_check): the floor that keeps the camera nearest to the last one */
+        static const int tries[3] = {0, -80, 80};
+        int d = views[vi].dwy;
+        for (int i = 0; i < 3; i++)
+            if (abs(wy0 + tries[i] - views[vi].wy0) < abs(wy0 + d - views[vi].wy0)) d = tries[i];
+        if (abs(wy0 + d - views[vi].wy0) > 24) d = views[vi].dwy;
         view_rec[vi].hsA = camx;
-        view_rec[vi].vsA = wy0 + views[vi].dwy;
+        view_rec[vi].vsA = wy0 + d;
         view_rec[vi].hsB = k->hs[1];
         view_rec[vi].vsB = k->vsram[1];
     }
