@@ -6,6 +6,7 @@
 #include "z80recomp.h"
 #include "sndmix.h"
 #include "cheats.h"
+#include "insane.h"
 #include "md.h"
 #include "vdp.h"
 #include "psg.h"
@@ -448,6 +449,7 @@ void md_reset(void)
     ym_phase = 0;
     xs_reset();
     cheat_reset();
+    insane_reset();
     snd_reset();
     snd_stems = 0;
     cpu_init();

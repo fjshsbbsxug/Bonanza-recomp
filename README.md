@@ -156,6 +156,18 @@ builder/      the HTML builder page
     ways and compares them (no pixel differs in any of the reference runs). The CRT
     filter, the menu's recolouring and `--cpu-drawing` (or no OpenGL) use the CPU's
     drawing.
+* **Insane mode** (`port/src/insane.c`; menu: Game tab, `insane =` in bonanza.ini):
+  unlocked by beating the whole game on Hard (the ending starting with the difficulty on
+  Hard) in a game that did not use the stage select code since the machine was reset,
+  or by the code A, B, B, A, Down, A, B, B, A on the title menu (`cheats.c`). Every guard
+  but the purple ones takes two shots (the first only clinks); the purple guard aims and
+  shoots 1.2 times as fast; the shield guard sends the shots it stops back at the player
+  (as a guard's bullet, which costs a life) and walks and runs 1.2 times as fast; green
+  guards look for the players every frame instead of every fourth, so they notice you
+  about four times as soon. The stage select code does nothing in Insane mode. Offline
+  only. It uses game hooks at the shot-hits-guard calls (0x18BC2, 0x18EAE), the shield
+  block (0x18B5C, 0x18E40) and the guards' look (0x16C2E), and changes four words of the
+  guards' script data in the ROM buffer while in a stage.
 * **Sprite limit** (menu: Screen tab, `sprite_limit =` in bonanza.ini, default off): the
   console shows at most 20 sprites and 320 sprite pixels on a line and drops the rest;
   with the limit off every sprite is drawn (the game's own masking sprites, which hide

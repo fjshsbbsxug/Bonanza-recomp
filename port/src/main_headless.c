@@ -60,6 +60,7 @@ extern unsigned long z80_stat_no_code;
 #include "mods.h"
 #include "prophunt.h"
 #include "race.h"
+#include "insane.h"
 #ifdef _WIN32
 #include <windows.h>
 static void nap(void) { Sleep(1); }
@@ -97,6 +98,7 @@ static void write_ppm(const char *path)
     uint32_t *fb = (uint32_t *)md_framebuffer();
     ph_overlay(fb, MD_FB_W, w, MD_SCREEN_H, net_state() == NET_PLAYING ? net_local_player() : -1);
     race_overlay(fb, MD_FB_W, w, MD_SCREEN_H);
+    insane_overlay(fb, MD_FB_W, w, MD_SCREEN_H);
     for (int y = 0; y < MD_SCREEN_H; y++)
         for (int x = 0; x < w; x++) {
             uint32_t p = fb[y * MD_FB_W + x];
@@ -404,6 +406,8 @@ int main(int argc, char **argv)
         cheat_frame();                          /* does nothing in an online game */
         if (cheat_insane_unlocked_now())
             fprintf(stderr, "insane: unlocked by the code at frame %d\n", fr);
+        if (!online && insane_frame())
+            fprintf(stderr, "insane: earned (the game beaten on Hard) at frame %d\n", fr);
         int16_t abuf[4096 * 2];
         int got;
         while ((got = md_audio_take(abuf, 4096)) > 0) {

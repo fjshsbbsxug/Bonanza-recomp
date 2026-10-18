@@ -46,8 +46,11 @@ FORBIDDEN = re.compile(r"\b(REG_PC|REG_PPC|m68ki_jump\w*|m68ki_branch_\w+|m68ki_
 # --------------------------------------------------------------------------
 
 # places where port/src/gamemods.c may step in: routine entries it can take over, and
-# 0x3B08 (the Options menu drawing EXIT, where the stage select code adds STAGE)
-HOOKS = {0x58B4, 0x59C6, 0x11106, 0x3B08}    # gamemods.c, extrastages.c, cheats.c
+# 0x3B08 (the Options menu drawing EXIT, where the stage select code adds STAGE); Insane
+# mode (insane.c): a shot hitting a guard (0x18BC2, 0x18EAE), a shield stopping it
+# (0x18B5C, 0x18E40), an unalerted guard looking for players (0x16C2E)
+HOOKS = {0x58B4, 0x59C6, 0x11106, 0x3B08,    # gamemods.c, extrastages.c, cheats.c
+         0x18BC2, 0x18EAE, 0x18B5C, 0x18E40, 0x16C2E}    # insane.c
 
 # operands that the port changes in the ROM buffer while running: read from it at run
 # time instead of being built in, so changing them needs no interpreter.

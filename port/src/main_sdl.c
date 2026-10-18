@@ -28,6 +28,7 @@
 #include "render_gl.h"
 #include "spotify.h"
 #include "race.h"
+#include "insane.h"
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -817,8 +818,9 @@ static void present(void)
             /* the graphics card's picture, and the Prop Hunt text over it */
             static uint32_t over[MD_SCREEN_H * MD_FB_W];
             render_gl_screen_picture(sw, dst.x, dst.y, dst.w, dst.h, settings.smooth);
-            if (me >= 0) {
+            if (me >= 0 || insane_overlay_on()) {
                 memset(over, 0, sizeof(over));
+                insane_overlay(over, MD_FB_W, sw, MD_SCREEN_H);
                 ph_overlay(over, MD_FB_W, sw, MD_SCREEN_H, me);
                 race_overlay(over, MD_FB_W, sw, MD_SCREEN_H);
                 scr_image(IMG_OVERLAY, over, MD_FB_W, MD_SCREEN_H, sw, MD_SCREEN_H, dst, settings.smooth, 1);
@@ -835,6 +837,7 @@ static void present(void)
             }
             ph_overlay(fb, MD_FB_W, sw, MD_SCREEN_H, me);
             race_overlay(fb, MD_FB_W, sw, MD_SCREEN_H);
+            insane_overlay(fb, MD_FB_W, sw, MD_SCREEN_H);
             if (crt_on())
                 present_crt(fb, sw, dst);
             else
@@ -1205,6 +1208,7 @@ static void net_update(void)
  * before the stage loads; the frames before that are run at once, without showing them. */
 static void start_stage(int entry)
 {
+    insane_taint();                             /* (not a game played through) */
     int16_t buf[2048 * 2];
     for (int f = 0; f < 912; f++) {
         int start = (f >= 620 && f < 630) || (f >= 760 && f < 770) || (f >= 900 && f < 910);
@@ -1294,6 +1298,8 @@ static void run_one(void)
         md_run_frame();
         cheat_frame();                          /* offline only: title-screen codes */
         if (cheat_insane_unlocked_now())        /* (the Insane code) */
+            save_settings();
+        if (insane_frame())                     /* Insane mode: its rules; earned now */
             save_settings();
         int16_t buf[2048 * 2 + 64];
         int n;
