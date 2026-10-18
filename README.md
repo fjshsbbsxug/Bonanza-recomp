@@ -156,6 +156,8 @@ builder/      the HTML builder page
     ways and compares them (no pixel differs in any of the reference runs). The CRT
     filter, the menu's recolouring and `--cpu-drawing` (or no OpenGL) use the CPU's
     drawing.
+* **Sound** (menu: Sound tab; `volume =`, `mute_music =`, `mute_all =` in bonanza.ini):
+  the volume (0-100), the game's music off (sound effects and voices stay), or no sound.
 * **Spotify** (`port/src/spotify.c`; menu: Sound tab, `spotify =` in bonanza.ini: mute,
   off): while Spotify plays music on the same computer, the game's music is eased out and
   its sound effects and voices stay; when Spotify stops, the music comes back. Spotify is

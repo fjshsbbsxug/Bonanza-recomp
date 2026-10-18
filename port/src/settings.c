@@ -12,7 +12,7 @@ static const char *crt_keys[CRT_COUNT] = { "off", "scanlines", "tv", "monitor" }
 #include "md.h"
 #include "vdp.h"
 
-settings_t settings = { .crop_cutscenes = 1, .patrol_return = 1, .spotify_mute = 1 };
+settings_t settings = { .crop_cutscenes = 1, .patrol_return = 1, .spotify_mute = 1, .volume = 100 };
 uint32_t md_color_lut[512];
 uint32_t char_color_lut[16];
 static const char *char_keys[CHAR_COUNT] = {"robo", "mobo"};
@@ -62,6 +62,7 @@ void settings_defaults(void)
     settings.patrol_return = 1;
     settings.ph_minutes = 3;
     settings.spotify_mute = 1;
+    settings.volume = 100;
 }
 
 /* ------------------------------------------------------------ colour */
@@ -249,6 +250,9 @@ int settings_set(const char *key, const char *value)
                              : (!strcmp(value, "on") || atoi(value) == 1) ? FLOOR_ALERT_ON : FLOOR_ALERT_OFF;
         return 1;
     }
+    if (!strcmp(key, "volume")) { int v = atoi(value); settings.volume = v < 0 ? 0 : v > 100 ? 100 : v; return 1; }
+    if (!strcmp(key, "mute_music")) { settings.mute_music = atoi(value) != 0 || !strcmp(value, "on"); return 1; }
+    if (!strcmp(key, "mute_all")) { settings.mute_all = atoi(value) != 0 || !strcmp(value, "on"); return 1; }
     if (!strcmp(key, "spotify")) { settings.spotify_mute = strcmp(value, "off") != 0; return 1; }
     if (!strcmp(key, "guards")) { settings.patrol_return = strcmp(value, "original") != 0; return 1; }
     if (!strcmp(key, "upper_view")) { settings.show_2p_panel = !strcmp(value, "panel"); return 1; }
@@ -333,6 +337,9 @@ int settings_save(const char *path)
     fprintf(f, "join = %s\n", settings.join_address);
     fprintf(f, "# enabled mods from the mods folder, in order (later ones win)\n");
     fprintf(f, "mods = %s\n", settings.mods);
+    fprintf(f, "# sound: volume 0-100; mute_music = on: no music (sound effects stay); mute_all = on: no sound\n");
+    fprintf(f, "volume = %d\nmute_music = %s\nmute_all = %s\n", settings.volume,
+            settings.mute_music ? "on" : "off", settings.mute_all ? "on" : "off");
     fprintf(f, "# spotify: mute = the game's music is muted while Spotify plays (sound effects stay); off\n");
     fprintf(f, "spotify = %s\n", settings.spotify_mute ? "mute" : "off");
     fprintf(f, "floor_alert = %s\n", settings.floor_alert == FLOOR_ALERT_SEMI ? "semi" : settings.floor_alert ? "on" : "off");

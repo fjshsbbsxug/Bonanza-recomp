@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "md.h"
 #include "game.h"
 #include "crt.h"
@@ -1077,8 +1078,24 @@ static SDL_AudioSpec have;
 /* The picture is shown at the display's refresh rate, which is rarely exactly the
  * Mega Drive's 59.92 Hz; the audio queue absorbs the difference by dropping or
  * repeating a few samples (inaudible) instead of making the picture wait. */
+/* the player's volume (Sound tab), eased to avoid clicks */
+static void volume_audio(int16_t *buf, int n)
+{
+    static double g = 1;
+    double want = settings.mute_all ? 0 : settings.volume / 100.0;
+    want *= want;                        /* the slider is closer to how loud it sounds */
+    if (g == 1 && want == 1) return;
+    for (int i = 0; i < n; i++) {
+        g += (want - g) * 0.002;
+        if (fabs(want - g) < 1e-4) g = want;
+        buf[i * 2] = (int16_t)(buf[i * 2] * g);
+        buf[i * 2 + 1] = (int16_t)(buf[i * 2 + 1] * g);
+    }
+}
+
 static void queue_audio(int16_t *buf, int n)
 {
+    volume_audio(buf, n);
     Uint32 queued = SDL_GetQueuedAudioSize(audio_dev) / 4;
     Uint32 hi = (Uint32)have.freq * 90 / 1000, lo = (Uint32)have.freq * 35 / 1000;
     if (queued > hi * 3) {
@@ -1218,8 +1235,10 @@ static int run_net_frame(void)
     int16_t buf[2048 * 2 + 64];
     int n;
     while ((n = md_audio_take(buf, 2048)) > 0)
-        if (audio_dev)
+        if (audio_dev) {
+            volume_audio(buf, n);
             queue_audio_net(buf, n);
+        }
     net_frame_done((net_frame() + 1) % 60 == 0 ? md_state_hash() : 0);
     return 1;
 }
@@ -1279,7 +1298,7 @@ static void frame(void)
     }
     net_update();
     spotify_watch(settings.spotify_mute);       /* Spotify playing: the game's music waits */
-    snd_music_gain(settings.spotify_mute && spotify_playing() ? 0 : 1);
+    snd_music_gain(settings.mute_music || (settings.spotify_mute && spotify_playing()) ? 0 : 1);
     scene_cpu_too = menu_is_open() || crt_on();    /* they read the CPU's picture */
     int locked = vsync_on && avg > 15.6 && avg < 17.6;
     if (locked) {
