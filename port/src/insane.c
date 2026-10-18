@@ -1,8 +1,8 @@
 /* Insane mode (Game tab; unlocked by beating the whole game on Hard without the stage
  * select code, or by the code A B B A Down A B B A on the title menu, cheats.c).
  *
- *   - every guard but the purple ones takes two shots: the first only clinks
- *   - the purple guard aims and shoots 1.2 times as fast (44 frames a shot -> 36)
+ *   - every guard but the purple one (the big guard who throws) takes two shots: the
+ *     first only clinks
  *   - the shield guard sends shots it stops back at the player (as a guard's bullet,
  *     which costs a life), and walks and runs 1.2 times as fast
  *   - green guards look for the players every frame (normally every 4th, the two
@@ -12,13 +12,12 @@
  *
  * Guard kinds, per guard object (obj*2 = o): the class is the long at $6F24 + o*2 (the
  * shot event script): 0x211AC the normal guard (blue; green with attribute $3C66 & 0x6000
- * = 0x4000; one purple-coloured with 0x2000), 0x211B8 the purple guard, 0x1FDBA the big
- * purple guard, 0x2306C the shield guard. Shots: player shots are objects whose $99F0 is
+ * = 0x4000), 0x211B8 another shooting guard, 0x1FDBA the purple guard (big, throws),
+ * 0x2306C the shield guard. Shots: player shots are objects whose $99F0 is
  * 8 (player 1) or $C (player 2); a guard's bullet is type $10 ($385E its step, $9BF4 the
  * guard, $3252 frame 0x165), removed without touching the players' shot counts
  * $9DF8 / $9DFA. Script data changed (in the ROM buffer, while in a stage, put back
- * otherwise): the purple guard's aiming count 0x21674 (10 -> 8) and its wait after a
- * shot 0x21764 (32 -> 27); the shield guard's patrol legs 0x22C9A / 0x22CD4 (80 -> 67
+ * otherwise): the shield guard's patrol legs 0x22C9A / 0x22CD4 (80 -> 67
  * frames, so that with the faster walk it covers the same ground).
  *
  * Earning it: the ending starts ($C068 = 0x23AB6) with the difficulty ($C04E) on Hard,
@@ -38,8 +37,7 @@
 
 #define NOBJ 0x56
 #define CLASS_NORMAL 0x211ACu
-#define CLASS_PURPLE 0x211B8u
-#define CLASS_BIG 0x1FDBAu
+#define CLASS_PURPLE 0x1FDBAu       /* the big guard who throws */
 #define CLASS_SHIELD 0x2306Cu
 #define UNLOCK_SHOW (6 * 60)
 
@@ -48,8 +46,6 @@ static void w16(int a, int v) { md.ram[a & 0xFFFF] = (uint8_t)(v >> 8); md.ram[(
 static uint32_t r32(int a) { return (uint32_t)r16(a) << 16 | (uint32_t)r16(a + 2); }
 
 static struct { uint32_t addr; uint16_t orig, insane; } patch[] = {
-    { 0x21674, 0x000A, 0x0008 },     /* purple guard: aiming */
-    { 0x21764, 0x0020, 0x001B },     /* ... the wait after a shot */
     { 0x22C9A, 0x0050, 0x0043 },     /* shield guard: patrol legs */
     { 0x22CD4, 0x0050, 0x0043 },
 };
@@ -68,7 +64,7 @@ static int is_guard(int o) { int i = o >> 1; return i >= 6 && i < 6 + r16(0x6CC2
 static int purple(int o)
 {
     uint32_t c = guard_class(o);
-    return c == CLASS_PURPLE || c == CLASS_BIG || (c == CLASS_NORMAL && colour(o) == 0x2000);
+    return c == CLASS_PURPLE;
 }
 
 int insane_active(void)
