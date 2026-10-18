@@ -21,6 +21,11 @@ int  net_take_start(void);                /* 1 once when a game starts: reset th
 int  net_option_floor_alert(void);        /* game options chosen by the host */
 int  net_option_prop_hunt(void);          /* Prop Hunt (only while playing online) */
 int  net_option_ph_minutes(void);         /* Prop Hunt: minutes a round lasts */
+/* Race (race.c): each player plays a game of their own, no lockstep; only a small race
+ * status goes over, sent often (the last one received counts) */
+int  net_option_race(void);
+void net_race_send(const uint8_t *data, int n);   /* up to 64 bytes */
+int  net_race_peer(uint8_t *data, int max);       /* the last received; 0 if none yet */
 void net_local_input(uint8_t pad);        /* this player's buttons, every refresh */
 int  net_inputs_for_next_frame(uint8_t pads[2]); /* 1 if the next frame can run */
 void net_frame_done(uint32_t state_hash); /* after running that frame */

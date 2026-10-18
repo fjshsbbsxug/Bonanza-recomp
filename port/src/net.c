@@ -14,6 +14,7 @@
  *   X refused: reason
  *   I buttons: first frame, count, buttons..., frames received, checksum frame+value,
  *     send time, echoed time
+ *   R race status (Race mode, race.c): whatever race.c sends, the last one kept
  *   Q leaving
  *   D / E: LAN search / answer (port, name) */
 #include <stdio.h>
@@ -23,7 +24,7 @@
 #include "md.h"
 #include "settings.h"
 
-#define NET_VERSION 2      /* 2: the welcome carries the Prop Hunt options */
+#define NET_VERSION 3      /* 2: the welcome carries the Prop Hunt options; 3: Race */
 #define RING 1024
 #define HASH_EVERY 60
 
@@ -33,7 +34,9 @@
 
 static char status_text[200] = "Not connected";
 static int state = NET_OFF, local_player;
-static int start_pending, opt_floor_alert, opt_prop_hunt, opt_ph_minutes = 3;
+static int start_pending, opt_floor_alert, opt_prop_hunt, opt_ph_minutes = 3, opt_race;
+static uint8_t race_in[64];
+static int race_in_n;
 static char peer_name[32];
 
 const char *net_status(void) { return status_text; }
@@ -42,6 +45,14 @@ int net_local_player(void) { return local_player; }
 int net_option_floor_alert(void) { return opt_floor_alert; }
 int net_option_prop_hunt(void) { return state == NET_PLAYING && opt_prop_hunt; }
 int net_option_ph_minutes(void) { return opt_ph_minutes; }
+int net_option_race(void) { return state == NET_PLAYING && opt_race; }
+
+int net_race_peer(uint8_t *data, int max)
+{
+    int n = race_in_n < max ? race_in_n : max;
+    memcpy(data, race_in, (size_t)n);
+    return n;
+}
 
 int net_take_start(void)
 {
@@ -56,6 +67,7 @@ int net_host(int port) { (void)port; snprintf(status_text, sizeof(status_text), 
 int net_join(const char *a) { (void)a; return net_host(0); }
 void net_stop(void) {}
 void net_poll(void) {}
+void net_race_send(const uint8_t *d, int n) { (void)d; (void)n; }
 void net_local_input(uint8_t pad) { (void)pad; }
 int net_inputs_for_next_frame(uint8_t pads[2]) { (void)pads; return 0; }
 int net_frames_waiting(void) { return 0; }
@@ -236,7 +248,8 @@ static void send_welcome(void)
     memcpy(b + 5, my_name, 24);
     b[29] = (uint8_t)opt_prop_hunt;           /* as connected() took them */
     b[30] = (uint8_t)opt_ph_minutes;
-    send_to(&peer, b, 31);
+    b[31] = (uint8_t)opt_race;
+    send_to(&peer, b, 32);
 }
 
 static void send_inputs(void)
@@ -265,7 +278,9 @@ static void connected(const char *name)
         opt_floor_alert = settings.floor_alert;
         opt_prop_hunt = settings.prop_hunt != 0;
         opt_ph_minutes = settings.ph_minutes >= 1 && settings.ph_minutes <= 9 ? settings.ph_minutes : 3;
+        opt_race = settings.race != 0 && !opt_prop_hunt;
     }
+    race_in_n = 0;
     snprintf(peer_name, sizeof(peer_name), "%.*s", 24, name);
     state = NET_PLAYING;
     start_pending = 1;
@@ -430,7 +445,7 @@ static void receive(void)
         if (!same_peer(&from))
             continue;
         last_recv = now_ms();
-        if (type == 'W' && state == NET_JOINING && n >= 31) {
+        if (type == 'W' && state == NET_JOINING && n >= 32) {
             if (b[3] != NET_VERSION) {
                 net_stop();
                 snprintf(status_text, sizeof(status_text), "Host runs a different version of the port");
@@ -439,6 +454,7 @@ static void receive(void)
             opt_floor_alert = b[4];
             opt_prop_hunt = b[29] != 0;
             opt_ph_minutes = b[30] >= 1 && b[30] <= 9 ? b[30] : 3;
+            opt_race = b[31] != 0;
             char name[32];
             snprintf(name, sizeof(name), "%.24s", (const char *)b + 5);
             local_player = 1;
@@ -456,6 +472,9 @@ static void receive(void)
             return;
         } else if (type == 'I' && state == NET_PLAYING) {
             got_inputs(b, n);
+        } else if (type == 'R' && state == NET_PLAYING && n > 3) {
+            race_in_n = n - 3 < (int)sizeof(race_in) ? n - 3 : (int)sizeof(race_in);
+            memcpy(race_in, b + 3, (size_t)race_in_n);
         }
     }
 }
@@ -539,6 +558,15 @@ void net_frame_done(uint32_t state_hash)
     if (!desync && frame % 60 == 0)
         snprintf(status_text, sizeof(status_text), "Playing with %s - player %d - ping %u ms, delay %d",
                  peer_name, local_player + 1, rtt_ms, delay);
+}
+
+void net_race_send(const uint8_t *d, int n)
+{
+    if (state != NET_PLAYING) return;
+    uint8_t b[3 + 64] = {'B', 'Z', 'R'};
+    if (n > 64) n = 64;
+    memcpy(b + 3, d, (size_t)n);
+    send_to(&peer, b, 3 + n);
 }
 
 void net_lan_search(void)

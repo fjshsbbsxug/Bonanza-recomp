@@ -37,6 +37,7 @@ typedef struct {
     int floor_alert;         /* game change: FLOOR_ALERT_* */
     int prop_hunt;           /* online game mode chosen by the host: Prop Hunt (prophunt.c) */
     int ph_minutes;          /* Prop Hunt: minutes a round lasts (1-9) */
+    int race;                /* online game mode chosen by the host: Race (race.c) */
     int volume;              /* 0..100 */
     int mute_music;          /* the game's music off (sound effects stay) */
     int mute_all;            /* no sound at all */

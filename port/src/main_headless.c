@@ -59,6 +59,7 @@ extern unsigned long z80_stat_no_code;
 #include "net.h"
 #include "mods.h"
 #include "prophunt.h"
+#include "race.h"
 #ifdef _WIN32
 #include <windows.h>
 static void nap(void) { Sleep(1); }
@@ -95,6 +96,7 @@ static void write_ppm(const char *path)
     fprintf(f, "P6\n%d %d\n255\n", w, MD_SCREEN_H);
     uint32_t *fb = (uint32_t *)md_framebuffer();
     ph_overlay(fb, MD_FB_W, w, MD_SCREEN_H, net_state() == NET_PLAYING ? net_local_player() : -1);
+    race_overlay(fb, MD_FB_W, w, MD_SCREEN_H);
     for (int y = 0; y < MD_SCREEN_H; y++)
         for (int x = 0; x < w; x++) {
             uint32_t p = fb[y * MD_FB_W + x];
@@ -102,6 +104,25 @@ static void write_ppm(const char *path)
             fwrite(rgb, 1, 3, f);
         }
     fclose(f);
+}
+
+/* a 1-player game straight into stage entry e (Race; as main_sdl.c's start_stage) */
+static void start_stage(int entry)
+{
+    int16_t buf[2048 * 2];
+    for (int f = 0; f < 912; f++) {
+        int start = (f >= 620 && f < 630) || (f >= 760 && f < 770) || (f >= 900 && f < 910);
+        md.pad[0] = start ? PAD_START : 0;
+        md.pad[1] = 0;
+        if (f == 765) {
+            md.ram[0xC05A] = 0;
+            md.ram[0xC05B] = (uint8_t)entry;
+        }
+        md_run_frame();
+        while (md_audio_take(buf, 2048) > 0) {
+        }
+    }
+    md.pad[0] = 0;
 }
 
 static void wav_header(FILE *f, int rate, uint32_t frames)
@@ -275,8 +296,8 @@ int main(int argc, char **argv)
             if (net_state() == NET_OFF) { fprintf(stderr, "net: %s\n", net_status()); return 1; }
             nap();
         }
-        vdp_local_player = net_local_player();
-        fprintf(stderr, "net: playing as player %d\n", vdp_local_player + 1);
+        vdp_local_player = net_option_race() ? -1 : net_local_player();
+        fprintf(stderr, "net: playing as player %d%s\n", net_local_player() + 1, net_option_race() ? " (race)" : "");
     }
     if (gpu) {
 #ifdef BONANZA_EGL
@@ -292,8 +313,47 @@ int main(int argc, char **argv)
     }
     md_reset();
     ph_reset();
+    race_reset();
     if (play_extra > 0) xs_play(play_extra - 1);
     uint8_t mine = 0;
+    if (online && race_on()) {
+        /* Race: this player's own game, the race status over the network; --input
+         * buttons are this player's (pad 0), --poke frames count the turns here */
+        for (int fr = 0; fr < frames; fr++) {
+            for (int k = 0; k < ninputs; k++)
+                if (inputs[k].frame == fr) mine = inputs[k].b;
+            net_poll();
+            if (net_state() != NET_PLAYING) { fprintf(stderr, "net: %s\n", net_status()); return 1; }
+            int entry = 0, what = race_update(mine, &entry);
+            if (what == RACE_START) {
+                fprintf(stderr, "race %d: start stage entry %d\n", fr, entry);
+                md_reset();
+                start_stage(entry);
+            } else if (what == RACE_RUN) {
+                for (int k = 0; k < npokes; k++)
+                    if (pokes[k].frame == fr) {
+                        md.ram[pokes[k].addr & 0xFFFE] = pokes[k].val >> 8;
+                        md.ram[(pokes[k].addr & 0xFFFE) + 1] = pokes[k].val;
+                    }
+                md.pad[0] = mine;
+                md.pad[1] = 0;
+                race_pre_frame();
+                md_run_frame();
+                race_post_frame();
+            }
+            int16_t abuf[4096 * 2];
+            while (md_audio_take(abuf, 4096) > 0) {
+            }
+            for (int k = 0; k < nshots; k++)
+                if (shots[k].frame == fr)
+                    write_ppm(shots[k].path);
+            nap();
+        }
+        fprintf(stderr, "net: %s\n", net_status());
+        for (int k = 0; k < 300; k++) { net_poll(); nap(); }
+        net_stop();
+        return 0;
+    }
     for (int fr = 0; fr < frames; fr++) {
         for (int k = 0; k < ninputs; k++)
             if (inputs[k].frame == fr) {

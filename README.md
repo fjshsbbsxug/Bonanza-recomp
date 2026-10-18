@@ -276,6 +276,18 @@ builder/      the HTML builder page
     machine for itself. `PH_OFFLINE=minutes` runs the rules offline in the headless
     runner (tests).
 
+  * *Race* (`port/src/race.c`, online only): the host chooses it in `Online...`
+    (Mode: Race). Each player plays the same stage in a 1-player game of their own -
+    no lockstep, only a small race status goes over the network (round, vote, frames
+    played, cleared and when, treasures, wins). Rounds: both vote for a stage (if the
+    votes differ, the host's pick counts in odd rounds and the other player's in even
+    ones), a 3-second countdown, then the race: lives never run out, a game that ends
+    without clearing the stage (time up) starts it again with the clock still running,
+    and whoever clears it in fewer game frames wins the round (a tie goes to the host).
+    During the race the top line shows the other player's treasures. Then the result
+    and the next vote. `bonanza-headless --net-host/--net-join --set race=1` plays it
+    scripted (`--input` is this player's pad).
+
   * *Mods* (`port/src/mods.c`): `.bbro` files (zip archives: `mod.ini`, IPS and text
     ROM patches in `patches/`) or folders in a `mods` folder next to `bonanza.ini`,
     turned on in the menu (`Mods...`, saved as `mods = a.bbro|b.bbro`) and applied to the

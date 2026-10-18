@@ -293,7 +293,7 @@ static void edit_change(int row, int dir)
 }
 
 /* ------------------------------------------------------------ online page */
-/* rows: Host, Mode (the host's: Normal / Prop Hunt), Round length (Prop Hunt), Join
+/* rows: Host, Mode (the host's: Normal / Prop Hunt / Race), Round length (Prop Hunt), Join
  * <address>, Search LAN, LAN games..., Leave / Back */
 #define OR_HOST 0
 #define OR_MODE 1
@@ -307,7 +307,13 @@ static int online_rows(void) { return OR_FIRST_GAME + net_lan_count() + 1; }
 static void online_option(int row, int dir)
 {
     if (net_state() != NET_OFF) return;
-    if (row == OR_MODE) settings.prop_hunt = !settings.prop_hunt;
+    if (row == OR_MODE) {
+        /* Normal -> Prop Hunt -> Race */
+        int m = settings.race ? 2 : settings.prop_hunt ? 1 : 0;
+        m = (m + dir + 3) % 3;
+        settings.prop_hunt = m == 1;
+        settings.race = m == 2;
+    }
     else if (row == OR_ROUND) settings.ph_minutes = (settings.ph_minutes - 1 + dir + 9) % 9 + 1;
     else return;
     menu_settings_dirty = 1;
@@ -735,7 +741,7 @@ void menu_draw(uint32_t *buf)
                 snprintf(t, sizeof(t), "Host a game (port %d)", NET_DEFAULT_PORT);
                 label = t;
             } else if (i == OR_MODE) {
-                snprintf(t, sizeof(t), "  Mode    < %s >", settings.prop_hunt ? "Prop Hunt" : "Normal");
+                snprintf(t, sizeof(t), "  Mode    < %s >", settings.race ? "Race" : settings.prop_hunt ? "Prop Hunt" : "Normal");
                 label = t;
             } else if (i == OR_ROUND) {
                 snprintf(t, sizeof(t), "  Round   < %d min >%s", settings.ph_minutes, settings.prop_hunt ? "" : "  (Prop Hunt)");

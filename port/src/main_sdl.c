@@ -27,6 +27,7 @@
 #include "scene.h"
 #include "render_gl.h"
 #include "spotify.h"
+#include "race.h"
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -819,6 +820,7 @@ static void present(void)
             if (me >= 0) {
                 memset(over, 0, sizeof(over));
                 ph_overlay(over, MD_FB_W, sw, MD_SCREEN_H, me);
+                race_overlay(over, MD_FB_W, sw, MD_SCREEN_H);
                 scr_image(IMG_OVERLAY, over, MD_FB_W, MD_SCREEN_H, sw, MD_SCREEN_H, dst, settings.smooth, 1);
             }
         } else {
@@ -832,6 +834,7 @@ static void present(void)
                         fb[i] = 0xFFFFFFFFu ^ (fb[i] & 0x00FFFFFF);
             }
             ph_overlay(fb, MD_FB_W, sw, MD_SCREEN_H, me);
+            race_overlay(fb, MD_FB_W, sw, MD_SCREEN_H);
             if (crt_on())
                 present_crt(fb, sw, dst);
             else
@@ -1169,6 +1172,7 @@ static void net_update(void)
         }
         md_reset();
         ph_reset();
+        race_reset();
         paused = 0;
         memset(key_pad, 0, sizeof(key_pad));
         SDL_Log("online game started: player %d", net_local_player() + 1);
@@ -1184,7 +1188,8 @@ static void net_update(void)
         saved_floor_alert = -1;
         game_mods_apply();
     }
-    vdp_local_player = net_state() == NET_PLAYING ? net_local_player() : -1;
+    /* (a race is a 1-player game on each machine) */
+    vdp_local_player = net_state() == NET_PLAYING && !race_on() ? net_local_player() : -1;
     if (menu_text_editing() != text_on) {
         text_on = menu_text_editing();
         if (text_on) SDL_StartTextInput(); else SDL_StopTextInput();
@@ -1243,8 +1248,39 @@ static int run_net_frame(void)
     return 1;
 }
 
+/* Race (race.c): this player's own game; only the race status goes over the network */
+static void run_race_frame(void)
+{
+    uint8_t pad = 0;
+    if (!menu_is_open()) {                      /* the race does not wait for the menu */
+        for (int p = 0; p < 2; p++)
+            ctl_pad[p] = controller_state(p);
+        pad = key_pad[0] | key_pad[1] | ctl_pad[0] | ctl_pad[1] | touch_pad;
+    }
+    int entry = 0, what = race_update(pad, &entry);
+    if (what == RACE_START) {
+        md_reset();
+        start_stage(entry);
+    } else if (what == RACE_RUN) {
+        md.pad[0] = pad;
+        md.pad[1] = 0;
+        race_pre_frame();
+        md_run_frame();
+        race_post_frame();
+    }
+    int16_t buf[2048 * 2 + 64];
+    int n;
+    while ((n = md_audio_take(buf, 2048)) > 0)
+        if (audio_dev && what == RACE_RUN)
+            queue_audio(buf, n);
+}
+
 static void run_one(void)
 {
+    if (have_rom && net_state() == NET_PLAYING && race_on()) {
+        run_race_frame();
+        return;
+    }
     if (have_rom && net_state() == NET_PLAYING) {
         if (run_net_frame() && net_frames_waiting() > 2)
             run_net_frame();                    /* behind the other player: catch up */
