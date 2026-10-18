@@ -3,6 +3,7 @@
  *
  *   - every guard but the purple one (the big guard who throws) takes two shots: the
  *     first only clinks
+ *   - the purple guard throws 1.2 times as fast (107 frames a throw -> 89)
  *   - the shield guard sends shots it stops back at the player (as a guard's bullet,
  *     which costs a life), and walks and runs 1.2 times as fast
  *   - green guards look for the players every frame (normally every 4th, the two
@@ -17,7 +18,8 @@
  * 8 (player 1) or $C (player 2); a guard's bullet is type $10 ($385E its step, $9BF4 the
  * guard, $3252 frame 0x165), removed without touching the players' shot counts
  * $9DF8 / $9DFA. Script data changed (in the ROM buffer, while in a stage, put back
- * otherwise): the shield guard's patrol legs 0x22C9A / 0x22CD4 (80 -> 67
+ * otherwise): the purple guard's aiming count 0x2001C / 0x20182 (30 -> 21 passes of 2
+ * frames; its wind-up is left as it was), the shield guard's patrol legs 0x22C9A / 0x22CD4 (80 -> 67
  * frames, so that with the faster walk it covers the same ground).
  *
  * Earning it: the ending starts ($C068 = 0x23AB6) with the difficulty ($C04E) on Hard,
@@ -46,6 +48,8 @@ static void w16(int a, int v) { md.ram[a & 0xFFFF] = (uint8_t)(v >> 8); md.ram[(
 static uint32_t r32(int a) { return (uint32_t)r16(a) << 16 | (uint32_t)r16(a + 2); }
 
 static struct { uint32_t addr; uint16_t orig, insane; } patch[] = {
+    { 0x2001C, 0x001E, 0x0015 },     /* the purple guard: aiming between throws (both copies */
+    { 0x20182, 0x001E, 0x0015 },     /* of its loop): 107 -> 89 frames a throw */
     { 0x22C9A, 0x0050, 0x0043 },     /* shield guard: patrol legs */
     { 0x22CD4, 0x0050, 0x0043 },
 };

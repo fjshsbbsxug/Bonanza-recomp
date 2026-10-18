@@ -161,7 +161,7 @@ builder/      the HTML builder page
   Hard) in a game that did not use the stage select code since the machine was reset,
   or by the code A, B, B, A, Down, A, B, B, A on the title menu (`cheats.c`). Every guard
   but the purple one (the big guard who throws) takes two shots (the first only clinks);
-  the shield guard sends the shots it stops back at the player
+  the purple guard throws 1.2 times as fast; the shield guard sends the shots it stops back at the player
   (as a guard's bullet, which costs a life) and walks and runs 1.2 times as fast; green
   guards look for the players every frame instead of every fourth, so they notice you
   about four times as soon. The stage select code does nothing in Insane mode. Offline
