@@ -25,6 +25,7 @@
 #include "mods.h"
 #include "scene.h"
 #include "render_gl.h"
+#include "spotify.h"
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -1277,6 +1278,8 @@ static void frame(void)
         return;
     }
     net_update();
+    spotify_watch(settings.spotify_mute);       /* Spotify playing: the game's music waits */
+    snd_music_gain(settings.spotify_mute && spotify_playing() ? 0 : 1);
     scene_cpu_too = menu_is_open() || crt_on();    /* they read the CPU's picture */
     int locked = vsync_on && avg > 15.6 && avg < 17.6;
     if (locked) {
@@ -1440,6 +1443,7 @@ int main(int argc, char **argv)
     }
     if (menu_settings_dirty)
         save_settings();
+    spotify_watch(0);
     SDL_Quit();
 #endif
     return 0;

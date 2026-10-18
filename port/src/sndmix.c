@@ -41,6 +41,7 @@ static voice song, fx[4], vox;
 static int prio;               /* the playing effect's priority (the driver's 0x1C18) */
 static int paused, psg_off;
 static double fade;            /* gain of the song while fading out */
+static double music_gain = 1, music_want = 1;   /* the player's volume for the songs */
 static double fade_t;          /* seconds since the fade began, -1: no fade */
 
 /* the frame's sound is made when the frame is over: a sound asked for on line L starts
@@ -217,9 +218,15 @@ void snd_pause(uint8_t v)
     }
 }
 
+void snd_music_gain(double g)
+{
+    music_want = g < 0 ? 0 : g > 1 ? 1 : g;
+}
+
 void snd_render(int16_t *out, int n, int rate)
 {
     double step = (double)bank.rate / rate;
+    double ease = 1.0 / (0.5 * rate);    /* half a second from silent to full */
     for (int i = 0; i < n; i++) {
         int32_t l = 0, r = 0;
         if (have_bank && !paused) {
@@ -240,8 +247,10 @@ void snd_render(int16_t *out, int n, int rate)
                     if (steps >= 40) { stop_all(); ml = mr = 0; }
                     else fade = pow(10.0, -0.75 * steps / 20.0);
                 }
-                l += (int32_t)(ml * fade);
-                r += (int32_t)(mr * fade);
+                if (music_gain < music_want) music_gain = music_gain + ease < music_want ? music_gain + ease : music_want;
+                else if (music_gain > music_want) music_gain = music_gain - ease > music_want ? music_gain - ease : music_want;
+                l += (int32_t)(ml * fade * music_gain);
+                r += (int32_t)(mr * fade * music_gain);
             }
         }
         out[i * 2] = (int16_t)(l > 32767 ? 32767 : l < -32768 ? -32768 : l);

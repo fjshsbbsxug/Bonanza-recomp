@@ -12,7 +12,7 @@ static const char *crt_keys[CRT_COUNT] = { "off", "scanlines", "tv", "monitor" }
 #include "md.h"
 #include "vdp.h"
 
-settings_t settings = { .crop_cutscenes = 1, .patrol_return = 1 };
+settings_t settings = { .crop_cutscenes = 1, .patrol_return = 1, .spotify_mute = 1 };
 uint32_t md_color_lut[512];
 uint32_t char_color_lut[16];
 static const char *char_keys[CHAR_COUNT] = {"robo", "mobo"};
@@ -61,6 +61,7 @@ void settings_defaults(void)
     settings.crop_cutscenes = 1;
     settings.patrol_return = 1;
     settings.ph_minutes = 3;
+    settings.spotify_mute = 1;
 }
 
 /* ------------------------------------------------------------ colour */
@@ -248,6 +249,7 @@ int settings_set(const char *key, const char *value)
                              : (!strcmp(value, "on") || atoi(value) == 1) ? FLOOR_ALERT_ON : FLOOR_ALERT_OFF;
         return 1;
     }
+    if (!strcmp(key, "spotify")) { settings.spotify_mute = strcmp(value, "off") != 0; return 1; }
     if (!strcmp(key, "guards")) { settings.patrol_return = strcmp(value, "original") != 0; return 1; }
     if (!strcmp(key, "upper_view")) { settings.show_2p_panel = !strcmp(value, "panel"); return 1; }
     if (!strcmp(key, "brightness")) { settings.brightness = clampi(atoi(value), -100, 100); return 1; }
@@ -331,6 +333,8 @@ int settings_save(const char *path)
     fprintf(f, "join = %s\n", settings.join_address);
     fprintf(f, "# enabled mods from the mods folder, in order (later ones win)\n");
     fprintf(f, "mods = %s\n", settings.mods);
+    fprintf(f, "# spotify: mute = the game's music is muted while Spotify plays (sound effects stay); off\n");
+    fprintf(f, "spotify = %s\n", settings.spotify_mute ? "mute" : "off");
     fprintf(f, "floor_alert = %s\n", settings.floor_alert == FLOOR_ALERT_SEMI ? "semi" : settings.floor_alert ? "on" : "off");
     fprintf(f, "# colors: original, vivid, soft, arcade, grayscale, sepia, night, gameboy, inverted\n");
     fprintf(f, "colors = %s\n", preset_keys[settings.preset]);

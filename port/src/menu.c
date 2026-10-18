@@ -44,7 +44,7 @@ static const uint32_t skin_presets[] = {
 #define PANEL_Y 8
 #define PANEL_W (MENU_W - 24)
 #define PANEL_H (MENU_H - 16)
-#define ROW_Y0 34
+#define ROW_Y0 29
 #define ROW_H 9
 #define VALUE_X 150
 
@@ -106,11 +106,11 @@ static void slider(uint32_t *buf, int x, int y, int v, int lo, int hi, int selec
 /* ------------------------------------------------------------ items */
 
 enum {
-    IT_RESUME, IT_ONLINE, IT_MODS, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_CRT, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
+    IT_RESUME, IT_ONLINE, IT_MODS, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_CRT, IT_SPOTIFY, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
     IT_CHARS, IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
 };
 static const char *item_label[IT_COUNT] = {
-    "Resume", "Online...", "Mods...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "CRT filter", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
+    "Resume", "Online...", "Mods...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "CRT filter", "Spotify", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
     "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
@@ -188,6 +188,7 @@ static int adjust_main(int item, int dir)
     case IT_SCREEN: settings.screen = (settings.screen + dir + SCREEN_COUNT) % SCREEN_COUNT; break;
     case IT_SCALING: settings.smooth = !settings.smooth; break;
     case IT_CRT: settings.crt = (settings.crt + dir + CRT_COUNT) % CRT_COUNT; break;
+    case IT_SPOTIFY: settings.spotify_mute = !settings.spotify_mute; break;
     case IT_UPPER: settings.show_2p_panel = !settings.show_2p_panel; break;
     case IT_CUTSCENES: settings.crop_cutscenes = !settings.crop_cutscenes; break;
     case IT_GUARDS: settings.patrol_return = !settings.patrol_return; break;
@@ -572,6 +573,9 @@ void menu_draw(uint32_t *buf)
             case IT_CRT:
                 snprintf(t, sizeof(t), "< %s >", crt_name(settings.crt));
                 text(buf, VALUE_X - 16, y, t, C_TEXT);
+                break;
+            case IT_SPOTIFY:
+                text(buf, VALUE_X - 16, y, settings.spotify_mute ? "< Mutes music >" : "< Off >", C_TEXT);
                 break;
             case IT_UPPER:
                 text(buf, VALUE_X - 16, y, settings.show_2p_panel ? "< 2P panel >" : "< Room above >", C_TEXT);

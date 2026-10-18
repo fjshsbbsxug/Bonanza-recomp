@@ -37,6 +37,7 @@ typedef struct {
     int floor_alert;         /* game change: FLOOR_ALERT_* */
     int prop_hunt;           /* online game mode chosen by the host: Prop Hunt (prophunt.c) */
     int ph_minutes;          /* Prop Hunt: minutes a round lasts (1-9) */
+    int spotify_mute;        /* the game's music is muted while Spotify plays (sound effects stay) */
     char join_address[64];   /* online: last address joined */
     char mods[1024];         /* enabled mods (file names in the mods folder), in order, '|' between */
     int preset;              /* PRESET_* */

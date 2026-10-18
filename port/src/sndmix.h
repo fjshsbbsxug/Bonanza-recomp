@@ -10,5 +10,6 @@ void snd_reset(void);                     /* machine reset: silence */
 void snd_request(uint8_t id);             /* the game wrote id to Z80 RAM 0x1C0A */
 void snd_pause(uint8_t v);                /* ... to 0x1C10 */
 void snd_render(int16_t *out, int n, int rate);   /* n stereo samples at rate */
+void snd_music_gain(double g);            /* the songs' volume, 0..1 (eased in / out) */
 
 #endif
