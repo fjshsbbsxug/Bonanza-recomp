@@ -55,6 +55,47 @@ static int wrap_margins;               /* widescreen: repeat the 4:3 picture's c
 static int map_on, map_all, map_camx, map_wy;
 static uint16_t map_entry(int wx, int wy);
 
+/* Tiles decoded from video memory's 4 bits a pixel to a byte a pixel, each once per
+ * picture (when first drawn) */
+static uint8_t tile_dec[2048][64];
+static uint32_t tile_gen[2048], tile_epoch = 1;
+
+static inline const uint8_t *tile_pixels(int t)
+{
+    uint8_t *d = tile_dec[t];
+    if (tile_gen[t] != tile_epoch) {
+        tile_gen[t] = tile_epoch;
+        const uint8_t *src = &V[t << 5];
+        for (int i = 0; i < 32; i++) {
+            d[i * 2] = src[i] >> 4;
+            d[i * 2 + 1] = src[i] & 0x0F;
+        }
+    }
+    return d;
+}
+
+/* n pixels of a name-table entry's tile row py, from column px0 on (as tile_pixel) */
+static inline void put_tile(uint8_t *out, uint16_t entry, int py, int px0, int n)
+{
+    if (entry & 0x1000) py = 7 - py;
+    const uint8_t *row = tile_pixels(entry & 0x07FF) + (py << 3);
+    uint8_t pri = (uint8_t)((entry >> 8) & 0x80), on = (uint8_t)(((entry >> 9) & 0x30) | pri);
+    if (entry & 0x0800) {
+        for (int i = 0; i < n; i++) {
+            uint8_t c = row[7 - (px0 + i)];
+            out[i] = c ? (uint8_t)(c | on) : pri;
+        }
+    } else {
+        for (int i = 0; i < n; i++) {
+            uint8_t c = row[px0 + i];
+            out[i] = c ? (uint8_t)(c | on) : pri;
+        }
+    }
+}
+
+static uint16_t map_cell(int wx, int wy);
+
+/* a plane's line, drawn a tile's run of pixels at a time */
 static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
 {
     static const int sizes[4] = {32, 64, 32, 128};
@@ -65,35 +106,39 @@ static void draw_plane(uint8_t *out, int y, int width, int m, int plane_b)
     if (ovr_hs >= 0) { hs = ovr_hs; column_vs = 0; }
     int wmask = pw * 8 - 1, hmask = ph * 8 - 1;
     int vs = ovr_vs >= 0 ? ovr_vs : cur->vsram[plane_b];
-    int last_tile = -1, last_py = -1;
-    uint16_t entry = 0;
-    for (int x = -m; x < width + m; x++) {
+    int map = map_on && !plane_b, end = width + m;
+    for (int x = -m; x < end;) {
+        /* the game may leave the column at the screen edge half updated (a TV hid it
+         * in the overscan): beside the picture and in its outer 16 pixels, use the map */
+        if (map && (map_all || x < 16 || x >= width - 16)) {
+            int wx = map_camx + x, n = 8 - (wx & 7);
+            if (!map_all && x < 16 && x + n > 16) n = 16 - x;
+            if (x + n > end) n = end - x;
+            uint16_t me = map_cell(wx, map_wy);
+            if (me == 0xFFFF) memset(out + x + m, 0, (size_t)n);
+            else put_tile(out + x + m, me, map_wy & 7, wx & 7, n);
+            x += n;
+            continue;
+        }
+        int sx = x, seg_end = end;
+        if (map && !map_all && seg_end > width - 16) seg_end = width - 16;
+        if (wrap_margins && x < 0) { sx = x + width; if (seg_end > 0) seg_end = 0; }
+        else if (wrap_margins && x >= width) sx = x - width;
+        else if (wrap_margins && seg_end > width) seg_end = width;
         if (column_vs) {
             int col = x < 0 ? 0 : (x >> 4);
             if (col > (width >> 4) - 1) col = (width >> 4) - 1;
             vs = cur->vsram[col * 2 + plane_b];
+            if (x >= 0 && (col + 1) * 16 < seg_end && col < (width >> 4) - 1) seg_end = (col + 1) * 16;
+            else if (x < 0 && seg_end > 0) seg_end = 0;
         }
-        int sx = x;
-        if (wrap_margins && (x < 0 || x >= width))
-            sx = ((x % width) + width) % width;
-        int px = (sx - hs) & wmask;
-        int py = (y + vs) & hmask;
-        int tile = px >> 3;
-        if (tile != last_tile || py != last_py) {
-            uint32_t ea = name + (((py >> 3) * pw + tile) << 1);
-            entry = (V[ea & 0xFFFF] << 8) | V[(ea + 1) & 0xFFFF];
-            last_tile = tile;
-            last_py = py;
-        }
-        /* the game may leave the column at the screen edge half updated (a TV hid it
-         * in the overscan): beside the picture and in its outer 16 pixels, use the map */
-        if (map_on && !plane_b && (map_all || x < 16 || x >= width - 16)) {
-            int wx = map_camx + x;
-            uint16_t me = map_entry(wx, map_wy);
-            out[x + m] = me == 0xFFFF ? 0 : (uint8_t)tile_pixel(me, wx & 7, map_wy & 7);
-            continue;
-        }
-        out[x + m] = (uint8_t)tile_pixel(entry, px & 7, py & 7);
+        int px = (sx - hs) & wmask, py = (y + vs) & hmask;
+        int n = 8 - (px & 7);
+        if (x + n > seg_end) n = seg_end - x;
+        uint32_t ea = name + (((py >> 3) * pw + (px >> 3)) << 1);
+        uint16_t entry = (uint16_t)((V[ea & 0xFFFF] << 8) | V[(ea + 1) & 0xFFFF]);
+        put_tile(out + x + m, entry, py & 7, px & 7, n);
+        x += n;
     }
 }
 
@@ -729,6 +774,7 @@ static void shifted_pieces(int l0, int vtop, int cam_wy)
 
 static void plan_line(int y, line_plan *P);
 static void draw_line(int y, const line_plan *P);
+static uint8_t plane_a[224][VDP_FB_W];  /* each line's plane A as planned (its own map) */
 
 /* ---- the scene (scene.h): the plans as plain tables, for the graphics card ---- */
 render_scene scene;
@@ -739,6 +785,27 @@ static uint8_t roof_cells[512 * 64];
 static struct { uint32_t map, meta; int w, stage; } map_key;
 
 /* the level map's cells, once per level (render.c's map_entry / above_roof, tabled) */
+static void scene_map(void);
+
+/* map_entry / above_roof from the tables (scene_map) */
+static uint32_t map_checked;           /* the picture the tables were checked for */
+
+static uint16_t map_cell(int wx, int wy)
+{
+    if (map_checked != picture_gen) { map_checked = picture_gen; scene_map(); }
+    if (wx < 0 || wy < 0 || wx >= level.w * 16 || wy >= 64 * 16)
+        return 0xFFFF;
+    return map_cells[(wy >> 3) * level.w * 2 + (wx >> 3)];
+}
+
+static int roof_cell(int wx, int wy)
+{
+    if (map_checked != picture_gen) { map_checked = picture_gen; scene_map(); }
+    if (wy >= roof_row * 16) return 0;
+    if (wy < 0 || wx < 0 || wx >= level.w * 16) return 1;
+    return roof_cells[(wy >> 4) * level.w + (wx >> 4)];
+}
+
 static void scene_map(void)
 {
     int stage = (md.ram[0xC05A] << 8) | md.ram[0xC05B];
@@ -911,6 +978,7 @@ void vdp_render_frame(void)
 {
     V = vdp.vram;
     picture_gen++;
+    tile_epoch++;
     pic_out_w = 0;
     stack_count = 0;
     view_prime();
@@ -994,7 +1062,7 @@ static void plan_line(int y, line_plan *P)
         P->off = 1;
         return;
     }
-    uint8_t a[VDP_FB_W];
+    uint8_t *a = plane_a[y];                /* (draw_line takes it from here) */
     /* Widescreen during play: the side areas of each view are drawn from the level map,
      * the backdrop is repeated, the HUD rows extend their edges. In a 1-player game the
      * top view shows the floor above player 1 (also from the map). */
@@ -1209,9 +1277,7 @@ static void draw_line(int y, const line_plan *P)
     }
     uint8_t a[VDP_FB_W], b[VDP_FB_W], s[VDP_FB_W], win[VDP_FB_W], wbuf[VDP_FB_W], part[VDP_FB_W];
     if (!P->room_above) {
-        map_on = P->a_map; map_all = P->a_map_all; map_camx = P->a_camx; map_wy = P->a_wy;
-        draw_plane(a, y, width, m, 0);
-        map_on = map_all = 0;
+        memcpy(a, plane_a[y], (size_t)ow);   /* drawn while the line was planned */
         wrap_margins = P->b_wrap;
         draw_plane(b, y, width, m, 1);
         wrap_margins = 0;
@@ -1227,16 +1293,23 @@ static void draw_line(int y, const line_plan *P)
         map_wy = P->ra_wy;
         draw_plane(a, y, width, m, 0);
         map_on = map_all = 0;
-        uint8_t sky[VDP_FB_W];
-        ovr_hs = P->sky_hs;
-        ovr_vs = P->sky_vs;
-        wrap_margins = m != 0;
-        draw_plane(sky, y, width, m, 1);
-        wrap_margins = 0;
-        ovr_hs = ovr_vs = -1;
-        for (int x = -m; x < width + m; x++)
-            if (above_roof(P->ra_camx + x, P->ra_wy))
-                b[x + m] = sky[x + m];
+        /* open sky above the roof: the background lined up with player 1's view (only
+         * drawn if the line has any) */
+        int any_sky = 0;
+        for (int x = -m; x < width + m && !any_sky; x += 16)
+            any_sky = roof_cell(P->ra_camx + x, P->ra_wy) || roof_cell(P->ra_camx + x + 15, P->ra_wy);
+        if (any_sky) {
+            uint8_t sky[VDP_FB_W];
+            ovr_hs = P->sky_hs;
+            ovr_vs = P->sky_vs;
+            wrap_margins = m != 0;
+            draw_plane(sky, y, width, m, 1);
+            wrap_margins = 0;
+            ovr_hs = ovr_vs = -1;
+            for (int x = -m; x < width + m; x++)
+                if (roof_cell(P->ra_camx + x, P->ra_wy))
+                    b[x + m] = sky[x + m];
+        }
     }
     /* the window covers nothing when HP=0 && !RIGT and VP=0 && !DOWN */
     if ((cur->reg[17] & 0x9F) || (cur->reg[18] & 0x9F)) {
