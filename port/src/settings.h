@@ -31,6 +31,7 @@ typedef struct {
     int screen;              /* SCREEN_* */
     int smooth;              /* 1 = smooth scaling, 0 = sharp pixels */
     int crt;                 /* CRT_* (crt.h): the picture as a CRT shows it */
+    int sprite_limit;        /* 1: the console's sprites-per-line limit (sprites drop out) */
     int show_2p_panel;       /* 1-player game: 0 = show the room above, 1 = original 2P panel */
     int crop_cutscenes;      /* widescreen: show cutscenes/title 4:3 (game overs stay wide) */
     int patrol_return;       /* widescreen: guards leaving the 4:3 picture walk back to their posts */

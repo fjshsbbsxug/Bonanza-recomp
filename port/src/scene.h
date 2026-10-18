@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #define SCENE_LINES 224
-#define SCENE_PICKS 20          /* sprites a line can show */
+#define SCENE_PICKS 80          /* sprites a line can show (the console: 20; settings.sprite_limit) */
 #define SCENE_WOBJ 64           /* port-made pieces a line can show */
 #define SCENE_SPRITES 80
 #define SCENE_LIST 256          /* pieces in each port-made list */

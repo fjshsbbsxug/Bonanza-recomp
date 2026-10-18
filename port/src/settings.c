@@ -251,6 +251,7 @@ int settings_set(const char *key, const char *value)
                              : (!strcmp(value, "on") || atoi(value) == 1) ? FLOOR_ALERT_ON : FLOOR_ALERT_OFF;
         return 1;
     }
+    if (!strcmp(key, "sprite_limit")) { settings.sprite_limit = atoi(value) != 0 || !strcmp(value, "on"); return 1; }
     if (!strcmp(key, "volume")) { int v = atoi(value); settings.volume = v < 0 ? 0 : v > 100 ? 100 : v; return 1; }
     if (!strcmp(key, "mute_music")) { settings.mute_music = atoi(value) != 0 || !strcmp(value, "on"); return 1; }
     if (!strcmp(key, "mute_all")) { settings.mute_all = atoi(value) != 0 || !strcmp(value, "on"); return 1; }
@@ -340,6 +341,8 @@ int settings_save(const char *path)
     fprintf(f, "join = %s\n", settings.join_address);
     fprintf(f, "# enabled mods from the mods folder, in order (later ones win)\n");
     fprintf(f, "mods = %s\n", settings.mods);
+    fprintf(f, "# sprite_limit = on: the console's 20 sprites a line (crowded lines drop sprites); off\n");
+    fprintf(f, "sprite_limit = %s\n", settings.sprite_limit ? "on" : "off");
     fprintf(f, "# sound: volume 0-100; mute_music = on: no music (sound effects stay); mute_all = on: no sound\n");
     fprintf(f, "volume = %d\nmute_music = %s\nmute_all = %s\n", settings.volume,
             settings.mute_music ? "on" : "off", settings.mute_all ? "on" : "off");

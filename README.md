@@ -156,6 +156,10 @@ builder/      the HTML builder page
     ways and compares them (no pixel differs in any of the reference runs). The CRT
     filter, the menu's recolouring and `--cpu-drawing` (or no OpenGL) use the CPU's
     drawing.
+* **Sprite limit** (menu: Screen tab, `sprite_limit =` in bonanza.ini, default off): the
+  console shows at most 20 sprites and 320 sprite pixels on a line and drops the rest;
+  with the limit off every sprite is drawn (the game's own masking sprites, which hide
+  characters behind the HUD, still work). On: as the console.
 * **Sound** (menu: Sound tab; `volume =`, `mute_music =`, `mute_all =` in bonanza.ini):
   the volume (0-100), the game's music off (sound effects and voices stay), or no sound.
 * **Spotify** (`port/src/spotify.c`; menu: Sound tab, `spotify =` in bonanza.ini: mute,

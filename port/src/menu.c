@@ -106,11 +106,11 @@ static void slider(uint32_t *buf, int x, int y, int v, int lo, int hi, int selec
 /* ------------------------------------------------------------ items */
 
 enum {
-    IT_RESUME, IT_ONLINE, IT_MODS, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_CRT, IT_VOLUME, IT_MUTEMUSIC, IT_MUTEALL, IT_SPOTIFY, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
+    IT_RESUME, IT_ONLINE, IT_MODS, IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_GUARDS, IT_ALERT, IT_SCALING, IT_CRT, IT_SPRITES, IT_VOLUME, IT_MUTEMUSIC, IT_MUTEALL, IT_SPOTIFY, IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE,
     IT_CHARS, IT_RECOLOR, IT_RESETCOLORS, IT_RESETGAME, IT_QUIT, IT_COUNT
 };
 static const char *item_label[IT_COUNT] = {
-    "Resume", "Online...", "Mods...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "CRT filter", "Volume", "Mute music", "Mute all", "Spotify", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
+    "Resume", "Online...", "Mods...", "Screen", "Top (1P)", "Cutscenes", "Patrol Return", "Floor Alert", "Scaling", "CRT filter", "Sprite limit", "Volume", "Mute music", "Mute all", "Spotify", "Colors", "Brightness", "Contrast", "Saturation", "Hue",
     "Characters...", "Recolor...", "Reset all colors", "Reset game", "Quit",
 };
 
@@ -120,7 +120,7 @@ static const char *tab_name[TAB_COUNT] = { "Game", "Screen", "Colors", "Sound" }
 #define TAB_MAX 8
 static const int tab_items[TAB_COUNT][TAB_MAX] = {
     { IT_RESUME, IT_ONLINE, IT_MODS, IT_GUARDS, IT_ALERT, IT_RESETGAME, IT_QUIT, -1 },
-    { IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_SCALING, IT_CRT, -1 },
+    { IT_SCREEN, IT_UPPER, IT_CUTSCENES, IT_SCALING, IT_CRT, IT_SPRITES, -1 },
     { IT_COLORS, IT_BRIGHT, IT_CONTRAST, IT_SAT, IT_HUE, IT_CHARS, IT_RECOLOR, IT_RESETCOLORS },
     { IT_VOLUME, IT_MUTEMUSIC, IT_MUTEALL, IT_SPOTIFY, -1 },
 };
@@ -224,6 +224,7 @@ static int adjust_main(int item, int dir)
     case IT_SCALING: settings.smooth = !settings.smooth; break;
     case IT_CRT: settings.crt = (settings.crt + dir + CRT_COUNT) % CRT_COUNT; break;
     case IT_SPOTIFY: settings.spotify_mute = !settings.spotify_mute; break;
+    case IT_SPRITES: settings.sprite_limit = !settings.sprite_limit; break;
     case IT_VOLUME: settings.volume = clampi(settings.volume + dir * 5, 0, 100); break;
     case IT_MUTEMUSIC: settings.mute_music = !settings.mute_music; break;
     case IT_MUTEALL: settings.mute_all = !settings.mute_all; break;
@@ -639,6 +640,9 @@ void menu_draw(uint32_t *buf)
             case IT_CRT:
                 snprintf(t, sizeof(t), "< %s >", crt_name(settings.crt));
                 text(buf, VALUE_X - 16, y, t, C_TEXT);
+                break;
+            case IT_SPRITES:
+                text(buf, VALUE_X - 16, y, settings.sprite_limit ? "< Original >" : "< None >", C_TEXT);
                 break;
             case IT_VOLUME:
                 slider(buf, VALUE_X, y, settings.volume, 0, 100, s);

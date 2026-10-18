@@ -343,7 +343,11 @@ typedef struct { uint8_t k, cols; } sprite_pick;
 
 static int sprites_on_line(int y, int h40, sprite_pick *pick)
 {
+    /* the console: 20 sprites (16 in 256-pixel mode) and 320 (256) of their pixels a
+     * line; with the limit lifted, every sprite (sprites behind the HUD are still hidden
+     * by the game's own masking sprites at x 0) */
     int max_line = h40 ? 20 : 16, max_px = h40 ? 320 : 256;
+    if (!settings.sprite_limit) { max_line = SCENE_PICKS; max_px = SCENE_PICKS * 32; }
     int n = 0, line_count = 0, pixels = 0, masked = 0, seen_nonzero_x = 0;
     for (int k = 0; k < sprites.n && pixels < max_px; k++) {
         const sprite_obj *o = &sprites.o[k];
@@ -376,7 +380,7 @@ static void draw_sprites(uint8_t *out, uint8_t *part, int y, int width, int m)
 {
     int h40 = width == 320;
     sprites_read((cur->reg[5] & (h40 ? 0x7E : 0x7F)) << 9, h40);
-    sprite_pick pick[20];
+    sprite_pick pick[SCENE_PICKS];
     int npick = sprites_on_line(y, h40, pick);
     int chars = any_char_colors();
     memset(out, 0, width + 2 * m);
@@ -828,7 +832,7 @@ static void scene_fill(void)
             if (sat != sat0 || h40 != h400) { scene.valid = 0; return; }   /* one sprite table a picture */
             cur = k;
             sprites_read(sat, h40);
-            sprite_pick pick[20];
+            sprite_pick pick[SCENE_PICKS];
             int n = sprites_on_line(P->spr_y, h40, pick);
             L->npick = (uint8_t)n;
             for (int i = 0; i < n; i++)

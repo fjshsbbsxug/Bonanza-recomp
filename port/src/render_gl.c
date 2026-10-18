@@ -259,7 +259,7 @@ static const char *fs_codes =
     "    int nw = L(y, 23);\n"
     "    for (int i = 0; i < nw; i++) {\n"
     "        if ((s & 15) != 0) break;\n"
-    "        int ref = L(y, 160 + i), list = ref >> 10, idx = ref & 1023;\n"
+    "        int ref = L(y, 216 + i), list = ref >> 10, idx = ref & 1023;\n"
     "        int lx = x - Pc(list, idx, 0);\n"
     "        int hsz = Pc(list, idx, 2), vsz = Pc(list, idx, 3), attr = Pc(list, idx, 6);\n"
     "        if (lx < 0 || lx >= hsz * 8) continue;\n"
@@ -334,7 +334,7 @@ static const char *fs_colors =
     "}\n";
 
 /* ---- state */
-#define LINE_W 256
+#define LINE_W 280                /* ..., 136: the sprites a line shows, 216: its pieces */
 #define LUT_W 1040
 static int gl_ok, gl_es;
 static GLuint prog_codes, prog_colors, vao, fbo_codes, fbo_colors;
@@ -504,7 +504,7 @@ static void tables(void)
         for (int i = 0; i < 64; i++) t[32 + i] = L->pal[i];
         for (int i = 0; i < 40; i++) t[96 + i] = L->vsram[i];
         for (int i = 0; i < L->npick; i++) t[136 + i] = L->pick[i];
-        for (int i = 0; i < L->nwobj; i++) t[160 + i] = L->wobj[i];
+        for (int i = 0; i < L->nwobj; i++) t[216 + i] = L->wobj[i];
     }
     for (int k = 0; k < scene.nsprites; k++) {
         const scene_sprite *s = &scene.sprite[k];
