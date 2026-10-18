@@ -1,5 +1,7 @@
-/* Title-screen code: Left, Left, Right, Up, Shoot, Jump on the 1 PLAYER / 2 PLAYERS /
- * OPTIONS menu unlocks the stage select the cartridge has but never shows.
+/* Title-screen codes, typed on the 1 PLAYER / 2 PLAYERS / OPTIONS menu:
+ *   Left, Left, Right, Up, Shoot, Jump: the stage select the cartridge has but never shows
+ *     (not in Insane mode)
+ *   A, B, B, A, Down, A, B, B, A (the pad's own A and B): Insane mode unlocked at once
  *
  * The Options menu has a sixth item, STAGE (sub_03E52 / sub_03F48: stages 1-10, the
  * three coffee breaks and the ending, written to the stage number 0xFFC05A, which a new
@@ -24,10 +26,16 @@
 #include "m68k.h"
 #include "m68kcpu.h"
 #include "recomp.h"
+#include "settings.h"
 
 typedef struct { uint32_t addr; uint8_t old; } undo_rec;
 static undo_rec undo[32];
-static int nundo, unlocked, step;
+static int nundo, unlocked, step, insane_step, insane_new;
+static uint8_t last_pad[2];
+
+enum { I_A = 1, I_B, I_DOWN };
+static const int INSANE_CODE[] = { I_A, I_B, I_B, I_A, I_DOWN, I_A, I_B, I_B, I_A };
+#define INSANE_LEN ((int)(sizeof(INSANE_CODE) / sizeof(INSANE_CODE[0])))
 
 enum { C_LEFT = 1, C_RIGHT, C_UP, C_SHOOT, C_JUMP };
 static const int CODE[] = { C_LEFT, C_LEFT, C_RIGHT, C_UP, C_SHOOT, C_JUMP };
@@ -58,6 +66,13 @@ void cheat_reset(void)
 }
 
 int cheat_stage_select(void) { return unlocked; }
+
+int cheat_insane_unlocked_now(void)
+{
+    int n = insane_new;
+    insane_new = 0;
+    return n;
+}
 
 static void unlock_stage_select(void)
 {
@@ -96,11 +111,40 @@ static int press(int newly)
     return -1;
 }
 
+/* A, B, B, A, Down, A, B, B, A with the pad's own buttons (whatever CONTROL says) */
+static void insane_code(void)
+{
+    for (int p = 0; p < 2; p++) {
+        uint8_t newly = md.pad[p] & ~last_pad[p];
+        last_pad[p] = md.pad[p];
+        int k = !newly ? 0 : newly & PAD_A ? I_A : newly & PAD_B ? I_B : newly & PAD_DOWN ? I_DOWN : -1;
+        if (!k) continue;
+        if (k == INSANE_CODE[insane_step]) insane_step++;
+        else insane_step = k == I_A ? 1 : 0;
+        if (insane_step == INSANE_LEN) {
+            insane_step = 0;
+            if (!settings.insane_unlocked) {
+                settings.insane_unlocked = 1;
+                insane_new = 1;
+                md.ram[0x5668] = 0x00;          /* a chime */
+                md.ram[0x5669] = 0xB0;
+            }
+        }
+    }
+}
+
 void cheat_frame(void)
 {
-    if (unlocked || net_state() == NET_PLAYING) return;
+    if (net_state() == NET_PLAYING) return;
     /* the title menu (sub_037DE), before Start was pressed on it */
-    if (ram32(0xFFC068) != 0x000037C0 || ram16(0xFF6C5C) != 0) { step = 0; return; }
+    if (ram32(0xFFC068) != 0x000037C0 || ram16(0xFF6C5C) != 0) {
+        step = insane_step = 0;
+        last_pad[0] = md.pad[0];
+        last_pad[1] = md.pad[1];
+        return;
+    }
+    insane_code();
+    if (unlocked || settings.insane) return;      /* no stage select in Insane mode */
     for (int p = 0; p < 2; p++) {
         int k = press(ram8(0xFF17C1 + 2 * p));     /* newly pressed, after the CONTROL remap */
         if (!k) continue;

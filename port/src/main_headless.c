@@ -402,6 +402,8 @@ int main(int argc, char **argv)
             memcpy(vdp.fbmd, codes, sizeof(codes));
         }
         cheat_frame();                          /* does nothing in an online game */
+        if (cheat_insane_unlocked_now())
+            fprintf(stderr, "insane: unlocked by the code at frame %d\n", fr);
         int16_t abuf[4096 * 2];
         int got;
         while ((got = md_audio_take(abuf, 4096)) > 0) {

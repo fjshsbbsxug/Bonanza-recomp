@@ -1293,6 +1293,8 @@ static void run_one(void)
         }
         md_run_frame();
         cheat_frame();                          /* offline only: title-screen codes */
+        if (cheat_insane_unlocked_now())        /* (the Insane code) */
+            save_settings();
         int16_t buf[2048 * 2 + 64];
         int n;
         while ((n = md_audio_take(buf, 2048)) > 0)
