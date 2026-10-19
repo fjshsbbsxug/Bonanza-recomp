@@ -48,11 +48,10 @@ FORBIDDEN = re.compile(r"\b(REG_PC|REG_PPC|m68ki_jump\w*|m68ki_branch_\w+|m68ki_
 # places where port/src/gamemods.c may step in: routine entries it can take over, and
 # 0x3B08 (the Options menu drawing EXIT, where the stage select code adds STAGE); Insane
 # mode (insane.c): a shot hitting a guard (0x18BC2, 0x18EAE), a shield stopping it
-# (0x18B5C, 0x18E40), an unalerted guard looking for players (0x16C2E), the guard loop's
-# events and script (0x14416), the OPTIONS menu's LEVEL (0x3CC8, its value drawn at 0x3B22,
+# (0x18B5C, 0x18E40), an unalerted guard looking for players (0x16C2E), the OPTIONS menu's LEVEL (0x3CC8, its value drawn at 0x3B22,
 # 0x3EC4)
 HOOKS = {0x58B4, 0x59C6, 0x11106, 0x3B08,    # gamemods.c, extrastages.c, cheats.c
-         0x18BC2, 0x18EAE, 0x18B5C, 0x18E40, 0x16C2E, 0x14416,
+         0x18BC2, 0x18EAE, 0x18B5C, 0x18E40, 0x16C2E,
          0x3CC8, 0x3B22, 0x3EC4}             # insane.c
 
 # operands that the port changes in the ROM buffer while running: read from it at run
@@ -61,6 +60,8 @@ HOOKS = {0x58B4, 0x59C6, 0x11106, 0x3B08,    # gamemods.c, extrastages.c, cheats
 LIVE = {
     0x59E4: (2, 4), 0x5B32: (2, 4), 0x5DB2: (2, 4),   # lea (frame table).l,a6: level mods' own frame table
     0x3C22: (2, 2), 0x3C42: (2, 2),                   # Options cursor wrap (stage select code)
+    0x911E: (2, 2), 0x92A0: (2, 2),                   # the players' shots at once (fire button,
+    0x189AC: (2, 2), 0x18C90: (2, 2),                 #   the shot made): Insane mode's 1
 }
 MARK = {2: 0x7A5B, 4: 0x5A5A1234}
 

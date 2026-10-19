@@ -4,9 +4,10 @@
  * Underneath the game plays on Hard ($C04E stays 2: the clock's tables have three
  * entries); the port keeps INSANE in its settings.
  *
- *   - every guard but the purple one takes two shots. The first one is taken the way the
- *     purple guard takes his: the guard flinches - turns to the shot, shows its hit frame
- *     for 16 frames, standing still - and then carries on
+ *   - every guard but the purple one takes two shots. The first one does not stun it:
+ *     the guard knows at once where the player is and goes for him (the game's "player
+ *     seen" event); the second knocks it down
+ *   - the players' guns fire one shot at a time (two in the game)
  *   - the purple guard (the big one who throws) goes down at his fourth shot as usual, but
  *     the shots before that no longer make him flinch or start his throwing over; one in a
  *     hundred bounces back at the player (with the spring's sound) as a thrown bullet. He
@@ -27,11 +28,11 @@
  * 0x18EAE (player 2), followed by the shot's removal; skipping the call leaves the guard
  * as it was. The purple guard counts his shots in $7430 (4 when set; his script takes one
  * per shot, flinches and restarts his throwing, or at 0 goes down); $6DA8 bit 0 set: he
- * cannot be hit now. A flinch for the others: turned as the purple guard's script does
- * ($92D0 = $A3C0 + 1, the facing $7644, mirrored $32FE), their own hit animation (op B8:
- * $33AA, $3456 = the long at 0x17CDE + anim*4, $35AE, $365A) and, for 16 frames, the guard
- * loop skips their events and script (0x14416 -> 0x144AE: animation, gravity and contact
- * still run); then their animation is put back and their script goes on where it was.
+ * cannot be hit now. Another guard's first shot is the same call with d7 = $C (the event
+ * a guard gets when it sees a player; $6CC0 / $931C say which player: 2 player 1, 4
+ * player 2). The shots at once: the compares with 2 before a shot is fired (0x911E,
+ * 0x92A0) and made (0x189AC, 0x18C90) read their operand from the ROM buffer
+ * (tools/recomp.py LIVE).
  * Shots: player shots are objects whose $99F0 is 8 (player 1) or $C (player 2); a guard's
  * bullet is type $10 ($385E its step, $9BF4 the guard, $3252 frame 0x165), removed
  * without touching the players' shot counts $9DF8 / $9DFA. Sounds: requested through the
@@ -71,15 +72,12 @@
 #define CLASS_SMALL 0x1E9AAu
 #define CLASS_DOG 0x1F40Cu
 #define UNLOCK_SHOW (6 * 60)
-#define FLINCH_FRAMES 16
 #define SND_PURPLE_HIT 0xAD
 #define SND_SPRING 0xAF
 
 static int r16(int a) { return (md.ram[a & 0xFFFF] << 8) | md.ram[(a + 1) & 0xFFFF]; }
 static void w16(int a, int v) { md.ram[a & 0xFFFF] = (uint8_t)(v >> 8); md.ram[(a + 1) & 0xFFFF] = (uint8_t)v; }
 static uint32_t r32(int a) { return (uint32_t)r16(a) << 16 | (uint32_t)r16(a + 2); }
-static void w32(int a, uint32_t v) { w16(a, (int)(v >> 16)); w16(a + 2, (int)(v & 0xFFFF)); }
-static uint32_t rom32(uint32_t a) { return a + 3 < md.rom_size ? (uint32_t)md.rom[a] << 24 | md.rom[a + 1] << 16 | md.rom[a + 2] << 8 | md.rom[a + 3] : 0; }
 /* a sound effect, as sub_02D54 asks for one (not over a waiting music command) */
 static void sound(int id) { if ((r16(0x5668) & 0xFFF0) != 0x00E0) w16(0x5668, id); }
 
@@ -88,12 +86,15 @@ static struct { uint32_t addr; uint16_t orig, insane; } patch[] = {
     { 0x20182, 0x001E, 0x0015 },     /* of his loop): 107 -> 89 frames a throw */
     { 0x22C9A, 0x0050, 0x0043 },     /* shield guard: patrol legs */
     { 0x22CD4, 0x0050, 0x0043 },
+    { 0x9120, 0x0002, 0x0001 },      /* the players' shots at once: 2 -> 1 (fire button, */
+    { 0x92A2, 0x0002, 0x0001 },
+    { 0x189AE, 0x0002, 0x0001 },     /* the shot made) */
+    { 0x18C92, 0x0002, 0x0001 },
 };
 #define NPATCH ((int)(sizeof(patch) / sizeof(patch[0])))
 
 static int patched;
 static uint8_t hits[NOBJ];           /* shots a guard has taken (and shrugged off) */
-static struct { int left; uint16_t anim, step, count; uint32_t ptr; } flinch[NOBJ];
 static int16_t last_x[NOBJ], last_y[NOBJ];
 static int8_t walk[NOBJ];            /* the shield guard's steps towards its extra pixel */
 static int tainted, earned_show, level_changed;
@@ -127,7 +128,6 @@ void insane_reset(void)
 {
     set_patches(0);
     memset(hits, 0, sizeof(hits));
-    memset(flinch, 0, sizeof(flinch));
     memset(walk, 0, sizeof(walk));
     tainted = 0;
 }
@@ -155,23 +155,15 @@ int insane_frame(void)
     game_mods_apply();
     if (!on) {
         memset(hits, 0, sizeof(hits));
-        memset(flinch, 0, sizeof(flinch));
         return save;
     }
     for (int i = 6; i < 38; i++) {
         int o = i * 2;
-        /* a flinch over: its own animation back, its script goes on */
-        if (flinch[i].left && --flinch[i].left == 0) {
-            w16(0x33AA + o, flinch[i].anim);
-            w32(0x3456 + o * 2, flinch[i].ptr);
-            w16(0x35AE + o, flinch[i].step);
-            w16(0x365A + o, flinch[i].count);
-        }
         /* the shield guard: a pixel more for every five it walks */
         int x = (int16_t)r16(0x304E + o), y = (int16_t)r16(0x30FA + o);
         if (!r16(0x2EF6 + o) || !is_guard(o) || guard_class(o) != CLASS_SHIELD) { walk[i] = 0; last_x[i] = (int16_t)x; continue; }
         int d = x - last_x[i];
-        if (y == last_y[i] && d && d >= -3 && d <= 3 && !r16(0x8DC4 + o) && !flinch[i].left) {
+        if (y == last_y[i] && d && d >= -3 && d <= 3 && !r16(0x8DC4 + o)) {
             walk[i] = (int8_t)(walk[i] + d);
             if (walk[i] >= 5 || walk[i] <= -5) {
                 int step = walk[i] > 0 ? 1 : -1;
@@ -199,42 +191,6 @@ static void bounce_back(int p, int shot, int guard)
     if (r16(count) > 0) w16(count, r16(count) - 1);
 }
 
-/* the guard's own hit animation for a flinch, 0 if it has none here */
-static int hit_anim(uint32_t c)
-{
-    if (c == CLASS_NORMAL || c == CLASS_LIGHT || c == CLASS_BLUE2) return 0x14;
-    if (c == CLASS_SHIELD) return 0x85;
-    if (c == CLASS_SMALL) return 0x52;
-    if (c == CLASS_DOG) return 0xB6;
-    return 0;
-}
-
-static void start_flinch(int g)
-{
-    int i = g >> 1, anim = hit_anim(guard_class(g));
-    /* turned to the shot, as the purple guard's script turns him (0x1F830) */
-    int face = r16(0xA3C0 + g) + 1;
-    w16(0x92D0 + g, face);
-    w16(0x7644 + g, face);
-    w16(0x32FE + g, face == 1);
-    if (anim) {
-        flinch[i].anim = (uint16_t)r16(0x33AA + g);
-        flinch[i].ptr = r32(0x3456 + g * 2);
-        flinch[i].step = (uint16_t)r16(0x35AE + g);
-        flinch[i].count = (uint16_t)r16(0x365A + g);
-        w16(0x33AA + g, anim);
-        w32(0x3456 + g * 2, rom32(0x17CDE + (uint32_t)anim * 4));
-        w16(0x35AE + g, 0);
-        w16(0x365A + g, 1);
-    } else {
-        flinch[i].anim = (uint16_t)r16(0x33AA + g);
-        flinch[i].ptr = r32(0x3456 + g * 2);
-        flinch[i].step = (uint16_t)r16(0x35AE + g);
-        flinch[i].count = (uint16_t)r16(0x365A + g);
-    }
-    flinch[i].left = FLINCH_FRAMES;
-}
-
 /* player p's shot d0 reached guard d6 (at the jsr that applies it; skip_to: past it) */
 static int shot_hits(int p, uint32_t skip_to)
 {
@@ -258,14 +214,17 @@ static int shot_hits(int p, uint32_t skip_to)
         return 0;                             /* his last one: down he goes */
     }
     if (hits[i] == 0) {
-        hits[i] = 1;                          /* the first shot: a flinch */
-        start_flinch(g);
+        /* the first shot: not stunned - it has seen the player who shot (the jsr goes on
+         * with the "player seen" event instead of the shot's) */
+        hits[i] = 1;
+        int who = p ? 4 : 2;
+        w16(0x6CC0, who);
+        w16(0x931C + g, who);
+        REG_D[7] = (REG_D[7] & 0xFFFF0000u) | 0x0Cu;
         sound(SND_PURPLE_HIT);
-        REG_PC = skip_to;                     /* (past the jsr; the shot is used up) */
-        return 2;
+        return 0;
     }
-    hits[i] = 0;                              /* down it goes (the event takes over) */
-    flinch[i].left = 0;
+    hits[i] = 0;                              /* down it goes */
     return 0;
 }
 
@@ -306,7 +265,7 @@ static int draw_insane(uint32_t next)
 int insane_owns(uint32_t pc)
 {
     return pc == INSANE_HOOK_P1_HIT || pc == INSANE_HOOK_P2_HIT || pc == INSANE_HOOK_P1_SHIELD ||
-           pc == INSANE_HOOK_P2_SHIELD || pc == INSANE_HOOK_LOOK || pc == INSANE_HOOK_GUARD ||
+           pc == INSANE_HOOK_P2_SHIELD || pc == INSANE_HOOK_LOOK ||
            pc == INSANE_HOOK_LEVEL || pc == INSANE_HOOK_LEVEL_DRAW1 || pc == INSANE_HOOK_LEVEL_DRAW2;
 }
 
@@ -324,12 +283,6 @@ int insane_hook(uint32_t pc)
     case INSANE_HOOK_P2_HIT: return shot_hits(1, 0x18EB4u);
     case INSANE_HOOK_P1_SHIELD: return reflect(0);
     case INSANE_HOOK_P2_SHIELD: return reflect(1);
-    case INSANE_HOOK_GUARD: {
-        /* a flinching guard: no events, no script this frame */
-        int o = REG_D[0] & 0xFFFF;
-        if (o < NOBJ * 2 && flinch[o >> 1].left) { REG_PC = 0x144AEu; return 2; }
-        return 0;
-    }
     case INSANE_HOOK_LOOK: {
         /* green guards look every frame, at the two players in turn */
         int o = REG_D[0] & 0xFFFF;

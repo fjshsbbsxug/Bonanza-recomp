@@ -160,17 +160,16 @@ builder/      the HTML builder page
   (EASY, NORMAL, HARD, INSANE; underneath the game plays on Hard), offered once unlocked:
   by beating the whole game on Hard in a game that did not use the stage select code since
   the machine was reset, or by the code A, B, B, A, Down, A, B, B, A on the title menu
-  (`cheats.c`). Every guard but the purple one takes two shots: the first makes it flinch
-  the way the purple guard does (it turns to the shot and shows its hit frame for 16
-  frames, then carries on). The purple guard (the big one who throws) goes down at his
+  (`cheats.c`). Every guard but the purple one takes two shots: the first does not stun it,
+  it knows at once where the player is and goes for him (the game's "player seen" event).
+  The players' guns fire one shot at a time. The purple guard (the big one who throws) goes down at his
   fourth shot as usual, but the shots before no longer make him flinch or start his
   throwing over, one in a hundred bounces back at the player with the spring's sound, and
   he throws 1.2 times as fast. The shield guard sends the shots it stops back at the
   player (as a guard's bullet, which costs a life) and walks and runs 1.2 times as fast;
   green guards look for the players every frame instead of every fourth. The stage select
   code does nothing in Insane mode. Offline only. Game hooks: the shot-hits-guard calls
-  (0x18BC2, 0x18EAE), the shield block (0x18B5C, 0x18E40), the guards' look (0x16C2E), the
-  guard loop (0x14416), the LEVEL item (0x3CC8, drawn at 0x3B22 / 0x3EC4); four words of
+  (0x18BC2, 0x18EAE), the shield block (0x18B5C, 0x18E40), the guards' look (0x16C2E), the LEVEL item (0x3CC8, drawn at 0x3B22 / 0x3EC4); four words of
   guard script data are changed in the ROM buffer while in a stage.
 * **Sprite limit** (menu: Screen tab, `sprite_limit =` in bonanza.ini, default off): the
   console shows at most 20 sprites and 320 sprite pixels on a line and drops the rest;

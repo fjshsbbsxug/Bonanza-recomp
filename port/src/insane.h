@@ -22,7 +22,6 @@ int  insane_overlay_on(void);
 #define INSANE_HOOK_P1_SHIELD 0x18B5Cu   /* ... and a shield stopped it (after the clink) */
 #define INSANE_HOOK_P2_SHIELD 0x18E40u
 #define INSANE_HOOK_LOOK      0x16C2Eu   /* sub_16BE8: an unalerted guard looks for players */
-#define INSANE_HOOK_GUARD     0x14416u   /* the guard loop: a guard's events and script */
 #define INSANE_HOOK_LEVEL     0x3CC8u    /* sub_03CC8: OPTIONS, LEVEL changed by d7 */
 #define INSANE_HOOK_LEVEL_DRAW1 0x3B22u  /* the menu drawing LEVEL's value (jsr sub_011F2) */
 #define INSANE_HOOK_LEVEL_DRAW2 0x3EC4u  /* ... and redrawing it */
