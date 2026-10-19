@@ -16,13 +16,19 @@
  *     which costs a life), and walks and runs 1.2 times as fast
  *   - green guards look for the players every frame (normally every 4th, the two
  *     players in turn): they notice you about four times as soon
+ *   - a waiter with plates who sees a player throws them (the plate-throwing waiter's
+ *     script, its pause cut) instead of dropping them and raising the alarm
+ *   - a dog waking up barks and runs straight at the player (no "!" pause, no sniffing),
+ *     and runs at 2 pixels a frame (1.5 in the game)
+ *   - tripping on a can gives no protection while the player gets up (the game's 40
+ *     frames of it; he lies as long). The minecart's landing keeps its protection
  * Offline only (an online game runs the same game on both machines). The stage select
  * code does nothing while it is on (cheats.c).
  *
  * Guard kinds, per guard object (obj*2 = o): the class is the long at $6F24 + o*2 (the
  * shot event script): 0x211AC the normal guard (blue; green with attribute $3C66 & 0x6000
  * = 0x4000), 0x211B8 the light blue one, 0x22140 another blue one, 0x1FDBA the purple
- * guard, 0x2306C the shield guard, 0x1E9AA the small striped one, 0x1F40C the dog.
+ * guard, 0x2306C the shield guard, 0x1E9AA the waiter, 0x1F40C / 0x1F566 the dog.
  *
  * A shot hitting guard d6 is `jsr sub_17170` with d7 = 4 at 0x18BC2 (player 1) /
  * 0x18EAE (player 2), followed by the shot's removal; skipping the call leaves the guard
@@ -71,9 +77,13 @@
 #define CLASS_SHIELD 0x2306Cu
 #define CLASS_SMALL 0x1E9AAu
 #define CLASS_DOG 0x1F40Cu
+#define CLASS_DOG2 0x1F566u
 #define UNLOCK_SHOW (6 * 60)
 #define SND_PURPLE_HIT 0xAD
 #define SND_SPRING 0xAF
+#define SCRIPT_WAITER_SEEN 0x1E8EAu  /* the plate waiter's: drops them and raises the alarm */
+#define SCRIPT_THROWER_SEEN 0x1E260u /* the plate-throwing waiter's: goes for the player */
+#define TRIP_FRAMES 0x28             /* the can: the game's protection, the time he lies */
 
 static int r16(int a) { return (md.ram[a & 0xFFFF] << 8) | md.ram[(a + 1) & 0xFFFF]; }
 static void w16(int a, int v) { md.ram[a & 0xFFFF] = (uint8_t)(v >> 8); md.ram[(a + 1) & 0xFFFF] = (uint8_t)v; }
@@ -90,6 +100,13 @@ static struct { uint32_t addr; uint16_t orig, insane; } patch[] = {
     { 0x92A2, 0x0002, 0x0001 },
     { 0x189AE, 0x0002, 0x0001 },     /* the shot made) */
     { 0x18C92, 0x0002, 0x0001 },
+    { 0x1E268, 0x0020, 0x00D0 },     /* the waiter who throws plates: no "!" pause (op 20 -> */
+    { 0x1E26C, 0x003C, 0x0001 },     /* op D0, a no-op here; WAIT 60 -> 1) */
+    { 0x1F0D4, 0x0020, 0x0080 },     /* the dog waking: "!" and a wait -> JMP 0x1F0DA */
+    { 0x1F0D6, 0x0004, 0x0001 },
+    { 0x1F0D8, 0x000A, 0xF0DA },
+    { 0x1F0EC, 0x0024, 0x0001 },     /* ... head up and bark: 36 frames -> 1 */
+    { 0x1F0F6, 0x001F, 0x0001 },     /* ... the sniff: 31 frames -> 1 */
 };
 #define NPATCH ((int)(sizeof(patch) / sizeof(patch[0])))
 
@@ -98,6 +115,7 @@ static uint8_t hits[NOBJ];           /* shots a guard has taken (and shrugged of
 static int16_t last_x[NOBJ], last_y[NOBJ];
 static int8_t walk[NOBJ];            /* the shield guard's steps towards its extra pixel */
 static int tainted, earned_show, level_changed;
+static int trip_wait[2];             /* a player tripped on a can: frames before he gets up */
 static uint32_t rng = 0x1234567u;
 
 static uint32_t guard_class(int o) { return r32(0x6F24 + o * 2); }
@@ -129,6 +147,7 @@ void insane_reset(void)
     set_patches(0);
     memset(hits, 0, sizeof(hits));
     memset(walk, 0, sizeof(walk));
+    trip_wait[0] = trip_wait[1] = 0;
     tainted = 0;
 }
 
@@ -155,7 +174,16 @@ int insane_frame(void)
     game_mods_apply();
     if (!on) {
         memset(hits, 0, sizeof(hits));
+        trip_wait[0] = trip_wait[1] = 0;
         return save;
+    }
+    for (int i = 6; i < 38; i++) {
+        int o = i * 2;
+        if (!r16(0x2EF6 + o)) continue;
+        /* a waiter carrying plates who sees a player throws them at him instead of
+         * dropping them (his "player seen" script: the plate thrower's) */
+        if (r32(0x7054 + o * 2) == SCRIPT_WAITER_SEEN)
+            w16(0x7054 + o * 2 + 2, SCRIPT_THROWER_SEEN & 0xFFFF);
     }
     for (int i = 6; i < 38; i++) {
         int o = i * 2;
@@ -220,6 +248,7 @@ static int shot_hits(int p, uint32_t skip_to)
         int who = p ? 4 : 2;
         w16(0x6CC0, who);
         w16(0x931C + g, who);
+        w16(0x9284 + g, 0);                   /* (its own look would forget the player) */
         REG_D[7] = (REG_D[7] & 0xFFFF0000u) | 0x0Cu;
         sound(SND_PURPLE_HIT);
         return 0;
@@ -266,6 +295,9 @@ int insane_owns(uint32_t pc)
 {
     return pc == INSANE_HOOK_P1_HIT || pc == INSANE_HOOK_P2_HIT || pc == INSANE_HOOK_P1_SHIELD ||
            pc == INSANE_HOOK_P2_SHIELD || pc == INSANE_HOOK_LOOK ||
+           pc == INSANE_HOOK_P1_TRIP || pc == INSANE_HOOK_P2_TRIP ||
+           pc == INSANE_HOOK_P1_GETUP || pc == INSANE_HOOK_P2_GETUP ||
+           pc == INSANE_HOOK_RUN_STEP || pc == INSANE_HOOK_LANE_STEP ||
            pc == INSANE_HOOK_LEVEL || pc == INSANE_HOOK_LEVEL_DRAW1 || pc == INSANE_HOOK_LEVEL_DRAW2;
 }
 
@@ -281,6 +313,24 @@ int insane_hook(uint32_t pc)
     switch (pc) {
     case INSANE_HOOK_P1_HIT: return shot_hits(0, 0x18BC8u);
     case INSANE_HOOK_P2_HIT: return shot_hits(1, 0x18EB4u);
+    case INSANE_HOOK_P1_TRIP: trip_wait[0] = TRIP_FRAMES; REG_PC = 0xC336u; return 2;
+    case INSANE_HOOK_P2_TRIP: trip_wait[1] = TRIP_FRAMES; REG_PC = 0xE7B0u; return 2;
+    case INSANE_HOOK_P1_GETUP:
+    case INSANE_HOOK_P2_GETUP: {
+        int p = pc == INSANE_HOOK_P2_GETUP;
+        if (trip_wait[p] <= 0) return 0;
+        trip_wait[p]--;
+        return 1;                             /* (still lying: the routine's rts) */
+    }
+    case INSANE_HOOK_RUN_STEP:
+    case INSANE_HOOK_LANE_STEP: {
+        /* a running dog: 4 for the game's 3 (2 pixels a frame, not 1.5) */
+        int o = REG_D[0] & 0xFFFF;
+        if (!is_guard(o) || (guard_class(o) != CLASS_DOG && guard_class(o) != CLASS_DOG2)) return 0;
+        int dx = (int16_t)r16(0x385E + o);
+        if (dx == 3 || dx == -3) w16(0x385E + o, dx > 0 ? 4 : -4);
+        return 0;
+    }
     case INSANE_HOOK_P1_SHIELD: return reflect(0);
     case INSANE_HOOK_P2_SHIELD: return reflect(1);
     case INSANE_HOOK_LOOK: {

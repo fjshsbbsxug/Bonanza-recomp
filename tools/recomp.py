@@ -52,7 +52,8 @@ FORBIDDEN = re.compile(r"\b(REG_PC|REG_PPC|m68ki_jump\w*|m68ki_branch_\w+|m68ki_
 # 0x3EC4)
 HOOKS = {0x58B4, 0x59C6, 0x11106, 0x3B08,    # gamemods.c, extrastages.c, cheats.c
          0x18BC2, 0x18EAE, 0x18B5C, 0x18E40, 0x16C2E,
-         0x3CC8, 0x3B22, 0x3EC4}             # insane.c
+         0x3CC8, 0x3B22, 0x3EC4, 0xC330, 0xE7AA, 0xC366, 0xE7DE,
+         0x156C0, 0x16752}             # insane.c
 
 # operands that the port changes in the ROM buffer while running: read from it at run
 # time instead of being built in, so changing them needs no interpreter.

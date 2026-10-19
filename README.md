@@ -167,10 +167,17 @@ builder/      the HTML builder page
   throwing over, one in a hundred bounces back at the player with the spring's sound, and
   he throws 1.2 times as fast. The shield guard sends the shots it stops back at the
   player (as a guard's bullet, which costs a life) and walks and runs 1.2 times as fast;
-  green guards look for the players every frame instead of every fourth. The stage select
-  code does nothing in Insane mode. Offline only. Game hooks: the shot-hits-guard calls
-  (0x18BC2, 0x18EAE), the shield block (0x18B5C, 0x18E40), the guards' look (0x16C2E), the LEVEL item (0x3CC8, drawn at 0x3B22 / 0x3EC4); four words of
-  guard script data are changed in the ROM buffer while in a stage.
+  green guards look for the players every frame instead of every fourth. A waiter carrying
+  plates who sees a player throws them at him at once instead of dropping them and raising
+  the alarm. Dogs that wake up run straight at the player (a bark, no "!" pause, no
+  sniffing) and run 1.33 times as fast (2 pixels a frame for 1.5). Tripping on a can no
+  longer makes the player invincible while he gets up (the minecart's landing still does;
+  the rake never did). The stage select code does nothing in Insane mode. Offline only.
+  Game hooks: the shot-hits-guard calls (0x18BC2, 0x18EAE), the shield block (0x18B5C,
+  0x18E40), the guards' look (0x16C2E), the dogs' running steps (0x156C0, 0x16752), the
+  can's protection and getting up (0xC330, 0xE7AA, 0xC366, 0xE7DE), the LEVEL item
+  (0x3CC8, drawn at 0x3B22 / 0x3EC4); some guard script data words are changed in the ROM
+  buffer while in a stage.
 * **Sprite limit** (menu: Screen tab, `sprite_limit =` in bonanza.ini, default off): the
   console shows at most 20 sprites and 320 sprite pixels on a line and drops the rest;
   with the limit off every sprite is drawn (the game's own masking sprites, which hide

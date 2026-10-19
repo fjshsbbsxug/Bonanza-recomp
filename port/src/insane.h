@@ -21,6 +21,12 @@ int  insane_overlay_on(void);
 #define INSANE_HOOK_P2_HIT    0x18EAEu
 #define INSANE_HOOK_P1_SHIELD 0x18B5Cu   /* ... and a shield stopped it (after the clink) */
 #define INSANE_HOOK_P2_SHIELD 0x18E40u
+#define INSANE_HOOK_P1_TRIP   0xC330u    /* tripped on a can: jsr sub_09F0E (40 frames' protection) */
+#define INSANE_HOOK_P2_TRIP   0xE7AAu    /* ... player 2: jsr sub_09F28 */
+#define INSANE_HOOK_P1_GETUP  0xC366u    /* sub_0C366: lying until the protection runs out */
+#define INSANE_HOOK_P2_GETUP  0xE7DEu
+#define INSANE_HOOK_RUN_STEP  0x156C0u   /* script op 48 (running): a frame's step from $385E */
+#define INSANE_HOOK_LANE_STEP 0x16752u   /* ... op F0 (changing lane) */
 #define INSANE_HOOK_LOOK      0x16C2Eu   /* sub_16BE8: an unalerted guard looks for players */
 #define INSANE_HOOK_LEVEL     0x3CC8u    /* sub_03CC8: OPTIONS, LEVEL changed by d7 */
 #define INSANE_HOOK_LEVEL_DRAW1 0x3B22u  /* the menu drawing LEVEL's value (jsr sub_011F2) */
