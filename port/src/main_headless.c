@@ -27,6 +27,7 @@
 #include "game.h"
 #include "md.h"
 #include "draw.h"
+#include "logic.h"
 #include "cheats.h"
 #include "z80recomp.h"
 #include "sndmix.h"
@@ -469,6 +470,9 @@ int main(int argc, char **argv)
             (unsigned long long)cpu_stat_recomp_insns, (unsigned long long)cpu_stat_no_code);
     fprintf(stderr, "drawing routines: %llu calls in C, %llu as translated (an interrupt came within)\n",
             (unsigned long long)draw_stat_c, (unsigned long long)draw_stat_translated);
+    fprintf(stderr, "game logic in C: %llu calls%s\n", (unsigned long long)logic_stat_c,
+            logic_off > 0 ? " (off: --translated / BONANZA_TRANSLATED)" : "");
+    if (getenv("LOGICSTATS")) logic_report(stderr);
     fprintf(stderr, "video port words (a mod's own code): %lu\n", video_port_words);
     if (gpu)
         fprintf(stderr, "gpu: %lu pictures drawn on the graphics card, %lu differ from the CPU's\n", gpu_frames, gpu_differ);

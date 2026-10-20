@@ -6,6 +6,7 @@
 #include "vdp.h"
 #include "video.h"
 #include "draw.h"
+#include "logic.h"
 #include "recomp.h"
 #include "gamemods.h"
 #include "m68k.h"

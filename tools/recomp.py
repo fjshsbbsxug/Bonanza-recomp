@@ -357,6 +357,37 @@ DRAW = {
     0x3C07E: "draw_seg_3C07E",
 }
 # the split screen's line effects: interrupt routines (rte)
+# The game's logic written in readable C (port/src/logic.c): called where the routines
+# start; the rts is done here. 0: the routine runs as translated (--translated).
+LOGIC = {
+    0x02D54: "logic_sound_request",
+    0x09EDA: "logic_protect_p1",
+    0x09EF4: "logic_protect_p2",
+    0x09F0E: "logic_protect2_p1",
+    0x09F28: "logic_protect2_p2",
+    0x097F6: "logic_player_anim_p1",
+    0x0981E: "logic_player_anim_p2",
+    0x17170: "logic_guard_event",
+    0x0986A: "logic_player_state_p1",
+    0x098B8: "logic_player_state_p2",
+    0x098E2: "logic_pose_keep_p1",
+    0x09928: "logic_pose_keep_p2",
+    0x0996E: "logic_pose_back_p1",
+    0x099A2: "logic_pose_back_p2",
+    0x0A51A: "logic_path_start_p1",
+    0x0A542: "logic_path_start_p2",
+    0x0BF10: "logic_height_step_p1",
+    0x0E392: "logic_height_step_p2",
+    0x0AE8A: "logic_take_away_p1",
+    0x0AEA6: "logic_take_away_p2",
+    0x09F42: "logic_guards_forget_p1",
+    0x09F66: "logic_guards_forget_p2",
+    0x171B6: "logic_guard_event_script",
+    0x19C00: "logic_place_above32",
+    0x19C26: "logic_place_above64",
+    0x04460: "logic_screen_wait",
+}
+
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (
     0x00C1E,
     0x00C32,
@@ -629,6 +660,9 @@ class Gen:
             # from it), 2 = the hook set where to go on
             L.append("\tif (game_hooks) { int h = game_hook(0x%Xu); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
                      "if (h == 2) goto dispatch; }" % a)
+        if a in LOGIC:
+            self.stats["logic"] = self.stats.get("logic", 0) + 1
+            L.append("\tif (%s()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }" % LOGIC[a])
         if a in DRAW:
             # 0: an interrupt would come within it: the routine below, as translated
             self.stats["draw"] += 1
@@ -944,7 +978,8 @@ LIB_DATA = ["m68ki_cpu", "m68ki_remaining_cycles", "m68ki_shift_32_table", "cpu_
 def lib_names():
     """the engine's names the game's code uses: (functions, data)"""
     draw = re.findall(r"^extern int\s+(draw_\w+)\(", open(os.path.join(ROOT, "port", "src", "draw.h")).read(), re.M)
-    return LIB_FUNCS + sorted(set(draw)), LIB_DATA
+    logic = re.findall(r"^extern int\s+(logic_\w+)\(", open(os.path.join(ROOT, "port", "src", "logic.h")).read(), re.M)
+    return LIB_FUNCS + sorted(set(draw)) + sorted(set(logic)), LIB_DATA
 
 
 def gen_lib(out):

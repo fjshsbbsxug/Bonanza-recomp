@@ -111,6 +111,18 @@ builder/      the HTML builder page
   md.c runs the program it finds in Z80 RAM (`z80r_program`); writing over its code
   bytes makes it look again. The sound chips (YM2612, PSG) are simulated only to record
   the sounds, or to play them when there is no recording (below).
+* **Game logic in readable C** (`port/src/logic.c`): the decompilation of the game's
+  own rules, one routine at a time, starting with the small, well understood ones: the
+  sound request, the players' protection, animations, states, kept poses, paths and
+  height steps, objects taken away, guards forgetting a player, and the event sent to
+  a guard (shot, touched, player seen). `tools/recomp.py` (`LOGIC`) calls each where its
+  routine starts. Each is plain C on the game's work memory with named addresses; at its
+  end it also leaves the registers, stack words and flags the 68000 routine left, and
+  takes its time (`port/gen/m68k_costs.c`), because the code around it is still
+  translated 68000 code and the game's clock is its cycle count. Checking: with
+  `BONANZA_TRANSLATED=1` the game's own routines run instead; every scene must give the
+  same pictures and game state frame for frame both ways (`LOGICSTATS=1` lists the
+  headless runner's calls by routine).
 * **Drawing** (`port/src/draw.c`, `video.c`, `vdp.c`):
   * The game's drawing routines are written in C: tile loading (raw and packed), lines
     of text and the queued text, the HUD (frame, stage name, time, scores, counters),
