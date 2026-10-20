@@ -86,6 +86,15 @@ int  cpu_waiting(void);          /* paused where the frame routine waits for the
 int  cpu_wait_over(void);        /* ... and what it waits for has happened */
 void cpu_set_irq(int level);
 uint32_t cpu_get_pc(void);
+uint32_t cpu_get_sp(void);
+/* the game's routine at addr run as a function call from C (logic.c), as a jsr whose
+ * next instruction is ret would: back when it returns there */
+void cpu_call(uint32_t addr, uint32_t ret);
+/* run the game's code from addr (a part of a routine) until it reaches one of the
+ * places stops[] (tools/recomp.py STOPS): the address reached */
+uint32_t cpu_run_part(uint32_t addr, const uint32_t *stops, int n);
+extern int cpu_stopping;
+int cpu_stop_here(uint32_t addr);
 
 /* save state of the whole machine to a buffer (for differential testing) */
 uint32_t md_state_hash(void);

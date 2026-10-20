@@ -92,6 +92,7 @@ void cpu_apply_irq(void)
 }
 
 uint32_t cpu_get_pc(void) { return REG_PC; }
+uint32_t cpu_get_sp(void) { return REG_SP; }
 
 /* PC where there is no native code (never, for the game, its Bonanza Maker mods and the
  * Lost Levels): the 68000's exception for an instruction it cannot run; the game's own
@@ -143,8 +144,78 @@ int cpu_run_until_idle(int cycles)
         step();
     }
     int idle = idle_pc(REG_PC);
+    if (getenv("LOADLOG") && (idle || cpu_waiting()))
+        fprintf(stderr, "load: frame %u mode %04X used %d of %d\n", md.frame,
+                md.ram[0xC070] << 8 | md.ram[0xC071], cycles - GET_CYCLES(), cycles);
+    if (!idle && !cpu_waiting() && getenv("LAGLOG"))
+        fprintf(stderr, "lag: frame %u pc %06X mode %04X\n", md.frame, REG_PC, md.ram[0xC070] << 8 | md.ram[0xC071]);
     SET_CYCLES(0);
     return idle;
+}
+
+void cpu_call(uint32_t addr, uint32_t ret)
+{
+    uint32_t sp0 = REG_SP;
+    m68ki_push_32(ret);
+    REG_PC = addr;
+    /* (the frame's time may run out within it: the routine goes on to its end, its
+     * time counted against the frame all the same) */
+    const int more = 1 << 28;
+    int added = more;
+    SET_CYCLES(GET_CYCLES() + more);
+    while (!(REG_PC == ret && REG_SP == sp0) && !CPU_STOPPED) {
+        if (GET_CYCLES() <= 0) {             /* (never, in practice) */
+            SET_CYCLES(GET_CYCLES() + more);
+            added += more;
+        }
+        step();
+    }
+    SET_CYCLES(GET_CYCLES() - added);
+}
+
+int cpu_stopping;
+static const uint32_t *part_stops;
+static int part_n, part_left;
+static uint32_t part_start;
+
+int cpu_stop_here(uint32_t addr)
+{
+    if (!part_left) {                        /* (the place it starts from is not an end) */
+        part_left = 1;
+        if (addr == part_start) return 0;
+    }
+    for (int i = 0; i < part_n; i++)
+        if (part_stops[i] == addr) return 1;
+    return 0;
+}
+
+uint32_t cpu_run_part(uint32_t addr, const uint32_t *stops, int n)
+{
+    const uint32_t *ps = part_stops;
+    int pn = part_n, pl = part_left, was = cpu_stopping;
+    uint32_t pst = part_start;
+    part_stops = stops; part_n = n; part_left = 0; part_start = addr;
+    cpu_stopping = 1;
+    REG_PC = addr;
+    const int more = 1 << 28;
+    int added = more;
+    SET_CYCLES(GET_CYCLES() + more);
+    for (;;) {
+        if (GET_CYCLES() <= 0) {
+            SET_CYCLES(GET_CYCLES() + more);
+            added += more;
+        }
+        step();
+        int at_stop = 0;
+        for (int i = 0; i < n; i++)
+            if (REG_PC == stops[i]) at_stop = 1;
+        if (at_stop && part_left) break;
+        if (CPU_STOPPED) break;
+    }
+    SET_CYCLES(GET_CYCLES() - added);
+    part_stops = ps; part_n = pn; part_left = pl; part_start = pst;
+    cpu_stopping = was;
+    return REG_PC;
 }
 
 /* take a waiting interrupt (if the code accepts it now) and run its routine until it

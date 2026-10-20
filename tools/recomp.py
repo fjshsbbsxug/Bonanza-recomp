@@ -386,7 +386,32 @@ LOGIC = {
     0x19C00: "logic_place_above32",
     0x19C26: "logic_place_above64",
     0x04460: "logic_screen_wait",
+    0x14232: "logic_guards_update",
+    0x1016A: "logic_map_cell",
+    0x101F2: "logic_wall_test",
+    0x10274: "logic_wall_test2",
+    0x176B8: "logic_probe_176B8",
+    0x176F8: "logic_probe_176F8",
+    0x17738: "logic_probe_17738",
+    0x17778: "logic_probe_17778",
+    0x1794A: "logic_probe_1794A",
+    0x177B8: "logic_probe_177B8",
+    0x177EC: "logic_probe_177EC",
+    0x17820: "logic_probe_17820",
+    0x178AA: "logic_probe_178AA",
+    0x17934: "logic_probe_17934",
+    0x17A8A: "logic_wall_near",
+    0x17AFC: "logic_wall_feet",
+    0x17C54: "logic_floor_under",
+    0x17B82: "logic_stairs_ahead",
+    0x17BD8: "logic_contact_free",
+    0x17C1A: "logic_contact_up",
+    0x17A44: "logic_guard_told",
 }
+
+# Places where game code still translated hands back to C (port/src/logic: a part of a
+# routine written in C runs the rest of it up to one of these, cpu_run_part)
+STOPS = {0x144AE, 0x147C2, 0x14782}
 
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (
     0x00C1E,
@@ -660,6 +685,8 @@ class Gen:
             # from it), 2 = the hook set where to go on
             L.append("\tif (game_hooks) { int h = game_hook(0x%Xu); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
                      "if (h == 2) goto dispatch; }" % a)
+        if a in STOPS:
+            L.append("\tif (cpu_stopping && cpu_stop_here(0x%Xu)) { REG_PC = 0x%Xu; return; }" % (a, a))
         if a in LOGIC:
             self.stats["logic"] = self.stats.get("logic", 0) + 1
             L.append("\tif (%s()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }" % LOGIC[a])
@@ -970,9 +997,9 @@ LIB_FUNCS = ["m68k_read_memory_8", "m68k_read_memory_16", "m68k_read_memory_32",
              "m68k_write_memory_8", "m68k_write_memory_16", "m68k_write_memory_32",
              "md_int_ack", "video_at", "video_at_long", "video_put", "video_set", "video_reg_word",
              "video_status", "video_port_ctrl", "video_port_read",
-             "game_hook", "slot_find", "slot_reset", "fprintf"]
+             "game_hook", "slot_find", "slot_reset", "fprintf", "cpu_stop_here"]
 LIB_DATA = ["m68ki_cpu", "m68ki_remaining_cycles", "m68ki_shift_32_table", "cpu_stat_recomp_insns",
-            "cpu_irq_dirty", "md", "game_hooks", "stderr"]
+            "cpu_irq_dirty", "md", "game_hooks", "stderr", "cpu_stopping"]
 
 
 def lib_names():

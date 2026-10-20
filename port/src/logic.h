@@ -35,5 +35,26 @@ extern int  logic_guard_event_script(void);   /* sub_171B6 */
 extern int  logic_place_above32(void);        /* sub_19C00 */
 extern int  logic_place_above64(void);        /* sub_19C26 */
 extern int  logic_screen_wait(void);          /* sub_04460 */
+extern int  logic_guards_update(void);        /* sub_14232 */
+extern int  logic_map_cell(void);             /* sub_1016A */
+extern int  logic_wall_test(void);            /* sub_101F2 */
+extern int  logic_wall_test2(void);           /* sub_10274 */
+extern int  logic_probe_176B8(void);
+extern int  logic_probe_176F8(void);
+extern int  logic_probe_17738(void);
+extern int  logic_probe_17778(void);
+extern int  logic_probe_1794A(void);
+extern int  logic_probe_177B8(void);
+extern int  logic_probe_177EC(void);
+extern int  logic_probe_17820(void);
+extern int  logic_probe_178AA(void);
+extern int  logic_probe_17934(void);
+extern int  logic_wall_near(void);            /* sub_17A8A */
+extern int  logic_wall_feet(void);            /* sub_17AFC */
+extern int  logic_floor_under(void);          /* sub_17C54 */
+extern int  logic_stairs_ahead(void);         /* sub_17B82 */
+extern int  logic_contact_free(void);         /* sub_17BD8 */
+extern int  logic_contact_up(void);           /* sub_17C1A */
+extern int  logic_guard_told(void);           /* sub_17A44 */
 
 #endif

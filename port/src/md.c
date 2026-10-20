@@ -541,7 +541,13 @@ uint32_t md_state_hash(void)
 {
     uint32_t h = 2166136261u;
 #define HB(p, n) for (size_t i_ = 0; i_ < (n); i_++) { h ^= ((const uint8_t *)(p))[i_]; h *= 16777619u; }
-    HB(md.ram, sizeof(md.ram));
+    /* the work memory, but not what lies below the stack pointer (the stack runs down
+     * from 0xFFFE00; the game's own variables end below 0xFFC200): left-over words the
+     * game never reads, which differ when routines written in C (logic.c) push less */
+    uint32_t sp = cpu_get_sp() & 0xFFFF;
+    if (sp < 0xC200 || sp > 0xFE00) sp = 0xC200;
+    HB(md.ram, 0xC200);
+    HB(md.ram + sp, sizeof(md.ram) - sp);
     HB(vdp.vram, sizeof(vdp.vram));
     HB(vdp.cram, sizeof(vdp.cram));
     HB(vdp.vsram, sizeof(vdp.vsram));

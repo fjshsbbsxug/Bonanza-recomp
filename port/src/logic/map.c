@@ -1,0 +1,415 @@
+/* The stage's map: what is at a place, and walls (ram.h: MAP_*). */
+#include "rt.h"
+#include "map.h"
+
+struct cell map_cell(uint16_t x, uint16_t y, int *floors_down)
+{
+    /* the floor: the building's floors are 80 pixels high (counted as the game does,
+     * taking 80 off until below 0) */
+    uint16_t floor4 = 0, rest = y;
+    int n = 0;
+    for (;;) {
+        rest = (uint16_t)(rest - 0x50);
+        if (rest & 0x8000) break;
+        floor4 += 4;
+        n++;
+    }
+    if (floors_down) *floors_down = n;
+    uint32_t cells = ram32(MAP_FLOORS + floor4);
+    uint16_t start = ram16(MAP_FLOOR_START + floor4 / 2);
+    uint32_t at = cells + (int16_t)(uint16_t)((x >> 3) << 2) - (int16_t)start;
+    struct cell c;
+    c.walls = (uint8_t)RD8(at);
+    c.walls_up = (uint8_t)RD8(at + 1);
+    c.info = mem16(at + 2);
+    c.at = at;
+    c.rest = rest;
+    c.start = start;
+    return c;
+}
+
+uint8_t map_lane(uint16_t y)        { return (uint8_t)RD8(ram32(MAP_LANES) + (uint16_t)((y >> 3) << 1)); }
+uint8_t map_lane_stairs(uint16_t y) { return (uint8_t)RD8(ram32(MAP_LANES) + (uint16_t)((y >> 3) << 1) + 1); }
+
+void map_cell_time(int n, int with_rts)
+{
+    jumped_to(0x1016A);
+    ran_to(0x1016E);
+    for (int k = 0; k < n; k++) {
+        ran_to(0x10176);
+        branched(0x10176, 0x1016E);
+    }
+    branched(0x10170, 0x10178);
+    ran_to(with_rts ? 0x1019E : 0x1019C);
+}
+
+/* sub_1016A: the cell at d0 = x, d1 = y: d0.b, d1.b its walls, d2 its word */
+int logic_map_cell(void)
+{
+    if (!start()) return 0;
+    int n;
+    uint16_t x = lo(REG_D[0]), y = lo(REG_D[1]);
+    struct cell c = map_cell(x, y, &n);
+    begin(0x1016A);
+    map_cell_time(n, 0);
+    REG_D[7] = c.start;                               /* (for the callers) */
+    REG_D[6] = 0x50;
+    set_lo(0, (uint16_t)((((x >> 3) << 2) & 0xFF00) | c.walls));
+    set_lo(1, (uint16_t)((c.rest & 0xFF00) | c.walls_up));
+    set_lo(2, c.info);
+    REG_A[6] = c.at + 4;
+    REG_A[5] = MAP_FLOOR_START;
+    flags_of16(c.info);
+    return done();
+}
+
+/* the time of sub_101F2 / sub_10274 (its rts too) */
+void wall_test_time(uint32_t routine, int up)
+{
+    jumped_to(routine);
+    if (!up) { branched(routine + 0x26, routine + 0x2E); ran_to(routine + 0x32); }
+    else ran_to(routine + 0x2E);
+}
+
+/* sub_101F2 / sub_10274: a wall in the way of object d4, the lane d3 pixels down from
+ * it: of the walls d0.b (standing on the floor) or d1.b (standing on something: height 8
+ * and up; sub_10274 the other way round) those of that lane. Z clear: a wall. */
+static int wall_test(uint32_t routine, int swapped)
+{
+    if (!start()) return 0;
+    uint16_t o = lo(REG_D[4]);
+    uint16_t at = (uint16_t)(obj16(OBJ_Y, o) + lo(REG_D[3]));
+    uint8_t lane = map_lane(at);
+    int up = obj16(OBJ_HEIGHT, o) >= 8;
+    int d = (up != swapped) ? 1 : 0;                  /* the register tested: d1 or d0 */
+    uint8_t v = (uint8_t)(REG_D[d] & lane);
+    REG_D[d] = (REG_D[d] & ~0xFFu) | v;
+    REG_D[3] = (REG_D[3] & ~0xFFu) | lane;            /* (for the callers) */
+    REG_D[7] = (REG_D[7] & 0xFFFF0000u) | (uint16_t)((at >> 3) << 1);
+    REG_A[6] = OBJ_HEIGHT;
+    FLAG_N = NFLAG_8(v); FLAG_Z = v; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+    begin(routine);
+    if (!up) branched(routine + 0x26, routine + 0x2E);
+    ran_to(routine + (up ? 0x2C : 0x30));
+    return done();
+}
+
+int logic_wall_test(void)  { return wall_test(0x101F2, 0); }
+int logic_wall_test2(void) { return wall_test(0x10274, 1); }
+
+int probe_wall(uint16_t o, uint32_t points, int16_t dx, int16_t dy, int16_t lane_dy, int swapped,
+               int stairs, uint16_t *info)
+{
+    uint32_t pt = points + 2 * (int16_t)o;
+    uint16_t x = (uint16_t)(obj16(OBJ_X, o) + dx + mem16(pt));
+    uint16_t y = (uint16_t)(obj16(OBJ_Y, o) + dy + mem16(pt + 2));
+    struct cell c = map_cell(x, y, 0);
+    *info = c.info;
+    if (stairs) {
+        set_obj16(MAP_CELL_INFO, o, c.info);
+        uint8_t st = map_lane_stairs(y);
+        if (st && (c.info & 0x80) && obj16(OBJ_HEIGHT, o))
+            return (c.info >> 8) & st;                /* on stairs: their bits */
+    }
+    uint8_t lane = map_lane((uint16_t)(obj16(OBJ_Y, o) + lane_dy));
+    int up = obj16(OBJ_HEIGHT, o) >= 8;
+    return ((up != swapped) ? c.walls_up : c.walls) & lane;
+}
+
+/* The probes around a guard (sub_176B8 and the others: d0 the object, d7 dx, d6 dy, d3
+ * the lane's offset): Z clear: a wall; d2: the cell's word. Each: its points, which
+ * walls first (sub_10274's order: swapped), whether stairs count, and where its parts
+ * are (the time). */
+struct probe_kind {
+    uint32_t routine, points;
+    uint8_t swapped, stairs;
+    uint32_t to_tail;        /* stairs: the branch to the shared part (0: falls into it) */
+    uint32_t tail;           /* stairs: the shared part (0x17850 / 0x178DA); plain: where map_cell is called */
+};
+
+/* a probe and its time (from its start; with_rts: its rts too); the cell's word in *info */
+static int probe_run(const struct probe_kind *k, uint16_t o, int16_t dx, int16_t dy, int16_t lane_dy,
+                     uint16_t *info_out, int with_rts)
+{
+    uint16_t info;
+    int wall = probe_wall(o, k->points, dx, dy, lane_dy, k->swapped, k->stairs, &info);
+
+    /* the time */
+    uint32_t pt = k->points + 2 * (int16_t)o;
+    uint16_t y = (uint16_t)(obj16(OBJ_Y, o) + dy + mem16(pt + 2));
+    int n;
+    map_cell((uint16_t)(obj16(OBJ_X, o) + dx + mem16(pt)), y, &n);
+    int up = obj16(OBJ_HEIGHT, o) >= 8;
+    uint32_t test = k->swapped ? 0x10274 : 0x101F2;
+    jumped_to(k->routine);
+    if (k->stairs) {
+        uint32_t s = k->tail;
+        if (k->routine == 0x17934) { ran_to(0x17946); branched(0x17946, 0x17832); }
+        if (k->to_tail) { ran_to(k->to_tail); branched(k->to_tail, s); }
+        else ran_to(s);
+        ran_to(s + 0x0A);
+        map_cell_time(n, 1);
+        jumped_to(s + 0x0A);
+        ran_to(s + 0x26);
+        int normal = 1;
+        if (map_lane_stairs(y)) {
+            branched(s + 0x26, s + 0x36);
+            if (!(info & 0x80)) branched(s + 0x3C, s + 0x2A);
+            else if (!obj16(OBJ_HEIGHT, o)) branched(s + 0x48, s + 0x2A);
+            else { ran_to(s + 0x58 + (with_rts ? 2 : 0)); normal = 0; }
+        } else {
+            ran_to(s + 0x2A);
+        }
+        if (normal) {
+            ran_to(s + 0x30);
+            wall_test_time(test, up);
+            jumped_to(s + 0x30);
+            ran_to(s + 0x34 + (with_rts ? 2 : 0));
+        }
+    } else {
+        uint32_t m = k->tail;                         /* the jsr to sub_1016A */
+        ran_to(m + 6);
+        map_cell_time(n, 1);
+        jumped_to(m + 6);
+        ran_to(m + 12);
+        wall_test_time(test, up);
+        jumped_to(m + 12);
+        ran_to(m + 16 + (with_rts ? 2 : 0));
+    }
+    if (info_out) *info_out = info;
+    return wall;
+}
+
+/* what a probe leaves for its callers: d2 the cell's word, d4 the object, Z clear: a wall */
+static void probe_result(uint16_t o, uint16_t info, int wall)
+{
+    set_lo(2, info);
+    set_lo(4, o);
+    FLAG_N = NFLAG_8(wall); FLAG_Z = (uint8_t)wall; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+    scramble((1u << 3) | (1u << 5) | (0x60u << 8));   /* (d3, d5, a5, a6: nothing reads them) */
+}
+
+static int probe(const struct probe_kind *k)
+{
+    if (!start()) return 0;
+    uint16_t o = lo(REG_D[0]), info;
+    begin(k->routine);
+    int wall = probe_run(k, o, (int16_t)lo(REG_D[7]), (int16_t)lo(REG_D[6]), (int16_t)lo(REG_D[3]), &info, 0);
+    probe_result(o, info, wall);
+    return done();
+}
+
+static const struct probe_kind P_176B8 = {0x176B8, OBJ_POINTS_A, 0, 0, 0, 0x176E6};
+static const struct probe_kind P_176F8 = {0x176F8, OBJ_POINTS_A, 1, 0, 0, 0x17726};
+static const struct probe_kind P_17738 = {0x17738, OBJ_POINTS_C, 0, 0, 0, 0x17766};
+static const struct probe_kind P_17778 = {0x17778, OBJ_POINTS_C, 1, 0, 0, 0x177A6};
+static const struct probe_kind P_1794A = {0x1794A, OBJ_POINTS_E, 1, 0, 0, 0x1797A};
+static const struct probe_kind P_177B8 = {0x177B8, OBJ_POINTS_B, 0, 1, 0x177E8, 0x17850};
+static const struct probe_kind P_177EC = {0x177EC, OBJ_POINTS_B, 1, 1, 0x1781C, 0x178DA};
+static const struct probe_kind P_17820 = {0x17820, OBJ_POINTS_D, 0, 1, 0, 0x17850};
+static const struct probe_kind P_178AA = {0x178AA, OBJ_POINTS_D, 1, 1, 0, 0x178DA};
+static const struct probe_kind P_17934 = {0x17934, OBJ_POINTS_E, 0, 1, 0, 0x17850};
+
+int logic_probe_176B8(void) { return probe(&P_176B8); }
+int logic_probe_176F8(void) { return probe(&P_176F8); }
+int logic_probe_17738(void) { return probe(&P_17738); }
+int logic_probe_17778(void) { return probe(&P_17778); }
+int logic_probe_1794A(void) { return probe(&P_1794A); }
+int logic_probe_177B8(void) { return probe(&P_177B8); }
+int logic_probe_177EC(void) { return probe(&P_177EC); }
+int logic_probe_17820(void) { return probe(&P_17820); }
+int logic_probe_178AA(void) { return probe(&P_178AA); }
+int logic_probe_17934(void) { return probe(&P_17934); }
+
+/* ================================================================ around an object */
+
+/* how far below its y an object's feet are ($37B2) */
+static int16_t feet(uint16_t o) { return (int16_t)obj16(0xFF37B2, o); }
+
+/* a list of probes; the first wall found ends it: each probe's dx, kind, lane (pixels
+ * down from the object), and where it is called (a bne to `end` after it, but for the
+ * last). The probe that ended it in *last. Z clear: a wall. */
+struct look_step { int16_t dx; const struct probe_kind *k; int16_t lane; uint32_t jsr_at; };
+
+static int probes(uint16_t o, const struct look_step *st, int n, int16_t dy, uint32_t end,
+                  uint16_t *info, int *last)
+{
+    int wall = 0;
+    for (int i = 0; i < n; i++) {
+        *last = i;
+        ran_to(st[i].jsr_at + 6);
+        wall = probe_run(st[i].k, o, st[i].dx, dy, st[i].lane, info, 1);
+        jumped_to(st[i].jsr_at + 6);
+        if (wall && i < n - 1) { branched(st[i].jsr_at + 6, end); return wall; }
+    }
+    ran_to(end);
+    return wall;
+}
+
+/* sub_17A8A: a wall at either side of the guard or where it stands (the lane at its
+ * feet) */
+int logic_wall_near(void)
+{
+    if (!start()) return 0;
+    uint16_t o = lo(REG_D[0]), info = 0;
+    int16_t lane = (int16_t)(-feet(o) - 0x20);
+    const struct look_step st[] = {
+        {-3, &P_1794A, lane, 0x17A9E}, {3, &P_1794A, lane, 0x17ABC},
+        {0, &P_176F8, lane, 0x17ADA}, {0, &P_17778, lane, 0x17AF4},
+    };
+    int last;
+    begin(0x17A8A);
+    int wall = probes(o, st, 4, 0, 0x17AFA, &info, &last);
+    REG_D[6] = 0;
+    REG_D[7] = (uint32_t)(int32_t)st[last].dx;        /* (moveq) */
+    set_lo(3, (uint16_t)lane);
+    probe_result(o, info, wall);
+    return done();
+}
+
+/* sub_17AFC: a wall around the guard's feet (a little lower, at its sides, under it) */
+int logic_wall_feet(void)
+{
+    if (!start()) return 0;
+    uint16_t o = lo(REG_D[0]), info = 0;
+    int16_t lane = (int16_t)(feet(o) - 0x20);
+    const struct look_step st[] = {
+        {0, &P_1794A, (int16_t)(feet(o) - 0x28), 0x17B0E}, {-3, &P_1794A, lane, 0x17B2A},
+        {3, &P_1794A, lane, 0x17B46}, {0, &P_177EC, lane, 0x17B62}, {0, &P_178AA, lane, 0x17B7A},
+    };
+    int last;
+    begin(0x17AFC);
+    int wall = probes(o, st, 5, 0, 0x17B80, &info, &last);
+    REG_D[6] = 0;
+    if (last < 4) REG_D[7] = (uint32_t)(int32_t)st[last].dx;
+    else REG_D[7] = 0;
+    set_lo(3, (uint16_t)st[last].lane);
+    probe_result(o, info, wall);
+    return done();
+}
+
+/* sub_17C54: the floor under the guard, d6 pixels down (d7 across, then 4 to either
+ * side, then under it): Z clear: there is floor */
+int logic_floor_under(void)
+{
+    if (!start()) return 0;
+    uint16_t o = lo(REG_D[0]), info = 0;
+    int16_t dy = (int16_t)lo(REG_D[6]);
+    int16_t lane = (int16_t)(feet(o) + dy - 0x20);
+    const struct look_step st[] = {
+        {(int16_t)lo(REG_D[7]), &P_17934, lane, 0x17C64}, {-4, &P_17934, lane, 0x17C82},
+        {4, &P_17934, lane, 0x17CA0}, {0, &P_177B8, lane, 0x17CBC}, {0, &P_17820, lane, 0x17CD6},
+    };
+    int last;
+    begin(0x17C54);
+    int wall = probes(o, st, 5, dy, 0x17CDC, &info, &last);
+    if (last == 1 || last == 2) set_lo(7, (uint16_t)st[last].dx);
+    else if (last >= 3) REG_D[7] = 0;
+    set_lo(3, (uint16_t)lane);
+    probe_result(o, info, wall);
+    return done();
+}
+
+/* sub_17B82: stairs just ahead of the guard ($3706: how far ahead its front is)? Z
+ * clear: stairs */
+int logic_stairs_ahead(void)
+{
+    if (!start()) return 0;
+    uint16_t o = lo(REG_D[0]), info = 0;
+    set_obj16(MAP_CELL_INFO, o, 0);
+    int16_t ahead = (int16_t)(obj16(0xFF3706, o) + 8);
+    begin(0x17B82);
+    if (obj16(GUARD_FACING, o) == 3) branched(0x17BA8, 0x17BAE);
+    else { ahead = (int16_t)-ahead; ran_to(0x17BAE); }
+    int16_t lane = (int16_t)(feet(o) - 0x20);
+    ran_to(0x17BC4);
+    probe_run(&P_17934, o, ahead, 0, lane, &info, 1);
+    jumped_to(0x17BC4);
+    ran_to(0x17BD6);
+    uint16_t st = obj16(MAP_CELL_INFO, o) & 0x80;
+    REG_D[6] = 0;
+    set_lo(2, info);
+    set_lo(3, (uint16_t)lane);
+    set_lo(4, o);
+    FLAG_N = NFLAG_CLEAR; FLAG_Z = st; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+    scramble((1u << 5) | (0x60u << 8));
+    return done();
+}
+
+/* sub_17BD8: the guard (on the floor) is in contact with an object (a player) that is
+ * not in the animation matching its own ($3E6A) and is in the state $9E9E: Z clear */
+int logic_contact_free(void)
+{
+    if (!start()) return 0;
+    uint16_t o = lo(REG_D[0]);
+    begin(0x17BD8);
+    if (obj16(OBJ_HEIGHT, o)) {
+        ran_to(0x17BE6);
+    } else {
+        branched(0x17BE2, 0x17BEA);
+        uint16_t c = obj16(TOUCH_PLAYER, o);
+        set_lo(7, c);
+        if (!c) {
+            branched(0x17BF4, 0x17BE6);
+        } else {
+            uint16_t want = (uint16_t)(obj16(0xFF3E6A, o) * 2);
+            set_lo(6, want);
+            if (obj16(OBJ_ANIM, c) == want) {
+                branched(0x17C0C, 0x17BE6);
+            } else {
+                uint16_t v = obj16(0xFF9E9E, c);
+                REG_A[6] = 0xFF9E9E;
+                flags_of16(v);
+                ran_to(0x17C18);
+                return done();
+            }
+        }
+    }
+    REG_D[7] = 0;                                     /* (moveq #0: Z set) */
+    flags_of16(0);
+    ran_to(0x17BE8);
+    return done();
+}
+
+/* sub_17C1A: the guard (at height $10) is in contact with an object not in the
+ * animation matching its own: d7 = 1, Z clear; else d7 = 0 */
+int logic_contact_up(void)
+{
+    if (!start()) return 0;
+    uint16_t o = lo(REG_D[0]);
+    begin(0x17C1A);
+    int yes = 0;
+    if (obj16(OBJ_HEIGHT, o) != 0x10) {
+        ran_to(0x17C2A);
+    } else {
+        branched(0x17C26, 0x17C2E);
+        uint16_t c = obj16(TOUCH_PLAYER, o);
+        uint16_t want = (uint16_t)(obj16(0xFF3E6A, o) * 2);
+        set_lo(6, want);
+        if (obj16(OBJ_ANIM, c) == want) branched(0x17C4E, 0x17C2A);
+        else { yes = 1; ran_to(0x17C52); }
+    }
+    if (!yes) ran_to(0x17C2C);
+    REG_D[7] = (uint32_t)yes;
+    flags_of16((uint16_t)yes);
+    return done();
+}
+
+/* sub_17A44: guard d2 is told of player d3 (unless it ignores that now: mask bit 7): it
+ * has seen him, stops looking, and its script calls its "alerted" script ($6DF4) */
+int logic_guard_told(void)
+{
+    if (!start()) return 0;
+    uint16_t g = lo(REG_D[2]);
+    begin(0x17A44);
+    if (obj16(GUARD_EVENT_MASK, g) & 0x80) {
+        branched(0x17A56, 0x17A84);
+    } else {
+        set_obj16(GUARD_SEEN, g, lo(REG_D[3]));
+        set_obj16(GUARD_LOOKS, g, 0);
+        set_obj32(0xFF6E8C, g, obj32(0xFF6DF4, g));
+        ran_to(0x17A84);
+    }
+    ran_to(0x17A88);
+    return done();
+}
