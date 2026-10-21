@@ -339,3 +339,82 @@ fixed_end:
     ran_to(0x109DC);
     return done();
 }
+
+/* ---------------------------------------------------------------- points */
+
+/* (abcd: the bytes' decimal digits added, with X; X and C as it leaves them) */
+static uint8_t bcd_add(uint8_t dst, uint8_t src)
+{
+    uint res = (uint)(src & 0xF) + (dst & 0xF) + (FLAG_X ? 1 : 0);
+    FLAG_V = ~res;
+    if (res > 9) res += 6;
+    res += (uint)(src & 0xF0) + (dst & 0xF0);
+    FLAG_X = FLAG_C = (res > 0x99) << 8;
+    if (FLAG_C) res -= 0xA0;
+    FLAG_V &= res;
+    FLAG_N = NFLAG_8(res);
+    res &= 0xFF;
+    FLAG_Z |= res;
+    return (uint8_t)res;
+}
+
+/* (n bytes ending before `dst` and `src`, added in decimal from the last: abcd -(src),-(dst)) */
+static void bcd_add_bytes(uint32_t dst, uint32_t src, int n)
+{
+    for (int k = 1; k <= n; k++) set8(dst - k, bcd_add(ram8(dst - k), ram8(src - k)));
+}
+
+/* sub_11D88 / sub_11E18: points d1 (decimal) to player p's score (at most 99999999),
+ * shown again; reaching the next extra life's score ($C0FC, 4 digits on from the top):
+ * a life more, the next one so many points on ($C0FE), shown */
+static int add_points(int p)
+{
+    uint32_t q = p ? 0xC : 0, b = p ? 0x90 : 0;
+    uint32_t score = 0xFFC0F4 + q, add = 0xFFC0F8 + q, next = 0xFFC0FC + q, step = 0xFFC0FE + q;
+    begin(0x11D88 + b);
+    set32(add, REG_D[1]);
+    REG_A[6] = add; REG_A[5] = next;
+    FLAG_X = 0;
+    bcd_add_bytes(add, next, 4);
+    REG_A[6] = score; REG_A[5] = add;
+    if (!FLAG_C) branched(0x11DA6 + b, 0x11DB4 + b);
+    else { set32(score, 0x99999999); ran_to(0x11DB4 + b); }
+    set16(0xFF6C2E + (p ? 0x16 : 0), 1);
+    REG_D[0] = (uint32_t)ram16(next) << 16;
+    if (REG_D[0] > ram32(score)) { branched(0x11DCC + b, 0x11DF6 + b); return done(); }
+    FLAG_X = 0;
+    bcd_add_bytes(step, step + 2, 2);
+    REG_A[0] = next; REG_A[1] = step;
+    uint8_t s = FLAG_C ? 0xFF : 0;
+    REG_D[0] = (REG_D[0] & 0xFFFFFF00u) | s;
+    set8(next, ram8(next) | s);
+    set16(P1_LIVES + 2 * p, (uint16_t)(ram16(P1_LIVES + 2 * p) + 1));
+    set16(0xFF6C30 + (p ? 0x16 : 0), 1);
+    ran_to(0x11DF6 + b);
+    return done();
+}
+int logic_add_points_p1(void) { if (!start()) return 0; return add_points(0); }
+int logic_add_points_p2(void) { if (!start()) return 0; return add_points(1); }
+
+/* sub_11D6A: points d1 to player d0 (sub_11D88 / sub_11E18), the registers kept */
+int logic_add_points(void)
+{
+    if (!start()) return 0;
+    begin(0x11D6A);
+    static const int regs[9] = {2, 3, 4, 5, 6, 7, 8 + 4, 8 + 5, 8 + 6};
+    uint32_t kept[9];
+    for (int k = 0; k < 9; k++) {
+        kept[k] = regs[k] < 8 ? REG_D[regs[k]] : REG_A[regs[k] - 8];
+        stack_put(-36 + 4 * k, kept[k]);              /* (movem.l d2-d7/a4-a6, -(a7)) */
+    }
+    REG_A[7] -= 36;
+    set_lo(0, (uint16_t)(lo(REG_D[0]) << 2));
+    REG_A[6] = rom32(0x11D80 + (int16_t)lo(REG_D[0]));
+    call(REG_A[6], 0x11D78);
+    REG_A[7] += 36;
+    for (int k = 0; k < 9; k++) {
+        if (regs[k] < 8) REG_D[regs[k]] = kept[k]; else REG_A[regs[k] - 8] = kept[k];
+    }
+    ran_to(0x11D7E);
+    return done();
+}

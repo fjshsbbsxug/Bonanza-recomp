@@ -1565,3 +1565,144 @@ int logic_items_frame(void)
     }
     return done();
 }
+
+/* ---------------------------------------------------------------- set up, reset */
+
+/* sub_1AD74: the stage's items (table 0x1ADE2 by stage: how many less one, each its
+ * kind): their kinds from object $26 on, and their sizes (table 0x1AF7A by kind); the
+ * stage's loot (table 0x1AF60), none taken yet */
+int logic_items_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x1AD74);
+    uint16_t s = (uint16_t)(ram16(STAGE_ENTRY) - 1);
+    uint32_t a0 = mem32(0x1ADE2 + (int16_t)(uint16_t)(s << 2));
+    set_lo(0, mem16(a0));
+    a0 += 2;
+    set16(0xFF9E10, lo(REG_D[0]));
+    if (lo(REG_D[0]) & 0x8000) branched(0x1AD8E, 0x1ADC4);
+    else {
+        set_lo(1, 0x4C);
+        REG_A[1] = ITEM_KIND;
+        ran_to(0x1AD9C);
+        for (;;) {
+            uint16_t o = lo(REG_D[1]), kind = mem16(a0);
+            a0 += 2;
+            set_obj16(ITEM_KIND, o, kind);
+            set_lo(7, (uint16_t)(kind << 2));
+            REG_A[5] = 0x1AF7A + (uint32_t)(int32_t)(int16_t)lo(REG_D[7]);
+            set_obj16(OBJ_SIZE_X, o, rom16(REG_A[5]));
+            set_obj16(OBJ_SIZE_Y, o, rom16(REG_A[5] + 2));
+            REG_A[5] += 2;
+            REG_A[6] = OBJ_SIZE_Y;
+            set_lo(1, (uint16_t)(o + 2));
+            uint16_t c = lo(REG_D[0]);
+            set_lo(0, (uint16_t)(c - 1));
+            if (!c) { ran_to(0x1ADC4); break; }
+            branched(0x1ADC0, 0x1AD9C);
+        }
+    }
+    set_lo(0, (uint16_t)(s * 2));
+    REG_A[0] = 0x1AF60;
+    set16(LOOT_COUNT, rom16(0x1AF60 + (int16_t)lo(REG_D[0])));
+    set16(LOOT_TAKEN, 0);
+    ran_to(0x1ADE0);
+    return done();
+}
+
+/* sub_1B80E: each door out of view shut again (its first frame, on the floor) */
+int logic_doors_reset(void)
+{
+    if (!start()) return 0;
+    begin(0x1B80E);
+    set_lo(0, 0x4C);
+    set_lo(1, 0x1F);
+    ran_to(0x1B816);
+    for (;;) {
+        uint16_t o = lo(REG_D[0]);
+        REG_A[6] = OBJ_ACTIVE;
+        if (!obj16(OBJ_ACTIVE, o)) branched(0x1B820, 0x1B87A);
+        else if (REG_A[6] = ITEM_KIND, obj16(ITEM_KIND, o) != 4) branched(0x1B830, 0x1B87A);
+        else if (REG_A[6] = OBJ_ON_SCREEN, obj16(OBJ_ON_SCREEN, o)) branched(0x1B83E, 0x1B87A);
+        else {
+            set_obj16(ITEM_STATE, o, 0);
+            set_lo(7, 1);
+            into(0x1B850, 0x1B088);
+            anim_start(o, 1);
+            jumped_to(0x1B856);
+            set_lo(7, (uint16_t)(o * 2));
+            REG_A[6] = obj32(OBJ_ANIM_STEPS, o);
+            REG_A[5] = OBJ_FRAME;
+            set_obj16(OBJ_FRAME, o, mem16(REG_A[6]));
+            REG_A[6] = OBJ_HEIGHT;
+            set_obj16(OBJ_HEIGHT, o, 0);
+            ran_to(0x1B87A);
+        }
+        set_lo(0, (uint16_t)(lo(REG_D[0]) + 2));
+        uint16_t c = lo(REG_D[1]);
+        set_lo(1, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x1B880); break; }
+        branched(0x1B87C, 0x1B816);
+    }
+    return done();
+}
+
+/* sub_1A7D8: the guards in view a press (d0) crushes (event $14; the trap's player,
+ * $A0CE of the object before it, noted at $9614, the press at $A46C) */
+int logic_press_crushes_guards(void)
+{
+    if (!start()) return 0;
+    begin(0x1A7D8);
+    uint32_t d1 = REG_D[1];
+    stack_put(-4, d1);                                /* (movem.l d1, -(a7)) */
+    REG_A[7] -= 4;
+    set_lo(1, 0xC);
+    set_lo(2, 0x1F);
+    ran_to(0x1A7E4);
+    for (;;) {
+        uint16_t g = lo(REG_D[1]);
+        REG_A[6] = OBJ_ACTIVE;
+        if (!obj16(OBJ_ACTIVE, g)) branched(0x1A7EE, 0x1A86C);
+        else if (REG_A[6] = OBJ_ON_SCREEN, !obj16(OBJ_ON_SCREEN, g)) branched(0x1A7FC, 0x1A86C);
+        else {
+            REG_A[6] = OBJ_PASS;
+            set_lo(6, obj16(OBJ_PASS, g));
+            if (!ram16(0xFFA3BA)) branched(0x1A810, 0x1A818);
+            else { set_obj16(OBJ_PASS, g, 0); ran_to(0x1A818); }
+            uint32_t d6 = REG_D[6];
+            stack_put(-4, d6);                        /* (movem.l d6, -(a7)) */
+            REG_A[7] -= 4;
+            call(0x1A95C, 0x1A81C);
+            REG_A[7] += 4;
+            REG_D[6] = d6;
+            REG_A[6] = OBJ_PASS;
+            set_obj16(OBJ_PASS, lo(REG_D[1]), lo(REG_D[6]));
+            if (!lo(REG_D[7])) branched(0x1A832, 0x1A86C);
+            else {
+                uint32_t d1b = REG_D[1], d2b = REG_D[2];
+                stack_put(-8, d1b); stack_put(-4, d2b);   /* (movem.l d1-d2, -(a7)) */
+                REG_A[7] -= 8;
+                set_lo(6, lo(REG_D[1]));
+                set_lo(7, (uint16_t)(lo(REG_D[0]) - 2));
+                set_lo(7, obj16(0xFFA0CE, lo(REG_D[7])));
+                set_obj16(0xFF9614, lo(REG_D[6]), lo(REG_D[7]));
+                set_obj16(0xFFA46C, lo(REG_D[6]), lo(REG_D[0]));
+                REG_A[6] = 0xFFA46C;
+                set_lo(7, 0x14);
+                call(0x17170, 0x1A862);
+                REG_A[7] += 8;
+                REG_D[1] = d1b; REG_D[2] = d2b;
+                ran_to(0x1A86C);
+            }
+        }
+        set_lo(1, (uint16_t)(lo(REG_D[1]) + 2));
+        uint16_t c = lo(REG_D[2]);
+        set_lo(2, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x1A872); break; }
+        branched(0x1A86E, 0x1A7E4);
+    }
+    REG_A[7] += 4;
+    REG_D[1] = d1;
+    ran_to(0x1A876);
+    return done();
+}

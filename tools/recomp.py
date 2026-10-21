@@ -675,6 +675,31 @@ LOGIC = {
     0x014F0: "logic_fade_job_down",
     0x01520: "logic_fade_job_white",
     0x018FC: "logic_palette_preset",
+    0x0FD90: "logic_palette_cycles",
+    0x0FDE8: "logic_palette_cycle",
+    # points (hud.c), the wall effect's start (play.c)
+    0x11D6A: "logic_add_points",
+    0x11D88: "logic_add_points_p1",
+    0x11E18: "logic_add_points_p2",
+    0x13E00: "logic_wall_fx_start_p1",
+    0x13E8C: "logic_wall_fx_start_p2",
+    0x017AC: "logic_column_job_add",
+    # the views put back when a player goes out, by stage (views.c)
+    **{a: "logic_view_reset%d_p%d" % (i, p + 1) for i, pair in enumerate((
+        (0x04610, 0x04690), (0x0471E, 0x0479E), (0x0482C, 0x048AC), (0x0493C, 0x049D0),
+        (0x04A72, 0x04AF2), (0x04B80, 0x04C00), (0x04C90, 0x04D10), (0x04D9E, 0x04E22),
+        (0x04EB4, 0x04F34), (0x04FC4, 0x05044))) for p, a in enumerate(pair)},
+    0x0427E: "logic_demo_frame",
+    # setting up a stage (stage.c)
+    0x0156C: "logic_stage_objects",
+    0x015F2: "logic_place_object",
+    0x04484: "logic_stage_graphics",
+    0x04498: "logic_stage_graphics2",
+    0x0FF22: "logic_map_setup",
+    0x1009A: "logic_map_expand",
+    0x1AD74: "logic_items_setup",
+    0x1B80E: "logic_doors_reset",
+    0x1A7D8: "logic_press_crushes_guards",
     # the pads (screens.c)
     0x007BE: "logic_pads",
     0x007EE: "logic_pads_read",

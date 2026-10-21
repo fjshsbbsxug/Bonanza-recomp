@@ -628,3 +628,109 @@ int logic_door_touching(void)
     if (!start()) return 0;
     return touching_any_of(&at, 0x4C, 4, 0);
 }
+
+/* ================================================================ the stage's map set up */
+
+#define MAP_CELLS        0xFF57D0   /* the stage's cells: $400 bytes a block */
+#define MAP_FLOOR_COUNT  0xFF6C04   /* the stage's floors, less one */
+
+/* sub_1009A: the stage's cells (table 0x100FA by stage: the data, the blocks less one)
+ * expanded into MAP_CELLS: each block a word, then longs until -1; a long with bit 8
+ * set stands for so many of itself (the count in the next word's high byte) */
+static void map_expand(void)
+{
+    set_lo(7, (uint16_t)((ram16(STAGE_ENTRY) - 1) << 3));
+    uint32_t t = 0x100FA + (uint32_t)(int32_t)(int16_t)lo(REG_D[7]);
+    uint32_t a0 = mem32(t), a1 = MAP_CELLS, a2 = MAP_CELLS;
+    REG_D[0] = mem32(t + 4);
+    REG_A[6] = t + 4;
+    ran_to(0x100BA);
+    for (;;) {
+        WR16(a1, mem16(a0));
+        a0 += 2; a1 += 2;
+        for (;;) {
+            uint32_t v = mem32(a0);
+            a0 += 4;
+            REG_D[7] = v;
+            if (v == 0xFFFFFFFF) { branched(0x100C4, 0x100EC); break; }
+            REG_D[6] = v & 0x100;
+            if (!REG_D[6]) {
+                WR32(a1, v);
+                a1 += 4;
+                ran_to(0x100D6);
+                branched(0x100D6, 0x100BC);
+                continue;
+            }
+            branched(0x100D0, 0x100D8);
+            v &= ~0x100u;
+            REG_D[7] = v;
+            set_lo(1, (uint16_t)((mem16(a0) >> 8) - 1));
+            a0 += 2;
+            ran_to(0x100E4);
+            for (;;) {
+                WR32(a1, v);
+                a1 += 4;
+                uint16_t c = lo(REG_D[1]);
+                set_lo(1, (uint16_t)(c - 1));
+                if (!c) { ran_to(0x100EA); break; }
+                branched(0x100E6, 0x100E4);
+            }
+            branched(0x100EA, 0x100BC);
+        }
+        a1 = a2 + 0x400;
+        a2 = a1;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x100F8); break; }
+        branched(0x100F4, 0x100BA);
+    }
+    REG_A[0] = a0; REG_A[1] = a1; REG_A[2] = a2;
+}
+
+int logic_map_expand(void)
+{
+    if (!start()) return 0;
+    begin(0x1009A);
+    map_expand();
+    return done();
+}
+
+/* sub_0FF22: the stage's map: its cells expanded (sub_1009A), its floors (table 0xFF86:
+ * how many less one; 0xFFA2: each floor's cells, its first cell's place first), its
+ * lanes (table 0x10322) */
+int logic_map_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x0FF22);
+    ran_to(0x0FF28);
+    stack_put(-4, 0x0FF28);                           /* (jsr $1009a) */
+    jumped_to(0x1009A);
+    map_expand();
+    ran_to(0x100FA);                                  /* (its rts) */
+    jumped_to(0x0FF28);
+    uint16_t s = (uint16_t)(ram16(STAGE_ENTRY) - 1);
+    set16(MAP_FLOOR_COUNT, rom16(0x0FF86 + (int16_t)(uint16_t)(s * 2)));
+    REG_A[0] = mem32(0x0FFA2 + (int16_t)(uint16_t)(s << 2));
+    set_lo(0, ram16(MAP_FLOOR_COUNT));
+    uint32_t a1 = MAP_FLOORS, a2 = MAP_FLOOR_START;
+    ran_to(0x0FF62);
+    for (;;) {
+        uint32_t a6 = mem32(REG_A[0]);
+        REG_A[0] += 4;
+        set16(a2, mem16(a6));
+        a2 += 2; a6 += 2;
+        set32(a1, a6);
+        a1 += 4;
+        REG_A[6] = a6;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x0FF6C); break; }
+        branched(0x0FF68, 0x0FF62);
+    }
+    REG_A[1] = a1; REG_A[2] = a2;
+    set_lo(7, (uint16_t)(s << 2));
+    REG_A[6] = mem32(0x10322 + (int16_t)lo(REG_D[7]));
+    set32(MAP_LANES, REG_A[6]);
+    ran_to(0x0FF84);
+    return done();
+}

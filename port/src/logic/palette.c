@@ -232,3 +232,81 @@ int logic_palette_preset(void)
     ran_to(0x01926);
     return done();
 }
+
+/* sub_0FD90: the stage's palette cycles (table 0xFE38 by stage) as jobs of kind 3: each
+ * its frames per step, the colors from (+8) to (+$C), how many (+6), the steps round
+ * (+7) */
+int logic_palette_cycles(void)
+{
+    if (!start()) return 0;
+    begin(0x0FD90);
+    set_lo(7, (uint16_t)((ram16(STAGE_ENTRY) - 1) << 2));
+    uint32_t a6 = rom32(0x0FE38 + (int16_t)lo(REG_D[7]));
+    set_lo(7, mem16(a6));
+    a6 += 2;
+    if (lo(REG_D[7]) & 0x8000) { branched(0x0FDA4, 0x0FDE6); REG_A[6] = a6; return done(); }
+    uint32_t a0 = 0xFF55D6;
+    ran_to(0x0FDAE);
+    for (;;) {
+        set16(a0 + 2, mem16(a6));
+        set16(a0 + 4, mem16(a6 + 2));
+        set32(a0 + 8, mem32(a6 + 4));
+        set32(a0 + 0xC, mem32(a6 + 8));
+        set8(a0 + 6, (uint8_t)RD8(a6 + 12));
+        set8(a0 + 7, (uint8_t)RD8(a6 + 13));
+        set8(a0 + 0x10, (uint8_t)RD8(a6 + 13));
+        a6 += 14;
+        set32(a0 + 0x12, 0);
+        set8(a0 + 1, 3);
+        set8(a0, 1);
+        set16(0xFF55D4, (uint16_t)(ram16(0xFF55D4) + 1));
+        a0 += 0x20;
+        uint16_t c = lo(REG_D[7]);
+        set_lo(7, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x0FDE6); break; }
+        branched(0x0FDE2, 0x0FDAE);
+    }
+    REG_A[0] = a0; REG_A[6] = a6;
+    return done();
+}
+
+/* sub_0FDE8 (job kind 3, a0 the job): a palette cycle's step: the colors from the
+ * source, so many on (+$12), into the palette; round again after its steps */
+int logic_palette_cycle(void)
+{
+    if (!start()) return 0;
+    uint32_t j = REG_A[0];
+    begin(0x0FDE8);
+    uint16_t t = (uint16_t)(ram16(j + 2) - 1);
+    set16(j + 2, t);
+    if (t) { branched(0x0FDEC, 0x0FE36); return done(); }
+    set16(j + 2, ram16(j + 4));
+    uint32_t a6 = ram32(j + 8) + (uint32_t)(int32_t)(int16_t)ram16(j + 0x12), a5 = ram32(j + 0xC);
+    uint16_t n = ram8(j + 6);
+    set_lo(6, n);
+    ran_to(0x0FE0C);
+    for (uint16_t k = (uint16_t)(n - 1);; k--) {
+        WR16(a5, mem16(a6));
+        a5 += 2; a6 += 2;
+        if (!k) { ran_to(0x0FE12); break; }
+        branched(0x0FE0E, 0x0FE0C);
+    }
+    REG_D[7] = 0xFFFF;
+    REG_A[5] = a5; REG_A[6] = a6;
+    set16(PALETTE_CHANGED, 1);
+    uint8_t left = (uint8_t)(ram8(j + 0x10) - 1);
+    set8(j + 0x10, left);
+    if (!left) {
+        set8(j + 0x10, ram8(j + 7));
+        REG_D[6] = 0;
+        ran_to(0x0FE2A);
+        branched(0x0FE2A, 0x0FE32);
+    } else {
+        branched(0x0FE1E, 0x0FE2C);
+        set_lo(6, (uint16_t)(n * 2 + ram16(j + 0x12)));
+        ran_to(0x0FE32);
+    }
+    set16(j + 0x12, lo(REG_D[6]));
+    ran_to(0x0FE36);
+    return done();
+}

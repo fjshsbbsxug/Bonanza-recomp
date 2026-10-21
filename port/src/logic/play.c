@@ -322,3 +322,76 @@ int logic_wall_fx(void)
     if (!wall_fx(0)) wall_fx(1);
     return done();
 }
+
+/* sub_13E00 / sub_13E8C: player p's effect against a wall asked for: a sound, at his
+ * height less 58 (52), 62 (66) across on the side he faces, its path that way (0x14114
+ * / 0x14186); facing neither side, where the table's empty first entry leads */
+static int wall_fx_start(int p)
+{
+    uint32_t b = p ? 0x8C : 0, q = 2 * p;
+    begin(0x13E00 + b);
+    set_lo(0, 0xA8);
+    call(0x02D54, 0x13E04 + b);
+    set16(WALL_FX + q, 1);
+    set16(WALL_FX_END + q, 0);
+    set16(WALL_FX_TIME + q, 0);
+    set_lo(0, (uint16_t)(obj16(OBJ_Y, (uint16_t)q) - (p ? 0x34 : 0x3A)));
+    set16(WALL_FX_X + 4 + q, lo(REG_D[0]));
+    set_lo(0, (uint16_t)((lo(REG_D[0]) & 0xFF00) | ram8(P1_FACING + q)));
+    set_lo(0, (uint16_t)((lo(REG_D[0]) << 2) & 0xFF));
+    uint32_t table = 0x13E48 + b;
+    REG_A[0] = rom32(table + (int16_t)lo(REG_D[0]));
+    ran_to(table);                                    /* (jmp (a0)) */
+    uint32_t left = 0x13E54 + b, right = left + (p ? 0x1C : 0x1C);
+    if (REG_A[0] != left && REG_A[0] != right) return jump_to(REG_A[0]);
+    jumped_to(REG_A[0]);
+    int r = REG_A[0] == right;
+    set_lo(0, (uint16_t)(obj16(OBJ_X, (uint16_t)q) + (r ? -1 : 1) * (p ? 0x42 : 0x3E)));
+    set16(WALL_FX_X + q, lo(REG_D[0]));
+    set32(WALL_FX_PATH + 4 * p, r ? 0x14186 : 0x14114);
+    ran_to(REG_A[0] + 0x1A);
+    return done();
+}
+int logic_wall_fx_start_p1(void) { if (!start()) return 0; return wall_fx_start(0); }
+int logic_wall_fx_start_p2(void) { if (!start()) return 0; return wall_fx_start(1); }
+
+/* ---------------------------------------------------------------- the attract demo */
+
+#define DEMO_LEFT        0xFF566E   /* the demo's frames left */
+#define DEMO_PADS        0xFF17FE   /* (longs) where each player's pad goes on in the recording */
+
+/* sub_0427E (the screen's routine in the attract demo): start pressed or the demo's time
+ * up: it ends (sub_05496); else the players' pads played back from the recording (or,
+ * not in the demo, recorded), and the frame during play (sub_05124, by a jsr of the C's
+ * own: it waits for the frame's end inside) */
+int logic_demo_frame(void)
+{
+    if (!start()) return 0;
+    begin(0x0427E);
+    set_lo(7, (uint16_t)((lo(REG_D[7]) & 0xFF00) | (ram8(0xFF17B9) & 0x80)));
+    if (lo(REG_D[7]) & 0xFF) { branched(0x04288, 0x042F6); goto end; }
+    {
+        uint16_t left = (uint16_t)(ram16(DEMO_LEFT) - 1);
+        set16(DEMO_LEFT, left);
+        if (!left) { branched(0x04292, 0x042F6); goto end; }
+    }
+    for (int p = 0; p < 2; p++) {
+        uint32_t at = DEMO_PADS + 4 * p, a6 = ram32(at);
+        if (ram16(DEMO) == 1) set16(P1_PAD + 2 * p, mem16(a6));
+        else WR16(a6, ram16(P1_PAD + 2 * p));
+        set32(at, a6 + 2);
+        REG_A[6] = a6 + 2;
+    }
+    if (ram16(DEMO) == 1) { branched(0x0429E, 0x042CA); ran_to(0x042EE); }
+    else { ran_to(0x042C6); branched(0x042C6, 0x042EE); }
+    ran_to(0x042F4);                                  /* (jsr $5124) */
+    REG_A[7] -= 4;
+    set32(REG_A[7], 0x042F4);
+    return jump_to(0x05124);
+end:
+    set16(0xFF1814, 0);
+    set16(TIME_FROZEN, 0);
+    call(0x05496, 0x04302);
+    ran_to(0x04308);
+    return done();
+}

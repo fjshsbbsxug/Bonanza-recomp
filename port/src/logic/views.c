@@ -386,3 +386,95 @@ int logic_column_jobs(void)
     }
     return done();
 }
+
+/* sub_017AC: a map column job (from a6: where from, the tiles' table, the video address,
+ * the count, how many times; d7 the step) into the first free slot (none: nothing) */
+int logic_column_job_add(void)
+{
+    if (!start()) return 0;
+    begin(0x017AC);
+    uint32_t a0 = COLUMN_JOBS;
+    set_lo(0, 7);
+    ran_to(0x017B6);
+    for (;;) {
+        if (!ram16(a0)) break;
+        a0 += 0x40;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { REG_A[0] = a0; ran_to(0x017C4); return done(); }
+        ran_to(0x017C0);
+        branched(0x017C0, 0x017B6);
+    }
+    branched(0x017B8, 0x017C6);
+    uint32_t a6 = REG_A[6];
+    set16(a0, 1);
+    set32(a0 + 2, mem32(a6));
+    set32(a0 + 6, mem32(a6 + 4));
+    set16(a0 + 0xA, mem16(a6 + 8));
+    set16(a0 + 0xC, mem16(a6 + 10));
+    set16(a0 + 0xE, mem16(a6 + 12));
+    set16(a0 + 0x10, lo(REG_D[7]));
+    REG_A[0] = a0 + 0x10;
+    REG_A[6] = a6 + 14;
+    ran_to(0x017D6);
+    return done();
+}
+
+/* The views when a player goes out (each stage's pair of routines, table 0x4566 / 0x459A
+ * by stage; sub_0493C / sub_049D0 for the 5th): the first columns asked for again
+ * (sub_017AC; each job's data 14 bytes, player 2's after player 1's), and where the
+ * view is put back on the map; the kept place set the same, or copied (`copy`). Player
+ * 2's map words are player 1's + $1100. */
+static const struct view_reset {
+    uint32_t p1, p2, jobs;
+    uint8_t njobs, copy;
+    uint16_t column, column_word, column2, row, row_word, left, top, cx, cy, x;
+} VIEW_RESET[10] = {
+    {0x04610, 0x04690, 0x0565E, 1, 0, 0x11, 0xC044, 0xFFFE, 0x05, 0xC078, 0x020, 0x0C0, 0x0A0, 0x0C8, 0x0000},
+    {0x0471E, 0x0479E, 0x0567A, 1, 0, 0x11, 0xC044, 0xFFFE, 0x05, 0xC078, 0x020, 0x0C0, 0x0A0, 0x0C8, 0x0000},
+    {0x0482C, 0x048AC, 0x05696, 1, 0, 0x11, 0xC044, 0xFFFE, 0x0F, 0xC078, 0x020, 0x160, 0x0A0, 0x168, 0x0000},
+    {0x0493C, 0x049D0, 0x056B2, 2, 1, 0x2B, 0xC02C, 0x0018, 0x0F, 0xC060, 0x1CC, 0x160, 0x24C, 0x168, 0xFE54},
+    {0x04A72, 0x04AF2, 0x056EA, 1, 0, 0x11, 0xC044, 0xFFFE, 0x00, 0xC078, 0x020, 0x070, 0x0A0, 0x078, 0x0000},
+    {0x04B80, 0x04C00, 0x05706, 1, 0, 0x11, 0xC044, 0xFFFE, 0x0A, 0xC078, 0x020, 0x110, 0x0A0, 0x118, 0x0000},
+    {0x04C90, 0x04D10, 0x05722, 1, 0, 0x11, 0xC044, 0xFFFE, 0x0F, 0xC078, 0x020, 0x160, 0x0A0, 0x168, 0x0000},
+    {0x04D9E, 0x04E22, 0x0573E, 1, 1, 0x54, 0xC050, 0x0041, 0xFFFB, 0xC004, 0x450, 0x070, 0x4D0, 0x078, 0xFBD0},
+    {0x04EB4, 0x04F34, 0x0575A, 1, 0, 0x11, 0xC044, 0xFFFE, 0x0F, 0xC078, 0x020, 0x160, 0x0A0, 0x168, 0x0000},
+    {0x04FC4, 0x05044, 0x05776, 1, 0, 0x11, 0xC044, 0xFFFE, 0x0F, 0xC078, 0x020, 0x160, 0x0A0, 0x168, 0x0000},
+};
+
+static int view_reset(int i, int v)
+{
+    const struct view_reset *t = &VIEW_RESET[i];
+    uint32_t r = v ? t->p2 : t->p1;
+    uint16_t hi = v ? 0x1100 : 0;
+#define R(a) view_ram(v, a)
+    begin(r);
+    for (int k = 0; k < t->njobs; k++) {
+        set_lo(7, ram16(MAP_WIDTH));
+        REG_A[6] = t->jobs + 0xE * (v ? t->njobs : 0) + 0xE * k;
+        call(0x017AC, r + 0xA + 0x10 * k);
+    }
+    set16(R(VIEW_COLUMN), t->column);
+    set16(R(0xFF187E), (uint16_t)(t->column_word + hi));
+    set16(R(VIEW_COLUMN2), t->column2);
+    set16(R(VIEW_ROW), t->row);
+    set16(R(0xFF1882), (uint16_t)(t->row_word + hi));
+    set16(R(0xFF1852), t->left);
+    set16(R(0xFF1850), t->top);
+    set16(R(0xFF1856), t->cx);
+    set16(R(0xFF1854), t->cy);
+    set16(R(VIEW_Y), v ? 0x159 : 0xFFC9);
+    set16(R(VIEW_X), t->x);
+    set16(R(0xFF1848), ram16(R(VIEW_Y)));
+    set16(R(0xFF184A), ram16(R(VIEW_X)));
+    set16(R(0xFF2284), 0);
+    flags_of16(0);
+    ran_to(r + (t->njobs == 2 ? 0x92 : t->copy ? 0x82 : 0x7E));
+#undef R
+    return done();
+}
+#define VIEW_RESET_FN(i) \
+    int logic_view_reset##i##_p1(void) { if (!start()) return 0; return view_reset(i, 0); } \
+    int logic_view_reset##i##_p2(void) { if (!start()) return 0; return view_reset(i, 1); }
+VIEW_RESET_FN(0) VIEW_RESET_FN(1) VIEW_RESET_FN(2) VIEW_RESET_FN(3) VIEW_RESET_FN(4)
+VIEW_RESET_FN(5) VIEW_RESET_FN(6) VIEW_RESET_FN(7) VIEW_RESET_FN(8) VIEW_RESET_FN(9)

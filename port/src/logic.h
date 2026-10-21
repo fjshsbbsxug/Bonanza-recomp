@@ -281,6 +281,45 @@ extern int  logic_fade_job_up(void);          /* sub_014B6 */
 extern int  logic_fade_job_down(void);        /* sub_014F0 */
 extern int  logic_fade_job_white(void);       /* sub_01520 */
 extern int  logic_palette_preset(void);       /* sub_018FC */
+extern int  logic_palette_cycles(void);       /* sub_0FD90 */
+extern int  logic_palette_cycle(void);        /* sub_0FDE8 */
+extern int  logic_add_points(void);           /* sub_11D6A (logic/hud.c) */
+extern int  logic_add_points_p1(void);        /* sub_11D88 */
+extern int  logic_add_points_p2(void);        /* sub_11E18 */
+extern int  logic_wall_fx_start_p1(void);     /* sub_13E00 (logic/play.c) */
+extern int  logic_wall_fx_start_p2(void);     /* sub_13E8C */
+extern int  logic_column_job_add(void);       /* sub_017AC (logic/views.c) */
+/* the views put back when a player goes out, each stage's (table 0x4566 / 0x459A) */
+extern int  logic_view_reset0_p1(void);
+extern int  logic_view_reset0_p2(void);
+extern int  logic_view_reset1_p1(void);
+extern int  logic_view_reset1_p2(void);
+extern int  logic_view_reset2_p1(void);
+extern int  logic_view_reset2_p2(void);
+extern int  logic_view_reset3_p1(void);
+extern int  logic_view_reset3_p2(void);
+extern int  logic_view_reset4_p1(void);
+extern int  logic_view_reset4_p2(void);
+extern int  logic_view_reset5_p1(void);
+extern int  logic_view_reset5_p2(void);
+extern int  logic_view_reset6_p1(void);
+extern int  logic_view_reset6_p2(void);
+extern int  logic_view_reset7_p1(void);
+extern int  logic_view_reset7_p2(void);
+extern int  logic_view_reset8_p1(void);
+extern int  logic_view_reset8_p2(void);
+extern int  logic_view_reset9_p1(void);
+extern int  logic_view_reset9_p2(void);
+extern int  logic_demo_frame(void);           /* sub_0427E (logic/play.c) */
+extern int  logic_stage_objects(void);        /* sub_0156C (logic/stage.c) */
+extern int  logic_place_object(void);         /* sub_015F2 */
+extern int  logic_stage_graphics(void);       /* sub_04484, to its load list */
+extern int  logic_stage_graphics2(void);      /* sub_04484 from 0x04498 */
+extern int  logic_map_setup(void);            /* sub_0FF22 (logic/map.c) */
+extern int  logic_map_expand(void);           /* sub_1009A */
+extern int  logic_items_setup(void);          /* sub_1AD74 (logic/items.c) */
+extern int  logic_doors_reset(void);          /* sub_1B80E */
+extern int  logic_press_crushes_guards(void); /* sub_1A7D8 */
 extern int  logic_pads(void);                 /* sub_007BE (logic/screens.c) */
 extern int  logic_pads_read(void);            /* sub_007EE */
 extern int  logic_pad_read(void);             /* sub_0087A */

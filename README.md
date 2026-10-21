@@ -152,21 +152,25 @@ builder/      the HTML builder page
     level mod's own picture table is read where the game keeps its address); a picture
     straight on the screen (the messages), and single sprites (the HUD's);
   * `hud.c`: the time (counted down and drawn, the hurry sound, "time up", the players
-    out and back in, the time left turned into points at the way out) and the map's
-    marks for the players and guards;
+    out and back in, the time left turned into points at the way out), the map's marks
+    for the players and guards, and points (decimal, an extra life at each threshold);
   * `views.c`: the players' views: scrolling them a pixel at a time by the moves the
     players' code asks for (stopping at the map's edges), and the drawing that asks for,
     a piece a frame (a column of the map as each 16 pixels go by, the rows, the HUD's
     split, tiles left by a player's code); the map's column jobs in the frame's
-    interrupt;
+    interrupt; each stage's views put back when a player goes out (one table for the
+    stages' twenty routines);
   * `play.c`: the frame during play: the pause (start, "PAUSE", the music held), every
     part of the frame in turn, then the stage done, players out of lives and the game
-    over; the effect over a player stuck against a wall. The views' part waits for the
-    frame's end inside, so these two routines are
+    over; the effect over a player stuck against a wall; the attract demo's frame (its
+    recorded pads). The views' part waits for the frame's end inside, so these routines are
     each written as two parts around that wait (the first goes into the game's wait
     loop with a `jsr` of its own; the second is called where that returns);
   * `palette.c`: the palette's fades (up from black a level at a time, darker, towards
-    white), as the screens run them and as jobs, and the palette copied;
+    white), as the screens run them and as jobs, the stages' palette cycles, and the
+    palette copied and preset;
+  * `stage.c` (with `map.c`, `items.c`): setting up a stage: its objects placed, its map
+    (the cells expanded, its floors and lanes), its items' kinds and sizes and its loot;
   * `screens.c`, `sound.c`: small routines (a screen's wait, the pad's buttons as the
     options map them, the jobs list). Where C stands for game code that pushes registers
     or return addresses, it writes them to the stack as the game does (`stack_put`): a
