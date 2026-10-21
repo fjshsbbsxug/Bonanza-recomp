@@ -121,7 +121,12 @@ builder/      the HTML builder page
     jumps, calls, variables and compares); `guard_anim.c`: turning and animations;
   * `map.c`: the stage's map (the cell at a place, wall tests by lane, the probes around an
     object and the checks built on them, objects touching);
-  * `players.c`, `objects.c`, `screens.c`, `sound.c`: the first small routines.
+  * `objects.c`: the objects players and guards make (all 23 kinds, made and run each
+    frame: the players' shots, the guards' bullets, bombs and thrown things, marks over a
+    guard's head, the loot held up, the messages, the way out at the stage's end and its
+    parts, puffs), with the small routines they share (animation steps, moving along a
+    path, hitting the players);
+  * `players.c`, `screens.c`, `sound.c`: the first small routines.
   `tools/recomp.py` (`LOGIC`) calls each where its routine starts. While the code around a
   part is still translated 68000 code, the part also leaves the registers and flags its
   callers read (`tools/liveness.py` works them out: registers by byte, word and long,

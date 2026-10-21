@@ -26,6 +26,10 @@
 #define OBJ_POINTS_C      0xFF43CA
 #define OBJ_POINTS_D      0xFF4522
 #define OBJ_POINTS_E      0xFF467A
+/* a moving path (sub_016EC / sub_0172E): steps of dx, dy, frames (8 bytes each) */
+#define OBJ_MOVE          0xFF4D32   /* (long) the path */
+#define OBJ_MOVE_LEFT     0xFF4E8A   /* frames left on this step */
+#define OBJ_MOVE_AT       0xFF4F36   /* the next step (bytes into the path) */
 
 /* ---- objects 0x46..0x55 (o $8C..$AA): shots, bullets, thrown things, puffs... */
 #define OBJS_FIRST        0x8C
@@ -36,6 +40,27 @@
 #define OBJ_DEFLECTED     0xFF9A9C   /* (shots: stopped by a shield, flying off a path) */
 #define GUARD_CARRIES     0xFF8D78   /* (guards: the object over it) */
 #define SHOT_TOGGLE       0xFF9E04   /* (the next shot's flicker phase) */
+#define OBJ_STATE         0xFF9A9C   /* (thrown things: 0 flying, 1 breaking, 2 broken) */
+#define THROWN_BOUNCES    0xFF9CA0   /* (thrown things: bounces left) */
+#define OBJ_END_Y         0xFF513A   /* (kinds $40 / $44: the y where it goes) */
+#define PUFF_X            0xFFA39C   /* (kind $48: where it starts, its animation, its path) */
+#define PUFF_Y            0xFFA39E
+#define PUFF_HEIGHT       0xFFA3A0
+#define PUFF_ANIM         0xFFA3A2
+#define PUFF_PATH         0xFFA3A4   /* (long) */
+#define THROWN_WAY        0xFF9D4C   /* (thrown things: 0..3, its path, table 0x19212) */
+#define OBJ_PICTURE       0xFF5292   /* (messages: the big picture sub_05DB0 draws) */
+#define OBJ_DELAY         0xFF49D6   /* (messages: frames before it shows) */
+#define OBJ_LEFT          0xFF4A82   /* (messages: frames it shows; kind $28: which player's) */
+#define MSG_20            0xFF181A   /* the message objects up (o; 0 none): kind $20 */
+#define MSG_24            0xFF9E06   /*   kind $24 */
+#define MSG_28_P1         0xFF181E   /*   kind $28, over player 1's / 2's view */
+#define MSG_28_P2         0xFF1820
+#define MSG_NONE          0xFF1822   /* the "time up" message (kind $50; o): no more others */
+#define ESCAPE            0xFF9E02   /* the way out at the stage end (kind $30, o): parts placed above it */
+#define ESCAPE_STEP       0xFF4B2E   /* (kind $30: the next step of its moves, table 0x19EAE) */
+#define ESCAPE_WAIT       0xFF4BDA   /* (kind $30: frames to the next state) */
+#define ESCAPE_PARTS      0xFF4C86   /* (kind $30: frames before part $38 comes) */
 
 /* ---- the players */
 #define P1_STATE          0xFF5688   /* the state (standing, walking, shot...) */
@@ -56,6 +81,11 @@
 #define P2_SHOTS          0xFF9DFA
 #define P1_TAKE_AWAY      0xFF9DFE   /* an object to be taken away (o; 0 none) */
 #define P2_TAKE_AWAY      0xFF9E00
+#define P1_HELD_DX        0xFF56E6   /* what he holds up (that object, kinds $18 / $1C): */
+#define P1_HELD_DY        0xFF56E8   /*   where, from him */
+#define P1_HELD_ACTIVE    0xFF56EA   /*   its OBJ_ACTIVE */
+#define P1_HELD_BIG       0xFF56EC   /*   nonzero: frame $3E, else $38 */
+#define P2_HELD_DX        0xFF5790
 
 /* ---- guards (objects 6..37) */
 #define GUARD_COUNT       0xFF6CC2   /* the stage's guards - 1 */
