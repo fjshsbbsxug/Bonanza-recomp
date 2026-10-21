@@ -643,6 +643,44 @@ LOGIC = {
     # the items: loot and gadgets (items.c)
     0x1AFDA: "logic_items_frame",
     0x008AA: "logic_pad_map",
+    # the views (views.c): sub_08576 before and after its wait for the frame's end
+    0x080FA: "logic_view_tasks",
+    0x08576: "logic_views_frame",
+    0x087A4: "logic_views_frame2",
+    0x017D8: "logic_column_jobs",
+    # the frame during play (play.c): sub_05124 before and after its views' part
+    0x05124: "logic_play_frame",
+    0x05312: "logic_play_frame2",
+    # small ones: player 1's lane walls, touching (map.c), sprites, work memory, jobs
+    0x1019E: "logic_lane_walls",
+    0x10224: "logic_lane_walls_low",
+    0x102A6: "logic_lane_walls_faced",
+    0x101C8: "logic_lane_walls_p2",
+    0x1024C: "logic_lane_walls_low_p2",
+    0x102E4: "logic_lane_walls_faced_p2",
+    0x1A764: "logic_guard_touching",
+    0x1AD04: "logic_door_touching",
+    0x12E64: "logic_sprite_add",
+    0x13CEA: "logic_blink_sprite",
+    0x05D88: "logic_object_picture",
+    0x13F18: "logic_wall_fx",
+    # the palette's fades (palette.c)
+    0x02B62: "logic_fade_up",
+    0x02BD4: "logic_fade_down",
+    0x02C06: "logic_fade_white",
+    0x02C52: "logic_palette_copy",
+    0x02AEA: "logic_fade_screen_up",
+    0x02BB4: "logic_fade_screen_down",
+    0x014B6: "logic_fade_job_up",
+    0x014F0: "logic_fade_job_down",
+    0x01520: "logic_fade_job_white",
+    0x018FC: "logic_palette_preset",
+    # the pads (screens.c)
+    0x007BE: "logic_pads",
+    0x007EE: "logic_pads_read",
+    0x0087A: "logic_pad_read",
+    0x13744: "logic_slot_add",
+    0x01468: "logic_jobs",
 }
 
 # Places where game code still translated hands back to C (port/src/logic: a part of a

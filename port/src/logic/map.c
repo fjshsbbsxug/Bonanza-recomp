@@ -505,3 +505,126 @@ int players_touching(uint16_t o, uint32_t jsr)
     REG_D[6] = found;
     return found;
 }
+
+/* ================================================================ the players' lane walls */
+
+/* sub_1019E / sub_10224 / sub_102A6 (player 2's: sub_101C8 / sub_1024C / sub_102E4):
+ * player p's lane's walls, d3 pixels below his feet (MAP_LANES at (y + d3) / 8), kept
+ * in the walls he meets on the floor (d0.b) or standing on something (d1.b): sub_1019E
+ * by his height (below 8: the floor), sub_10224 the other way round (at 0: the ones on
+ * something), sub_102A6 by his facing (into the screen: by height; 1: the floor; else
+ * on something) */
+static int lane_walls(int which, int p)
+{
+    static const uint32_t at[3] = {0x1019E, 0x10224, 0x102A6}, copy[3] = {0x2A, 0x28, 0x3E};
+    uint32_t b = p ? copy[which] : 0;
+    uint16_t o = (uint16_t)(2 * p);
+    begin(at[which] + b);
+    uint16_t i = (uint16_t)((uint16_t)((uint16_t)(obj16(OBJ_Y, o) + lo(REG_D[3])) >> 3) << 1);
+    set_lo(7, i);
+    REG_A[6] = ram32(MAP_LANES);
+    REG_D[3] = (REG_D[3] & 0xFFFFFF00u) | (uint8_t)RD8(REG_A[6] + (uint32_t)(int32_t)(int16_t)i);
+    int floor;
+    uint16_t h = obj16(OBJ_HEIGHT, o);
+    if (which == 0) {
+        floor = h < 8;
+        if (floor) { branched(0x101BC + b, 0x101C4 + b); ran_to(0x101C6 + b); } else ran_to(0x101C2 + b);
+    } else if (which == 1) {
+        floor = h != 0;
+        if (!floor) { branched(0x10240 + b, 0x10248 + b); ran_to(0x1024A + b); } else ran_to(0x10246 + b);
+    } else {
+        uint8_t f = ram8(P1_FACING + 1 + o);
+        REG_D[7] = (REG_D[7] & 0xFFFFFF00u) | f;
+        if (!f) {
+            branched(0x102C2 + b, 0x102D0 + b);
+            floor = h < 8;
+            if (floor) { branched(0x102D8 + b, 0x102E0 + b); ran_to(0x102E2 + b); } else ran_to(0x102DE + b);
+        } else if (f == 1) { floor = 1; branched(0x102CA + b, 0x102E0 + b); ran_to(0x102E2 + b); }
+        else { floor = 0; ran_to(0x102CE + b); branched(0x102CE + b, 0x102DC + b); ran_to(0x102DE + b); }
+    }
+    int r = floor ? 0 : 1;
+    uint8_t v = (uint8_t)(REG_D[r] & REG_D[3]);
+    REG_D[r] = (REG_D[r] & 0xFFFFFF00u) | v;
+    FLAG_N = NFLAG_8(v); FLAG_Z = v; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+    return done();
+}
+int logic_lane_walls(void)          { if (!start()) return 0; return lane_walls(0, 0); }
+int logic_lane_walls_low(void)      { if (!start()) return 0; return lane_walls(1, 0); }
+int logic_lane_walls_faced(void)    { if (!start()) return 0; return lane_walls(2, 0); }
+int logic_lane_walls_p2(void)       { if (!start()) return 0; return lane_walls(0, 1); }
+int logic_lane_walls_low_p2(void)   { if (!start()) return 0; return lane_walls(1, 1); }
+int logic_lane_walls_faced_p2(void) { if (!start()) return 0; return lane_walls(2, 1); }
+
+/* ================================================================ touching others */
+
+/* (each object in view from `first`, 32 of them (d1, counted down in d2): one of `kind`
+ * (any: -1) touching object d0 (sub_1A95C) - d6 it, d7 1; else d7 0) */
+struct touch_at { uint32_t start, loop, act, onscr, kind, jsr, found, next, dbra, none; };
+
+static int touching_any_of(const struct touch_at *at, uint16_t first, int kind, int pass_clear)
+{
+    begin(at->start);
+    uint32_t d1 = REG_D[1];
+    set_lo(1, first);
+    set_lo(2, 0x1F);
+    ran_to(at->loop);
+    for (;;) {
+        uint16_t g = lo(REG_D[1]);
+        REG_A[6] = OBJ_ACTIVE;
+        if (!obj16(OBJ_ACTIVE, g)) branched(at->act, at->next);
+        else if (REG_A[6] = OBJ_ON_SCREEN, !obj16(OBJ_ON_SCREEN, g)) branched(at->onscr, at->next);
+        else if (kind >= 0 && (REG_A[6] = ITEM_KIND, obj16(ITEM_KIND, g) != kind)) branched(at->kind, at->next);
+        else {
+            uint32_t d6 = 0;
+            if (pass_clear) {
+                /* (sub_1A764: shots pass through it no more, while $A3BA) */
+                REG_A[6] = OBJ_PASS;
+                set_lo(6, obj16(OBJ_PASS, g));
+                if (!ram16(0xFFA3BA)) branched(0x1A79C, 0x1A7A4);
+                else { set_obj16(OBJ_PASS, g, 0); ran_to(0x1A7A4); }
+                d6 = REG_D[6];
+            }
+            call(0x1A95C, at->jsr);
+            if (pass_clear) {
+                REG_D[6] = d6;
+                REG_A[6] = OBJ_PASS;
+                set_obj16(OBJ_PASS, lo(REG_D[1]), lo(REG_D[6]));
+            }
+            if (lo(REG_D[7])) {
+                branched(at->found, at->found + 0x12);
+                set_lo(6, lo(REG_D[1]));
+                REG_D[1] = d1;
+                ran_to(at->found + 0x18);
+                return done();
+            }
+            ran_to(at->next);
+        }
+        set_lo(1, (uint16_t)(lo(REG_D[1]) + 2));
+        uint16_t c = lo(REG_D[2]);
+        set_lo(2, (uint16_t)(c - 1));
+        if (!c) { ran_to(at->dbra + 4); break; }
+        branched(at->dbra, at->loop);
+    }
+    REG_D[7] = 0;
+    REG_D[1] = d1;
+    ran_to(at->none);
+    return done();
+}
+
+/* sub_1A764: a guard in view touching object d0 (d6), at the same height */
+int logic_guard_touching(void)
+{
+    static const struct touch_at at = {0x1A764, 0x1A770, 0x1A77A, 0x1A788, 0, 0x1A7A8,
+                                       0x1A7BE, 0x1A7C2, 0x1A7C4, 0x1A7CE};
+    if (!start()) return 0;
+    return touching_any_of(&at, 0xC, -1, 1);
+}
+
+/* sub_1AD04: a door in view (item kind 4) touching object d0 (d6), at the same height */
+int logic_door_touching(void)
+{
+    static const struct touch_at at = {0x1AD04, 0x1AD10, 0x1AD1A, 0x1AD28, 0x1AD38, 0x1AD3C,
+                                       0x1AD44, 0x1AD48, 0x1AD4A, 0x1AD54};
+    if (!start()) return 0;
+    return touching_any_of(&at, 0x4C, 4, 0);
+}

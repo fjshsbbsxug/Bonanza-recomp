@@ -49,3 +49,153 @@ int logic_pad_map(void)
     REG_A[3] = PAD_MAP + 3;
     return done();
 }
+
+/* sub_13744: a6 into the first of 4 free slots at $6C92 (none free: nothing) */
+int logic_slot_add(void)
+{
+    if (!start()) return 0;
+    begin(0x13744);
+    uint32_t a0 = 0xFF6C92;
+    for (int k = 0;; k++, a0 += 4) {
+        if (!ram32(a0)) {
+            branched(0x13752, 0x13762);
+            set32(a0, REG_A[6]);
+            ran_to(0x13768);
+            break;
+        }
+        if (k == 3) { ran_to(0x1375C); ran_to(0x13760); break; }
+        branched(0x13758, 0x13750);
+    }
+    return done();
+}
+
+/* sub_01468: the jobs at $55D6 ($20 bytes each; $55D4 of them in use): each in use runs
+ * its kind's routine (its second byte: table 0x14A6) */
+int logic_jobs(void)
+{
+    if (!start()) return 0;
+    begin(0x01468);
+    REG_A[0] = 0xFF55D6;
+    uint16_t n = ram16(0xFF55D4);
+    set_lo(0, n);
+    if (!n) { branched(0x01474, 0x014A4); return done(); }
+    set_lo(0, (uint16_t)(n - 1));
+    ran_to(0x0147A);
+    for (;;) {
+        while (!ram8(REG_A[0])) {
+            REG_A[0] += 0x20;
+            ran_to(0x01484);
+            branched(0x01484, 0x0147A);
+        }
+        branched(0x0147C, 0x01486);
+        REG_D[7] = (uint32_t)ram8(REG_A[0] + 1) << 2;
+        REG_A[6] = rom32(0x014A6 + (int16_t)lo(REG_D[7]));
+        uint32_t d0 = REG_D[0], a0 = REG_A[0];
+        stack_put(-8, d0); stack_put(-4, a0);         /* (movem.l d0/a0, -(a7)) */
+        REG_A[7] -= 8;
+        call(REG_A[6], 0x01496);
+        REG_A[7] += 8;
+        REG_D[0] = d0; REG_A[0] = a0 + 0x20;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x014A4); break; }
+        branched(0x014A0, 0x0147A);
+    }
+    return done();
+}
+
+/* ---------------------------------------------------------------- the pads */
+
+/* sub_0087A: the pad at port a1 read (its two halves: start and A, then B, C and the
+ * directions, a bit set for each button down) into a0: held, then newly pressed */
+static void pad_read(void)
+{
+    uint32_t a1 = REG_A[1];
+    WR8(a1, 0);
+    uint8_t d0 = (uint8_t)RD8(a1);
+    uint32_t sh = (uint32_t)d0 << 2;
+    FLAG_X = FLAG_C = CFLAG_8(sh);                    /* (lsl.b #2: X left for the callers) */
+    d0 = (uint8_t)(sh & 0xC0);
+    WR8(a1, 0x40);
+    uint8_t d1 = (uint8_t)(RD8(a1) & 0x3F);
+    d0 = (uint8_t)~(d0 | d1);
+    d1 = d0;
+    uint8_t d2 = ram8(REG_A[0]);
+    set8(REG_A[0], d1);
+    d0 = (uint8_t)((d0 ^ d2) & d1);
+    set8(REG_A[0] + 1, d0);
+    REG_A[0] += 2;
+    REG_D[0] = (REG_D[0] & 0xFFFFFF00u) | d0;
+    REG_D[1] = (REG_D[1] & 0xFFFFFF00u) | d1;
+    REG_D[2] = (REG_D[2] & 0xFFFFFF00u) | d2;
+    ran_to(0x008A8);
+}
+
+/* sub_007EE: both pads read (ports $A10003, $A10005) into PAD_RAW; up with down, or left
+ * with right, count as neither; then each mapped by the options (sub_008AA) */
+static void pads_read(void)
+{
+    REG_A[0] = PAD_RAW;
+    REG_A[1] = 0xA10003;
+    for (int k = 0; k < 2; k++) {
+        uint32_t bsr = k ? 0x00800 : 0x007FA;
+        ran_to(bsr + 4);
+        stack_put(-4, bsr + 4);                       /* (the bsr's return) */
+        jumped_to(0x0087A);
+        pad_read();
+        ran_to(0x008AA);                              /* (its rts) */
+        jumped_to(bsr + 4);
+        if (!k) REG_A[1] += 2;
+    }
+    static const struct { uint32_t pad; uint8_t both; uint16_t clear; uint32_t bne, past; } F[4] = {
+        {PAD_RAW, 3, 0xFCFC, 0x00812, 0x0081E}, {PAD_RAW, 0xC, 0xF3F3, 0x0082C, 0x00838},
+        {PAD_RAW + 2, 3, 0xFCFC, 0x00846, 0x00852}, {PAD_RAW + 2, 0xC, 0xF3F3, 0x00860, 0x0086C},
+    };
+    for (int k = 0; k < 4; k++) {
+        set_lo(0, (uint16_t)((lo(REG_D[0]) & 0xFF00) | (ram8(F[k].pad) & F[k].both)));
+        if ((ram8(F[k].pad) & F[k].both) != F[k].both) branched(F[k].bne, F[k].past);
+        else { set16(F[k].pad, ram16(F[k].pad) & F[k].clear); ran_to(F[k].past); }
+    }
+    REG_D[7] = 0;
+    call(0x008AA, 0x0086E);
+    REG_D[7] = 1;
+    call(0x008AA, 0x00874);
+    ran_to(0x00878);
+}
+
+int logic_pad_read(void)
+{
+    if (!start()) return 0;
+    begin(0x0087A);
+    pad_read();
+    return done();
+}
+
+int logic_pads_read(void)
+{
+    if (!start()) return 0;
+    begin(0x007EE);
+    pads_read();
+    return done();
+}
+
+/* sub_007BE: the pads read with the sound processor's bus held */
+int logic_pads(void)
+{
+    if (!start()) return 0;
+    begin(0x007BE);
+    WR16(0xA11100, 0x100);
+    ran_to(0x007C6);
+    while (RD8(0xA11100) & 1) branched(0x007CE, 0x007C6);
+    ran_to(0x007D4);
+    stack_put(-4, 0x007D4);                           /* (the bsr's return) */
+    REG_A[7] -= 4;
+    jumped_to(0x007EE);
+    pads_read();
+    ran_to(0x0087A);                                  /* (its rts) */
+    REG_A[7] += 4;
+    jumped_to(0x007D4);
+    WR16(0xA11100, 0);
+    ran_to(0x007EC);
+    return done();
+}

@@ -257,3 +257,102 @@ int logic_sprites_frame(void)
     ran_to(0x058B2);
     return done();
 }
+
+/* sub_12E64: a sprite at the sprite table's end (SPRITE_COUNT): y d2, x d1, attributes
+ * d0, d3 by d4 tiles' size (in its size byte), linked to the next */
+static void sprite_add(void)
+{
+    REG_A[6] = SPRITE_TABLE;
+    uint16_t n = ram16(SPRITE_COUNT);
+    set_lo(5, (uint16_t)(n << 3));
+    uint32_t e = SPRITE_TABLE + (uint32_t)(int32_t)(int16_t)lo(REG_D[5]);
+    set16(e, lo(REG_D[2]));
+    set16(e + 4, lo(REG_D[0]));
+    set16(e + 6, lo(REG_D[1]));
+    uint16_t size = (uint16_t)(lo(REG_D[3]) << 8);
+    uint16_t h = (uint16_t)((uint16_t)(lo(REG_D[4]) << 2) << 8);
+    n = (uint16_t)(ram16(SPRITE_COUNT) + 1);
+    set16(SPRITE_COUNT, n);
+    set_lo(4, n);
+    set_lo(3, (uint16_t)(size | h | n));
+    set16(e + 2, lo(REG_D[3]));
+    flags_of16(lo(REG_D[3]));
+    ran_to(0x12E9A);
+}
+int logic_sprite_add(void)
+{
+    if (!start()) return 0;
+    begin(0x12E64);
+    sprite_add();
+    return done();
+}
+
+/* sub_13CEA: a blinking sprite at 162, 183 (its picture every 8 frames from table
+ * 0x13CE2, palette line 1, in front) */
+int logic_blink_sprite(void)
+{
+    if (!start()) return 0;
+    begin(0x13CEA);
+    set_lo(0, (uint16_t)((ram16(FRAME_COUNT) & 0x18) >> 2));
+    REG_A[0] = 0x13CE2;
+    set_lo(0, (uint16_t)(rom16(0x13CE2 + lo(REG_D[0])) | 0xA000));
+    set_lo(1, 0xA2);
+    set_lo(2, 0xB7);
+    REG_D[3] = 1;
+    REG_D[4] = 1;
+    call(0x12E64, 0x13D0E);
+    ran_to(0x13D14);
+    return done();
+}
+
+/* sub_05D88: object d0's picture as sprites straight on the screen (the messages: x
+ * 192..319 only), each piece at the object's place, linked on; mirrored: x from the
+ * right by the piece's width, flipped */
+int logic_object_picture(void)
+{
+    if (!start()) return 0;
+    begin(0x05D88);
+    uint16_t o = lo(REG_D[0]);
+    REG_A[4] = OBJ_X;
+    uint16_t x = obj16(OBJ_X, o);
+    if (x < 0xC0) { branched(0x05D94, 0x05E26); return done(); }
+    if (x >= 0x140) { branched(0x05D9E, 0x05E26); return done(); }
+    REG_A[6] = OBJ_FRAME;
+    uint16_t pic = obj16(OBJ_FRAME, o);
+    set_lo(7, pic);
+    if (!pic) { branched(0x05DAC, 0x05E26); return done(); }
+    /* (the table's address read where the game keeps it: a level mod may move it) */
+    uint32_t a6 = mem32(rom32(0x05DB2 + 2) + (int16_t)(uint16_t)(pic << 2));
+    set_lo(4, (uint16_t)(mem16(a6) >> 8));
+    a6 += 2;
+    uint32_t a5 = SPRITE_TABLE + (uint32_t)(int32_t)(int16_t)(uint16_t)(ram16(SPRITE_COUNT) << 3);
+    REG_A[4] = OBJ_MIRRORED;
+    int mirrored = obj16(OBJ_MIRRORED, o) != 0;
+    uint32_t loop = mirrored ? 0x05E28 : 0x05DDE, dbra = mirrored ? 0x05E80 : 0x05E22;
+    if (mirrored) branched(0x05DDA, 0x05E28); else ran_to(0x05DDE);
+    for (;;) {
+        set16(SPRITE_COUNT, (uint16_t)(ram16(SPRITE_COUNT) + 1));
+        int8_t py = (int8_t)RD8(a6), px = (int8_t)RD8(a6 + 1);
+        uint16_t size = mem16(a6 + 2), attr = mem16(a6 + 4);
+        set16(a5, (uint16_t)(py + obj16(OBJ_Y, o)));
+        uint16_t sx;
+        if (!mirrored) sx = (uint16_t)(px + obj16(OBJ_X, o));
+        else sx = (uint16_t)(obj16(OBJ_X, o) - (uint16_t)((((size >> 7) & 0x18) + 8) + px));
+        set16(a5 + 6, sx);
+        set_lo(6, (uint16_t)(ram16(SPRITE_COUNT) & 0x3F));
+        set_lo(7, (uint16_t)(size + lo(REG_D[6])));
+        set16(a5 + 2, lo(REG_D[7]));
+        if (mirrored) { set_lo(7, attr ^ 0x800); set16(a5 + 4, lo(REG_D[7])); }
+        else set16(a5 + 4, attr);
+        a6 += 6;
+        a5 += 8;
+        uint16_t c = lo(REG_D[4]);
+        set_lo(4, (uint16_t)(c - 1));
+        if (!c) { ran_to(dbra + 4); break; }
+        branched(dbra, loop);
+    }
+    REG_A[4] = OBJ_X;
+    REG_A[5] = a5;
+    REG_A[6] = a6;
+    return done();
+}

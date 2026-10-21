@@ -29,6 +29,9 @@ static inline void set16(uint32_t a, uint16_t v) { a &= 0xFFFF; md.ram[a] = (uin
 static inline void set32(uint32_t a, uint32_t v) { set16(a, (uint16_t)(v >> 16)); set16(a + 2, (uint16_t)v); }
 static inline uint8_t ram8(uint32_t a) { return md.ram[a & 0xFFFF]; }
 static inline void set8(uint32_t a, uint8_t v) { md.ram[a & 0xFFFF] = v; }
+/* what a movem / jsr writes onto the stack, `off` bytes from a7 (the C keeps the values
+ * itself; a later routine may find them there, unwritten, above the stack pointer) */
+static inline void stack_put(int32_t off, uint32_t v) { set32(REG_A[7] + (uint32_t)off, v); }
 static inline uint16_t rom16(uint32_t a) { return (uint16_t)(md.rom[a] << 8 | md.rom[a + 1]); }
 static inline uint32_t rom32(uint32_t a) { return (uint32_t)rom16(a) << 16 | rom16(a + 2); }
 /* any address (ROM or RAM: script data is in both) */

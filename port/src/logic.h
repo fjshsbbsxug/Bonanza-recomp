@@ -250,6 +250,42 @@ extern int  logic_hud_frame(void);            /* sub_105CC */
 /* the items (logic/items.c) */
 extern int  logic_items_frame(void);          /* sub_1AFDA */
 extern int  logic_pad_map(void);              /* sub_008AA (logic/screens.c) */
+/* the views (logic/views.c) */
+extern int  logic_view_tasks(void);           /* sub_080FA */
+extern int  logic_views_frame(void);          /* sub_08576, to its wait */
+extern int  logic_views_frame2(void);         /* sub_08576 from 0x087A4 */
+extern int  logic_column_jobs(void);          /* sub_017D8 */
+/* the frame during play (logic/play.c) */
+extern int  logic_play_frame(void);           /* sub_05124, to its views' part */
+extern int  logic_play_frame2(void);          /* sub_05124 from 0x05312 */
+extern int  logic_lane_walls(void);           /* sub_1019E (logic/map.c) */
+extern int  logic_lane_walls_low(void);       /* sub_10224 */
+extern int  logic_lane_walls_faced(void);     /* sub_102A6 */
+extern int  logic_lane_walls_p2(void);        /* sub_101C8 */
+extern int  logic_lane_walls_low_p2(void);    /* sub_1024C */
+extern int  logic_lane_walls_faced_p2(void);  /* sub_102E4 */
+extern int  logic_guard_touching(void);       /* sub_1A764 */
+extern int  logic_door_touching(void);        /* sub_1AD04 */
+extern int  logic_sprite_add(void);           /* sub_12E64 (logic/sprites.c) */
+extern int  logic_blink_sprite(void);         /* sub_13CEA */
+extern int  logic_object_picture(void);       /* sub_05D88 */
+extern int  logic_wall_fx(void);              /* sub_13F18 (logic/play.c) */
+/* the palette's fades (logic/palette.c) */
+extern int  logic_fade_up(void);              /* sub_02B62 */
+extern int  logic_fade_down(void);            /* sub_02BD4 */
+extern int  logic_fade_white(void);           /* sub_02C06 */
+extern int  logic_palette_copy(void);         /* sub_02C52 */
+extern int  logic_fade_screen_up(void);       /* sub_02AEA */
+extern int  logic_fade_screen_down(void);     /* sub_02BB4 */
+extern int  logic_fade_job_up(void);          /* sub_014B6 */
+extern int  logic_fade_job_down(void);        /* sub_014F0 */
+extern int  logic_fade_job_white(void);       /* sub_01520 */
+extern int  logic_palette_preset(void);       /* sub_018FC */
+extern int  logic_pads(void);                 /* sub_007BE (logic/screens.c) */
+extern int  logic_pads_read(void);            /* sub_007EE */
+extern int  logic_pad_read(void);             /* sub_0087A */
+extern int  logic_slot_add(void);             /* sub_13744 (logic/screens.c) */
+extern int  logic_jobs(void);                 /* sub_01468 */
 extern int  logic_player_door_across_p1(void);/* sub_0AB68 */
 extern int  logic_player_door_across_p2(void);/* sub_0ABAA */
 extern int  logic_loot_reset(void);           /* sub_0AE02 */

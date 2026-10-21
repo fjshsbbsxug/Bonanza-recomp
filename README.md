@@ -149,11 +149,31 @@ builder/      the HTML builder page
     trapdoors and the way out;
   * `sprites.c`: the objects' sprites each frame (which views each object is near, its
     picture's pieces into each view's lists, the lists merged into the sprite table; a
-    level mod's own picture table is read where the game keeps its address);
+    level mod's own picture table is read where the game keeps its address); a picture
+    straight on the screen (the messages), and single sprites (the HUD's);
   * `hud.c`: the time (counted down and drawn, the hurry sound, "time up", the players
     out and back in, the time left turned into points at the way out) and the map's
     marks for the players and guards;
-  * `screens.c`, `sound.c`: the first small routines.
+  * `views.c`: the players' views: scrolling them a pixel at a time by the moves the
+    players' code asks for (stopping at the map's edges), and the drawing that asks for,
+    a piece a frame (a column of the map as each 16 pixels go by, the rows, the HUD's
+    split, tiles left by a player's code); the map's column jobs in the frame's
+    interrupt;
+  * `play.c`: the frame during play: the pause (start, "PAUSE", the music held), every
+    part of the frame in turn, then the stage done, players out of lives and the game
+    over; the effect over a player stuck against a wall. The views' part waits for the
+    frame's end inside, so these two routines are
+    each written as two parts around that wait (the first goes into the game's wait
+    loop with a `jsr` of its own; the second is called where that returns);
+  * `palette.c`: the palette's fades (up from black a level at a time, darker, towards
+    white), as the screens run them and as jobs, and the palette copied;
+  * `screens.c`, `sound.c`: small routines (a screen's wait, the pad's buttons as the
+    options map them, the jobs list). Where C stands for game code that pushes registers
+    or return addresses, it writes them to the stack as the game does (`stack_put`): a
+    later, deeper routine can find them there, above the stack pointer, before it writes
+    its own. Routines that take longer than a frame (clearing the work memory, setting
+    up a stage) stay the game's code: C runs a routine whole, which would move the
+    frame's end.
   `tools/recomp.py` (`LOGIC`) calls each where its routine starts. While the code around a
   part is still translated 68000 code, the part also leaves the registers and flags its
   callers read (`tools/liveness.py` works them out: registers by byte, word and long,
