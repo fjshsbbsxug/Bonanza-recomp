@@ -63,6 +63,41 @@
 #define ESCAPE_PARTS      0xFF4C86   /* (kind $30: frames before part $38 comes) */
 
 /* ---- the players */
+#define P1_PAD            0xFF17C0   /* (byte) the buttons held: U D L R (bits 0-3), B C A */
+#define P1_PAD_PRESSED    0xFF17C1   /* (byte) the buttons pressed this frame */
+#define BUTTONS_SWAPPED   0xFFC058   /* the options: the jump button (C) as B, not A */
+#define P1_FACING         0xFF3A62   /* (byte; o table) 1 left, 3 right... */
+#define P1_FACED          0xFF3B0E   /* (byte; o table) the way he faced before turning */
+#define P1_ON_STAIRS      0xFF3A63   /* (byte; o table) bits 0-1: on stairs */
+#define P1_ANIM_DONE      0xFF56D0   /* 3: his animation came round to its start */
+#define P1_PROTECT_PIC    0xFF56C2   /* (his picture, for blinking) */
+#define P1_CELL           0xFF56BA   /* the map cell's bits where he is */
+#define P1_EDGE           0xFF56BC   /* (nonzero: at a floor's edge, the view follows) */
+#define P1_DOOR           0xFF3D12   /* the door he touches (o; 0 none) ... */
+#define P1_DOOR_BEFORE    0xFF3DBE   /* ... and the one he touched last frame */
+#define P1_VIEW_X         0xFF1852   /* his view: where it is */
+#define P1_VIEW_Y         0xFF1854
+#define P1_VIEW_SPEED_X   0xFF186E
+#define P1_VIEW_SPEED_Y   0xFF1870
+#define P1_VIEW_WANT      0xFF1876   /* the ways it should scroll: bits up, down, left, right */
+#define P1_VIEW_LOOK      0xFF2284   /* the way he faced when the view began to follow */
+#define ANIMS_HELD        0xFF1806   /* nonzero: the players' animations stand still */
+#define P1_FALLING        0xFF56A4   /* (moving on a path: going down now) */
+#define P1_STAIRS_WAY     0xFF56A7   /* (byte; jumping: 1 down, 2 up the stairs he jumped onto) */
+#define P1_PATH_NEXT      0xFF56A8   /* (long) where a path goes on: its next command ... */
+#define P1_PATH_AFTER     0xFF56AC   /* (long) ... and after each step */
+#define P1_JUMP_PAD       0xFF17FA   /* the buttons as the jump takes them */
+#define P1_WAIT           0xFF567C   /* frames to wait (sub_0B472) ... */
+#define P1_WAIT_THEN      0xFF567E   /* (long) ... then this routine runs his state */
+#define P1_SCRIPT_STEP    0xFF56B8
+#define P1_SCRIPT_AT      0xFF6C06   /* (long) (what the script started with: a6) */
+#define P1_LIFT           0xFF6C0E   /* how high his feet are looked for (16; player 2's 12) */
+#define P1_TOUCHING       0xFFA3AE   /* (nonzero: he touches something, on side P1_CAUGHT_SIDE) */
+#define P1_SCRIPT_ON      0xFF56B2   /* nonzero: a little script moves him (sub_09ADE) ... */
+#define P1_SCRIPT         0xFF56B4   /* (long) ... where it is */
+#define P1_LEAVING        0xFF56E4   /* (nonzero: he is going out already) */
+#define LOOT_ALL          0xFF1818   /* all the loot is taken: the way out is open */
+#define P1_TAKEN_OVER     0xFF5682   /* nonzero: the routine at +2 (long) runs his frame */
 #define P1_STATE          0xFF5688   /* the state (standing, walking, shot...) */
 #define P1_STATE_RUN      0xFF568A   /* (long) the state's routine, run every frame */
 #define P1_STATE_BEFORE   0xFF568E

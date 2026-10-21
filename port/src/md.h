@@ -94,6 +94,7 @@ void cpu_call(uint32_t addr, uint32_t ret);
  * places stops[] (tools/recomp.py STOPS): the address reached */
 uint32_t cpu_run_part(uint32_t addr, const uint32_t *stops, int n);
 extern int cpu_stopping;
+extern uint32_t cpu_call_ret;      /* where the innermost cpu_call() waits for the routine's rts */
 int cpu_stop_here(uint32_t addr);
 
 /* save state of the whole machine to a buffer (for differential testing) */

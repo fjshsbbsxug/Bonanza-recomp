@@ -26,6 +26,36 @@ extern int  logic_path_start_p1(void);        /* sub_0A51A */
 extern int  logic_path_start_p2(void);        /* sub_0A542 */
 extern int  logic_height_step_p1(void);       /* sub_0BF10 */
 extern int  logic_height_step_p2(void);       /* sub_0E392 */
+extern int  logic_player_frame_p1(void);      /* sub_09026 */
+extern int  logic_player_frame_p2(void);      /* sub_091A8 */
+extern int  logic_player_after_p1(void);      /* sub_0932A */
+extern int  logic_player_after_p2(void);      /* sub_09408 */
+extern int  logic_player_view_p1(void);       /* sub_094E6 */
+extern int  logic_player_view_p2(void);       /* sub_0966E */
+extern int  logic_player_script_p1(void);     /* sub_09ADE */
+extern int  logic_player_script_p2(void);     /* sub_09B00 */
+extern int  logic_player_ground_p1(void);     /* sub_09CBA */
+extern int  logic_player_ground_p2(void);     /* sub_09DC6 */
+extern int  logic_player_stop_p1(void);       /* sub_099D6 */
+extern int  logic_player_stop_p2(void);       /* sub_09A1C */
+extern int  logic_player_stand_pose_p1(void); /* sub_099DE */
+extern int  logic_player_stand_pose_p2(void); /* sub_09A24 */
+extern int  logic_player_script_start_p1(void);/* sub_09A62 */
+extern int  logic_player_script_start_p2(void);/* sub_09A8C */
+extern int  logic_player_door_ok_p1(void);    /* sub_0AAE2 */
+extern int  logic_player_door_ok_p2(void);    /* sub_0AB24 */
+extern int  logic_state_stand_p1(void);       /* sub_0B56A */
+extern int  logic_state_stand_p2(void);       /* sub_0DA6E */
+extern int  logic_state_walk_p1(void);        /* sub_0B5A6 */
+extern int  logic_state_walk_p2(void);        /* sub_0DA9A */
+extern int  logic_state_walk_frame_p1(void);  /* sub_0B5FC */
+extern int  logic_state_walk_frame_p2(void);  /* sub_0DAF0 */
+extern int  logic_player_wait_p1(void);       /* sub_0B472 */
+extern int  logic_player_wait_p2(void);       /* sub_0D976 */
+extern int  logic_player_waiting_p1(void);    /* sub_0B47C */
+extern int  logic_player_waiting_p2(void);    /* sub_0D980 */
+extern int  logic_player_foot_p1(void);       /* sub_0B8BC */
+extern int  logic_player_foot_p2(void);       /* sub_0DDB0 */
 extern int  logic_take_away_p1(void);         /* sub_0AE8A */
 extern int  logic_take_away_p2(void);         /* sub_0AEA6 */
 extern int  logic_guards_forget_p1(void);     /* sub_09F42 */

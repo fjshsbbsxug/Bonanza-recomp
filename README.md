@@ -126,7 +126,15 @@ builder/      the HTML builder page
     guard's head, the loot held up, the messages, the way out at the stage's end and its
     parts, puffs), with the small routines they share (animation steps, moving along a
     path, hitting the players);
-  * `players.c`, `screens.c`, `sound.c`: the first small routines.
+  * `players.c`, `player_states.c`: the players: each one's frame (the buttons, the state
+    they choose, protection), what runs after his state (animation, blinking, the view's
+    scrolling, what is under him, the way out), standing and walking. The game has the
+    players' code twice; the C is written once with player 1's addresses, and
+    `tools/player_map.py` lines player 2's copy up with it (`player2_map.h`: the places,
+    tables and work memory of player 2's copy; `--diff` lists where the two differ, e.g.
+    in values, to be written in the C). A call from the players' code goes where that
+    player's own `jsr` goes;
+  * `screens.c`, `sound.c`: the first small routines.
   `tools/recomp.py` (`LOGIC`) calls each where its routine starts. While the code around a
   part is still translated 68000 code, the part also leaves the registers and flags its
   callers read (`tools/liveness.py` works them out: registers by byte, word and long,
@@ -137,7 +145,11 @@ builder/      the HTML builder page
   called from the C. Checking: `BONANZA_TRANSLATED=1` runs the game's own routines;
   `LOGIC_SCRAMBLE=1` fills the registers C leaves alone with junk; every recorded scene must
   give the same pictures and game state both ways (`LOGICSTATS=1` lists the calls by part
-  and by script op; `LOGIC_OPS_OFF=48,F0` runs those ops as the game's code). One frame of
+  and by script op; `LOGIC_OPS_OFF=48,F0` runs those ops as the game's code;
+  `LOGIC_SKIP=state_walk,...` runs those parts as the game's code; `LOGIC_TRACE=1` lists
+  each part as it starts, with the frame's time left, both ways). When C calls the game's
+  code, the generated code's `rts` goes back to the C as soon as it reaches the place
+  `cpu_call` waits for, even within the same translated region. One frame of
   the ending differs: the game's frame runs out of time inside the guards' frame there, and
   the C version finishes it at once (the next frame is the same again).
 * **Drawing** (`port/src/draw.c`, `video.c`, `vdp.c`):

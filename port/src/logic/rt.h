@@ -42,6 +42,24 @@ static inline void set_obj16(uint32_t table, uint16_t o, uint16_t v) { set16(tab
 static inline uint32_t obj32(uint32_t table, uint16_t o) { return ram32(table + 2 * (int16_t)o); }
 static inline void set_obj32(uint32_t table, uint16_t o, uint32_t v) { set32(table + 2 * (int16_t)o, v); }
 
+/* ---- the players' code: written once, with player 1's addresses (code and work memory);
+ * player 2's copy is elsewhere, with its own work memory (tools/player_map.py lines the
+ * two up): P(p, a) is the place a in player p's copy, PR(p, a) player p's word a, PT(p, a) his copy of
+ * the table at a */
+uint32_t player2_at(uint32_t a);
+uint32_t player2_ram(uint32_t a);
+uint32_t player2_table(uint32_t a);
+static inline uint32_t P(int p, uint32_t a) { return p ? player2_at(a) : a; }
+static inline uint32_t PR(int p, uint32_t a) { return p ? player2_ram(a) : a; }
+static inline uint32_t PT(int p, uint32_t a) { return p ? player2_table(a) : a; }   /* a table */
+
+/* the routine the jsr / bsr at `at` calls; and a call from the players' code: player p's
+ * copy calls what its own jsr there calls (player 2's code calls its own copies, and
+ * some routines of player 1's own; `a` is player 1's, checked) */
+uint32_t jsr_target(uint32_t at);
+void player_call(int p, uint32_t a, uint32_t jsr);
+int  player_jump(int p, uint32_t a, uint32_t jmp);   /* ... the same for a jmp abs.l (its time too) */
+
 /* ---- registers: the low word of a data register, and setting it (the high word kept) */
 static inline uint16_t lo(uint32_t r) { return (uint16_t)r; }
 static inline void set_lo(int d, uint16_t v) { REG_D[d] = (REG_D[d] & 0xFFFF0000u) | v; }
@@ -62,6 +80,7 @@ int  done(void);                     /* the routine done (up to its rts): its ti
 int  jump_to(uint32_t addr);         /* ... it goes on in the game's code at addr (a jmp): 2 */
 void jumped_to(uint32_t a);          /* it went on at a (after a jmp counted with ran_to) */
 void cyc_back(int n);                /* (time counted twice: an rts the caller counts) */
+uint32_t pc_now(void);               /* where the time counted has got to */
 
 /* the game's routine at addr (not in C yet), called by the jsr / bsr at jsr_at */
 void call(uint32_t addr, uint32_t jsr_at);

@@ -416,10 +416,44 @@ LOGIC = {
     0x1A9E8: "logic_touching2",
     0x18736: "logic_make_object",
     0x187EA: "logic_objects_frame",
+    0x09026: "logic_player_frame_p1",
+    0x091A8: "logic_player_frame_p2",
+    0x0932A: "logic_player_after_p1",
+    0x09408: "logic_player_after_p2",
+    0x094E6: "logic_player_view_p1",
+    0x0966E: "logic_player_view_p2",
+    0x09ADE: "logic_player_script_p1",
+    0x09B00: "logic_player_script_p2",
+    0x09CBA: "logic_player_ground_p1",
+    0x09DC6: "logic_player_ground_p2",
+    0x099D6: "logic_player_stop_p1",
+    0x09A1C: "logic_player_stop_p2",
+    0x099DE: "logic_player_stand_pose_p1",
+    0x09A24: "logic_player_stand_pose_p2",
+    0x09A62: "logic_player_script_start_p1",
+    0x09A8C: "logic_player_script_start_p2",
+    0x0AAE2: "logic_player_door_ok_p1",
+    0x0AB24: "logic_player_door_ok_p2",
+    0x0B56A: "logic_state_stand_p1",
+    0x0DA6E: "logic_state_stand_p2",
+    0x0B5A6: "logic_state_walk_p1",
+    0x0DA9A: "logic_state_walk_p2",
+    0x0B5FC: "logic_state_walk_frame_p1",
+    0x0DAF0: "logic_state_walk_frame_p2",
+    0x0B472: "logic_player_wait_p1",
+    0x0D976: "logic_player_wait_p2",
+    0x0B47C: "logic_player_waiting_p1",
+    0x0D980: "logic_player_waiting_p2",
+    0x0B8BC: "logic_player_foot_p1",
+    0x0DDB0: "logic_player_foot_p2",
 }
 
 # Places where game code still translated hands back to C (port/src/logic: a part of a
 # routine written in C runs the rest of it up to one of these, cpu_run_part)
+# after an rts: back to the engine when it returns to where cpu_call() waits (a routine
+# in C calling the game's code; the place may be in this region, past a part now in C)
+RETURNED = "if (REG_PC == cpu_call_ret) return; goto dispatch;"
+
 STOPS = {0x144AE, 0x147C2, 0x14782}
 
 DRAW_RTE = {a: "draw_band_%05X" % a for a in (
@@ -631,7 +665,7 @@ class Gen:
                 L.append("if (%s) { USE_CYCLES(%d); } else %s" % (COND[cond], cyc, body))
             return L
         if op == 0x4E75:  # rts
-            L.append("REG_PC = m68ki_pull_32(); USE_CYCLES(%d); goto dispatch;" % cyc)
+            L.append("REG_PC = m68ki_pull_32(); USE_CYCLES(%d); " % cyc + RETURNED)
             return L
         if (op & 0xFFC0) in (0x4E80, 0x4EC0):  # jsr / jmp
             e = self.flow_ea(i, op)
@@ -692,23 +726,23 @@ class Gen:
         if a in HOOKS:
             # optional game changes (port/src/gamemods.c): 1 = the routine was done (return
             # from it), 2 = the hook set where to go on
-            L.append("\tif (game_hooks) { int h = game_hook(0x%Xu); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
-                     "if (h == 2) goto dispatch; }" % a)
+            L.append(("\tif (game_hooks) { int h = game_hook(0x%Xu); if (h == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); " % a)
+                     + RETURNED + " } if (h == 2) goto dispatch; }")
         if a in STOPS:
             L.append("\tif (cpu_stopping && cpu_stop_here(0x%Xu)) { REG_PC = 0x%Xu; return; }" % (a, a))
         if a in LOGIC:
             self.stats["logic"] = self.stats.get("logic", 0) + 1
-            L.append("\t{ int r_ = %s(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
-                     "if (r_ == 2) goto dispatch; }" % LOGIC[a])
+            L.append(("\t{ int r_ = %s(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); " % LOGIC[a])
+                     + RETURNED + " } if (r_ == 2) goto dispatch; }")
         if a in DRAW:
             # 0: an interrupt would come within it: the routine below, as translated
             self.stats["draw"] += 1
-            L.append("\t{ int r_ = %s(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
-                     "if (r_ == 2) goto dispatch; }" % DRAW[a])
+            L.append(("\t{ int r_ = %s(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); " % DRAW[a])
+                     + RETURNED + " } if (r_ == 2) goto dispatch; }")
         elif a in LOAD_LISTS:
             self.stats["draw"] += 1
-            L.append("\t{ int r_ = draw_load_list(0x%Xu, %d); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } }"
-                     % (a, LOAD_LISTS[a]))
+            L.append(("\t{ int r_ = draw_load_list(0x%Xu, %d); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); "
+                      % (a, LOAD_LISTS[a])) + RETURNED + " } }")
         elif a in DRAW_RTE:
             self.stats["draw"] += 1
             L.append("\tif (%s()) { uint sr = m68ki_pull_16(); uint pc = m68ki_pull_32(); m68ki_jump(pc); m68ki_set_sr(sr); "
@@ -1009,7 +1043,7 @@ LIB_FUNCS = ["m68k_read_memory_8", "m68k_read_memory_16", "m68k_read_memory_32",
              "video_status", "video_port_ctrl", "video_port_read",
              "game_hook", "slot_find", "slot_reset", "fprintf", "cpu_stop_here"]
 LIB_DATA = ["m68ki_cpu", "m68ki_remaining_cycles", "m68ki_shift_32_table", "cpu_stat_recomp_insns",
-            "cpu_irq_dirty", "md", "game_hooks", "stderr", "cpu_stopping"]
+            "cpu_irq_dirty", "md", "game_hooks", "stderr", "cpu_stopping", "cpu_call_ret"]
 
 
 def lib_names():

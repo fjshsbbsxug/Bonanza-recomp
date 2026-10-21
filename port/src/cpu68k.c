@@ -153,9 +153,12 @@ int cpu_run_until_idle(int cycles)
     return idle;
 }
 
+uint32_t cpu_call_ret;
+
 void cpu_call(uint32_t addr, uint32_t ret)
 {
-    uint32_t sp0 = REG_SP;
+    uint32_t sp0 = REG_SP, ret0 = cpu_call_ret;
+    cpu_call_ret = ret;                      /* (the translated code's rts comes back here) */
     m68ki_push_32(ret);
     REG_PC = addr;
     /* (the frame's time may run out within it: the routine goes on to its end, its
@@ -171,6 +174,7 @@ void cpu_call(uint32_t addr, uint32_t ret)
         step();
     }
     SET_CYCLES(GET_CYCLES() - added);
+    cpu_call_ret = ret0;
 }
 
 int cpu_stopping;

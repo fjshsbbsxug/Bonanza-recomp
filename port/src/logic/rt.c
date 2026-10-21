@@ -2,6 +2,7 @@
 #include "rt.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 uint64_t logic_stat_c;
 int logic_off = -1;
@@ -18,6 +19,8 @@ void begin(uint32_t a) { cyc = 0; pc_at = a; }
 void jumped_to(uint32_t a) { pc_at = a; }
 
 void cyc_back(int n) { cyc -= n; }
+
+uint32_t pc_now(void) { return pc_at; }
 
 void ran_to(uint32_t b)
 {
@@ -70,6 +73,39 @@ void call(uint32_t addr, uint32_t jsr_at)
     pc_at = (uint32_t)saved_pc;
 }
 
+uint32_t jsr_target(uint32_t at)
+{
+    uint16_t op = rom16(at);
+    if (op == 0x4EB9 || op == 0x4EF9) return rom32(at + 2);            /* jsr / jmp abs.l */
+    if (op == 0x4EB8) return (uint32_t)(int32_t)(int16_t)rom16(at + 2);  /* jsr abs.w */
+    if (op == 0x4EBA) return at + 2 + (int16_t)rom16(at + 2);           /* jsr (d16,pc) */
+    if (op == 0x6100) return at + 2 + (int16_t)rom16(at + 2);           /* bsr.w */
+    if ((op & 0xFF00) == 0x6100) return at + 2 + (int8_t)(op & 0xFF);  /* bsr.s */
+    fprintf(stderr, "logic: no jsr at %06X\n", at);
+    abort();
+}
+
+int player_jump(int p, uint32_t a, uint32_t jmp)
+{
+    uint32_t at = P(p, jmp), to = jsr_target(at);
+    if (!p && to != a) {
+        fprintf(stderr, "logic: the jmp at %06X goes to %06X, not %06X\n", jmp, to, a);
+        abort();
+    }
+    ran_to(at + 6);
+    return jump_to(to);
+}
+
+void player_call(int p, uint32_t a, uint32_t jsr)
+{
+    uint32_t at = P(p, jsr), to = jsr_target(at);
+    if (!p && to != a) {
+        fprintf(stderr, "logic: the jsr at %06X calls %06X, not %06X\n", jsr, to, a);
+        abort();
+    }
+    call(to, at);
+}
+
 uint32_t run_part(uint32_t addr, const uint32_t *stops, int n)
 {
     USE_CYCLES(cyc);
@@ -77,6 +113,37 @@ uint32_t run_part(uint32_t addr, const uint32_t *stops, int n)
     uint32_t at = cpu_run_part(addr, stops, n);
     pc_at = at;
     return at;
+}
+
+/* ---- the players' code */
+
+#include "player2_map.h"
+
+static uint32_t look_up(const uint32_t (*map)[2], int n, uint32_t a, const char *what)
+{
+    int lo_ = 0, hi = n - 1;
+    while (lo_ <= hi) {
+        int m = (lo_ + hi) / 2;
+        if (map[m][0] == a) return map[m][1];
+        if (map[m][0] < a) lo_ = m + 1; else hi = m - 1;
+    }
+    fprintf(stderr, "logic: no player 2 %s for %06X (tools/player_map.py)\n", what, a);
+    abort();
+}
+
+uint32_t player2_at(uint32_t a)
+{
+    return look_up(player2_places, (int)(sizeof(player2_places) / sizeof(player2_places[0])), a, "place");
+}
+
+uint32_t player2_ram(uint32_t a)
+{
+    return look_up(player2_words, (int)(sizeof(player2_words) / sizeof(player2_words[0])), a, "word");
+}
+
+uint32_t player2_table(uint32_t a)
+{
+    return look_up(player2_tables, (int)(sizeof(player2_tables) / sizeof(player2_tables[0])), a, "table");
 }
 
 /* ---- checks */
@@ -109,7 +176,17 @@ void count_named(const char *name)
 int start_named(const char *name)
 {
     if (logic_off < 0) logic_off = getenv("BONANZA_TRANSLATED") != 0;
+    static int trace = -1;                             /* LOGIC_TRACE=1: each part as it starts, */
+    if (trace < 0) trace = getenv("LOGIC_TRACE") != 0; /* with the frame's time left (both ways) */
+    if (trace) fprintf(stderr, "logic %s %d\n", name, (int)GET_CYCLES());
     if (logic_off) return 0;
+    static const char *skip = (const char *)-1;       /* LOGIC_SKIP=a,b: these as the game's code */
+    if (skip == (const char *)-1) skip = getenv("LOGIC_SKIP");
+    if (skip) {
+        size_t n = strlen(name);
+        for (const char *s = strstr(skip, name); s; s = strstr(s + 1, name))
+            if ((s == skip || s[-1] == ',') && (s[n] == ',' || !s[n])) return 0;
+    }
     logic_stat_c++;
     count_named(name);
     cyc = 0;
