@@ -210,6 +210,39 @@ extern int  logic_stairs_go_p1(void);         /* sub_0D5FE */
 extern int  logic_stairs_go_p2(void);         /* sub_0FA18 */
 extern int  logic_stairs_frame_p1(void);      /* sub_0D654 */
 extern int  logic_stairs_frame_p2(void);      /* sub_0FA6E */
+extern int  logic_player_request_p1(void);    /* sub_09846 */
+extern int  logic_player_request_p2(void);    /* sub_09894 */
+extern int  logic_player_walk_ask_p1(void);   /* sub_0AF32 */
+extern int  logic_player_walk_ask_p2(void);   /* sub_0AF58 */
+extern int  logic_player_no_stairs_p1(void);  /* sub_0AFE8 */
+extern int  logic_player_no_stairs_p2(void);  /* sub_0B050 */
+extern int  logic_player_side_blocked_p1(void);/* sub_0B0B8 */
+extern int  logic_player_side_blocked_p2(void);/* sub_0B17C */
+extern int  logic_player_points_standing_p1(void);/* sub_0B23A */
+extern int  logic_player_points_standing_p2(void);/* sub_0B2BC */
+extern int  logic_player_points_lying_p1(void);/* sub_0B33E */
+extern int  logic_player_points_lying_p2(void);/* sub_0B3C0 */
+extern int  logic_player_recover_p1(void);    /* sub_0AEC2 */
+extern int  logic_player_recover_p2(void);    /* sub_0AEFA */
+extern int  logic_player_drop_loot_p1(void);  /* sub_0ABF6 */
+extern int  logic_player_drop_loot_p2(void);  /* sub_0ACE4 */
+extern int  logic_loot_back(void);            /* sub_0ADD0 */
+extern int  logic_tell_guards(void);          /* sub_0AF7E */
+extern int  logic_player_point_p1(void);      /* sub_0B442 */
+extern int  logic_player_point_p2(void);      /* sub_0B45A */
+extern int  logic_path_move_free_p1(void);    /* sub_0A8EA */
+extern int  logic_path_move_free_p2(void);    /* sub_0A942 */
+extern int  logic_path_move_p1(void);         /* sub_0A56A */
+extern int  logic_path_move_p2(void);         /* sub_0A72A */
+extern int  logic_script_fall_p1(void);       /* sub_09B32 */
+extern int  logic_script_fall_p2(void);       /* sub_09BE6 */
+extern int  logic_script_goto_p1(void);       /* sub_09C9A */
+extern int  logic_script_goto_p2(void);       /* sub_09CAA */
+extern int  logic_player_head_room_p1(void);  /* sub_0D7E4 */
+extern int  logic_player_head_room_p2(void);  /* sub_0FBFE */
+extern int  logic_player_door_across_p1(void);/* sub_0AB68 */
+extern int  logic_player_door_across_p2(void);/* sub_0ABAA */
+extern int  logic_loot_reset(void);           /* sub_0AE02 */
 extern int  logic_take_away_p1(void);         /* sub_0AE8A */
 extern int  logic_take_away_p2(void);         /* sub_0AEA6 */
 extern int  logic_guards_forget_p1(void);     /* sub_09F42 */

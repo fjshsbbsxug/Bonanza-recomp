@@ -49,9 +49,8 @@ int logic_player_anim_p2(void) { return player_anim(1, 0x37720, 0x0981E); }
 /* sub_0986A / sub_098B8: player 1 / 2 goes into state d7 (standing, walking, shot,
  * tripped...): the state before and its routine kept, the new state's routine (run
  * every frame) from the table at 0xB492 / 0xD996 */
-static int player_state(uint32_t state, uint32_t table, uint32_t routine)
+static void state_set(uint32_t state, uint32_t table, uint32_t routine)
 {
-    if (!start()) return 0;
     uint16_t next = lo(REG_D[7]);
     set16(state + 6, ram16(state));                   /* the state before */
     set32(state + 8, ram32(state + 2));               /* ... and its routine */
@@ -60,13 +59,48 @@ static int player_state(uint32_t state, uint32_t table, uint32_t routine)
 
     set_lo(7, (uint16_t)(next << 2));                 /* (for the callers: lsl.w #2,d7) */
     FLAG_X = (uint)next >> 6;
-    begin(routine);
     ran_to(routine + 0x28);
+}
+static int player_state(uint32_t state, uint32_t table, uint32_t routine)
+{
+    if (!start()) return 0;
+    begin(routine);
+    state_set(state, table, routine);
     return done();
 }
 
 int logic_player_state_p1(void) { return player_state(P1_STATE, 0x0B492, 0x0986A); }
 int logic_player_state_p2(void) { return player_state(P2_STATE, 0x0D996, 0x098B8); }
+
+/* sub_09846 / sub_09894: player p asks for state d7: only if table 0xA07A allows going
+ * from his state to it ((state << 5) + new), and it is not his state already */
+static int player_request(int p)
+{
+    if (!start()) return 0;
+    uint32_t state = p ? P2_STATE : P1_STATE, r = p ? 0x09894 : 0x09846;
+    begin(r);
+    uint16_t cur = ram16(state), want = lo(REG_D[7]);
+    uint16_t k = (uint16_t)(((uint16_t)(cur << 5) + want) & 0x7FFF);
+    REG_A[6] = 0x0A07A;
+    uint8_t ok = md.rom[0x0A07A + (int16_t)k];
+    set_lo(6, (uint16_t)((k & 0xFF00) | ok));
+    if (!ok) {
+        FLAG_N = 0; FLAG_Z = 0; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+        branched(r + 0x16, r + 0x4C);
+        return done();
+    }
+    if (want == cur) {
+        FLAG_N = 0; FLAG_Z = 0; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+        branched(r + 0x20, r + 0x4C);
+        return done();
+    }
+    ran_to(r + 0x24);
+    state_set(state, p ? 0x0D996 : 0x0B492, r + 0x24);
+    return done();
+}
+
+int logic_player_request_p1(void) { return player_request(0); }
+int logic_player_request_p2(void) { return player_request(1); }
 
 /* sub_098E2 / sub_09928: keep player 1's / 2's pose (animation, its steps, step, time
  * and picture - the picture he had when his protection began, if protected); sub_0996E /

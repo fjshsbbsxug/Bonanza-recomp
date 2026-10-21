@@ -2437,3 +2437,625 @@ static int stairs_go(int p)
 }
 int logic_stairs_go_p1(void) { return stairs_go(0); }
 int logic_stairs_go_p2(void) { return stairs_go(1); }
+
+/* ---------------------------------------------------------------- more of the players' helpers */
+
+/* sub_0AF32 / sub_0AF58: a way pressed asks for walking (state 1; only up or down: the
+ * stairs, $8019) */
+static int player_walk_ask(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0AF32));
+    REG_D[6] = ram8(PR(p, P1_PAD)) & 0xF;
+    if (!REG_D[6]) { branched(AT(0x0AF3E), AT(0x0AF56)); return done(); }
+    REG_D[7] = 1;
+    REG_D[6] &= 0xC;
+    if (REG_D[6]) branched(AT(0x0AF48), AT(0x0AF50));
+    else { set_lo(7, 0x8019); ran_to(AT(0x0AF50)); }
+    CALL(0x09846, 0x0AF50);
+    ran_to(AT(0x0AF56));
+    return done();
+}
+int logic_player_walk_ask_p1(void) { return player_walk_ask(0); }
+int logic_player_walk_ask_p2(void) { return player_walk_ask(1); }
+
+/* sub_0AFE8 / sub_0B050: may player p not take the stairs? d0 (and the flags) nonzero:
+ * not while his little script runs, nor into a door he cannot go through, nor where
+ * sub_0D7E4 says, nor up from the top floor or down from the ground floor */
+static int player_no_stairs(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0AFE8));
+    if (ram16(PR(p, P1_SCRIPT_ON))) { ran_to(AT(0x0AFF2)); goto no; }
+    branched(AT(0x0AFEE), AT(0x0AFF8));
+    if (!ram16(PR(p, P1_TOUCHING))) branched(AT(0x0AFFE), AT(0x0B020));
+    else if (obj16(OBJ_HEIGHT, O)) branched(AT(0x0B008), AT(0x0B020));
+    else {
+        uint16_t door = ram16(PR(p, P1_DOOR));
+        set_lo(0, door);
+        if (!door) branched(AT(0x0B012), AT(0x0B020));
+        else {
+            CALL(0x0AB68, 0x0B016);
+            if (lo(REG_D[7])) { branched(AT(0x0B01E), AT(0x0AFF2)); goto no; }
+            ran_to(AT(0x0B020));
+        }
+    }
+    CALL(0x0D7E4, 0x0B020);
+    if (z_clear()) { branched(AT(0x0B026), AT(0x0AFF2)); goto no; }
+    REG_D[7] = (REG_D[7] & ~0xFFu) | ram8(PR(p, P1_PAD));
+    if (obj16(OBJ_HEIGHT, O)) {
+        branched(AT(0x0B034), AT(0x0B044));
+        if (REG_D[7] & 1) { branched(AT(0x0B048), AT(0x0AFF2)); goto no; }
+        REG_D[0] = 0;
+        ran_to(AT(0x0B04C));
+    } else {
+        if (REG_D[7] & 2) { branched(AT(0x0B03C), AT(0x0AFF2)); goto no; }
+        REG_D[0] = 0;
+        ran_to(AT(0x0B040));
+        branched(AT(0x0B040), AT(0x0B04C));
+    }
+    goto out;
+no:
+    REG_D[0] = 1;
+    ran_to(AT(0x0AFF4));
+    branched(AT(0x0AFF4), AT(0x0B04C));
+out:
+    flags_of16(lo(REG_D[0]));
+    ran_to(AT(0x0B04E));
+    return done();
+}
+int logic_player_no_stairs_p1(void) { return player_no_stairs(0); }
+int logic_player_no_stairs_p2(void) { return player_no_stairs(1); }
+
+/* sub_0B0B8 / sub_0B17C: is player p's way to the side blocked? d0 (and the flags)
+ * nonzero: a door he touches on that side he cannot go through (sub_0AAE2, as if on the
+ * floor unless on the top floor), or a wall (sub_102A6, two points of table 0xB870) */
+static int player_side_blocked(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0B0B8));
+    if (!ram16(PR(p, P1_TOUCHING))) { branched(AT(0x0B0BE), AT(0x0B10E)); goto walls; }
+    set_lo(0, ram16(PR(p, P1_CAUGHT_SIDE)));
+    if ((uint8_t)lo(REG_D[0]) != facing(p)) { branched(AT(0x0B0CE), AT(0x0B10E)); goto walls; }
+    {
+        uint16_t door = ram16(PR(p, P1_DOOR));
+        set_lo(0, door);
+        if (!door) { ran_to(AT(0x0B0DC)); goto yes; }
+        branched(AT(0x0B0D8), AT(0x0B0E2));
+        uint16_t h = obj16(OBJ_HEIGHT, O);
+        set_lo(6, h);
+        if (h == 0x10) branched(AT(0x0B0EC), AT(0x0B0F6));
+        else { set_obj16(OBJ_HEIGHT, O, 0); ran_to(AT(0x0B0F6)); }
+        uint32_t d6 = REG_D[6];
+        CALL(0x0AAE2, 0x0B0FA);
+        REG_D[6] = d6;
+        set_obj16(OBJ_HEIGHT, O, h);
+        if (lo(REG_D[7])) { branched(AT(0x0B10C), AT(0x0B0DC)); goto yes; }
+        ran_to(AT(0x0B10E));
+    }
+walls:
+    {
+        uint8_t w = (uint8_t)(((ram8(PR(p, P1_PAD)) & 0xC) >> 2) - 1);
+        REG_D[7] = (uint16_t)(w << 3);
+        uint32_t pts = PT(p, 0x0B870) + (int16_t)lo(REG_D[7]);
+        set_lo(0, (uint16_t)(obj16(OBJ_X, O) + rom16(pts)));
+        set_lo(3, rom16(pts + 2));
+        set_lo(1, (uint16_t)(obj16(OBJ_Y, O) + lo(REG_D[3])));
+        REG_A[6] = pts + 4;
+        uint32_t a6 = REG_A[6];
+        CALL(0x1016A, 0x0B13C);
+        CALL(0x102A6, 0x0B142);
+        REG_A[6] = a6;
+        if (z_clear()) { branched(AT(0x0B14C), AT(0x0B0DC)); goto yes; }
+        set_lo(0, (uint16_t)(obj16(OBJ_X, O) + rom16(REG_A[6])));
+        REG_A[6] += 2;
+        set_lo(3, rom16(REG_A[6]));
+        set_lo(1, (uint16_t)(obj16(OBJ_Y, O) + lo(REG_D[3])));
+        CALL(0x1016A, 0x0B160);
+        CALL(0x102A6, 0x0B166);
+        if (z_clear()) { branched(AT(0x0B16C), AT(0x0B0DC)); goto yes; }
+        REG_D[0] = 0;
+        ran_to(AT(0x0B172));
+        goto out;
+    }
+yes:
+    REG_D[0] = 1;
+    ran_to(AT(0x0B0DE));
+    branched(AT(0x0B0DE), AT(0x0B172));
+out:
+    flags_of16(lo(REG_D[0]));
+    ran_to(AT(0x0B174));
+    return done();
+}
+int logic_player_side_blocked_p1(void) { return player_side_blocked(0); }
+int logic_player_side_blocked_p2(void) { return player_side_blocked(1); }
+
+/* sub_0B23A / sub_0B2BC and sub_0B33E / sub_0B3C0: the points around player p where walls
+ * are looked for (8 pairs from $56F2): standing, and lying (player 2's two of them two
+ * pixels further) */
+static const uint16_t points_standing[16] = {
+    0xFFDA, 0xFFD1, 0xFFE0, 0xFFD1, 0xFFE6, 0xFFD1, 0xFFDA, 0xFFE0,
+    0xFFE6, 0xFFE0, 0xFFDA, 0xFFEF, 0xFFE0, 0xFFEF, 0xFFE6, 0xFFEF,
+};
+static const uint16_t points_lying[16] = {
+    0xFFD8, 0xFFD8, 0xFFE0, 0xFFD8, 0xFFE8, 0xFFD8, 0xFFD8, 0xFFE0,
+    0xFFE8, 0xFFE0, 0xFFD8, 0xFFE8, 0xFFE0, 0xFFE8, 0xFFE8, 0xFFE8,
+};
+static int player_points(int p, const uint16_t *v, uint32_t r)
+{
+    if (!start()) return 0;
+    begin(AT(r));
+    for (int k = 0; k < 16; k++) {
+        uint16_t w = v[k];
+        if (p && v == points_lying && (k == 4 || k == 14)) w = 0xFFEA;
+        set16(PR(p, 0xFF56F2 + 2 * k), w);
+    }
+    ran_to(AT(r + 0x80));
+    return done();
+}
+int logic_player_points_standing_p1(void) { return player_points(0, points_standing, 0x0B23A); }
+int logic_player_points_standing_p2(void) { return player_points(1, points_standing, 0x0B23A); }
+int logic_player_points_lying_p1(void) { return player_points(0, points_lying, 0x0B33E); }
+int logic_player_points_lying_p2(void) { return player_points(1, points_lying, 0x0B33E); }
+
+/* sub_0AEC2 / sub_0AEFA: player p gets up again after being shot: (in play: $180E) he
+ * stands, protected for 180 frames, off the stairs, his standing points */
+static int player_recover(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0AEC2));
+    if (ram16(0xFF6C4E)) branched(AT(0x0AEC8), AT(0x0AED4));
+    else { set16(PR(p, 0xFF180E), 1); ran_to(AT(0x0AED4)); }
+    CALL(0x099D6, 0x0AED4);
+    set_lo(7, 0xB4);
+    CALL(0x09EDA, 0x0AEDE);
+    set16(PR(p, 0xFF56E2), 1);
+    set8(PR(p, P1_ON_STAIRS), 0);
+    CALL(0x0B23A, 0x0AEF2);
+    ran_to(AT(0x0AEF8));
+    return done();
+}
+int logic_player_recover_p1(void) { return player_recover(0); }
+int logic_player_recover_p2(void) { return player_recover(1); }
+
+/* sub_0ADD0: loot object d0 back as it was (its picture, its time), one fewer taken, the
+ * way out shut again */
+static void loot_back_do(uint16_t o, uint32_t r)
+{
+    set_obj16(OBJ_FRAME, o, obj16(OBJ_PICTURE, o));
+    set_obj16(OBJ_DELAY, o, obj16(OBJ_LEFT, o));
+    set16(0xFF9E0E, (uint16_t)(ram16(0xFF9E0E) - 1));
+    set16(LOOT_ALL, 0);
+    REG_A[5] = OBJ_DELAY;
+    REG_A[6] = OBJ_LEFT;
+    ran_to(r + 0x30);
+}
+int logic_loot_back(void)
+{
+    if (!start()) return 0;
+    begin(0x0ADD0);
+    loot_back_do(lo(REG_D[0]), 0x0ADD0);
+    return done();
+}
+
+/* sub_0ABF6 / sub_0ACE4: player p drops the loot he carries (objects $26..$45 carried,
+ * $9E9E = 2, by him: owner 0 for player 1's copy, nonzero for player 2's): each falls
+ * from where he is (dx 2 his way, dy -6), counted ($A15A), back as it was (sub_0ADD0) */
+static int player_drop_loot(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0ABF6));
+    CALL(0x19A18, 0x0ABF6);
+    REG_D[0] = (REG_D[0] & 0xFFFF0000u) | 0x4C;
+    set_lo(1, 0x1F);
+    REG_D[2] = 1;
+    for (;;) {
+        uint16_t o = lo(REG_D[0]);
+        if (!obj16(OBJ_ACTIVE, o)) { branched(AT(0x0AC10), AT(0x0ACDC)); goto next; }
+        if (obj16(0xFF9E12, o)) { branched(AT(0x0AC1E), AT(0x0ACDC)); goto next; }
+        if (obj16(0xFF9E9E, o) != 2) { branched(AT(0x0AC2E), AT(0x0ACDC)); goto next; }
+        {
+            uint16_t owner = obj16(0xFF9FB6, o);
+            set_lo(7, owner);
+            REG_A[5] = 0xFF9FB6;
+            if (p ? owner == 0 : owner != 0) { branched(AT(0x0AC3C), AT(0x0ACDC)); goto next; }
+            set_obj16(0xFF9E9E, o, 3);
+            set_obj16(OBJ_X, o, obj16(OBJ_X, owner));
+            set_obj16(OBJ_Y, o, obj16(OBJ_Y, owner));
+            REG_D[6] = 0;
+            if (obj16(OBJ_HEIGHT, owner)) { REG_D[6] = 0x10; ran_to(AT(0x0AC72)); }
+            else branched(AT(0x0AC6A), AT(0x0AC72));
+            set_obj16(OBJ_HEIGHT, o, lo(REG_D[6]));
+            REG_D[6] = 0xFFFFFFFEu;
+            if (facing(p) == 1) branched(AT(0x0AC80), AT(0x0AC86));
+            else { REG_D[6] = 2; ran_to(AT(0x0AC86)); }
+            set_obj16(OBJ_DX, o, lo(REG_D[6]));
+            set_obj16(OBJ_DY, o, 0xFFFA);
+            set_obj16(0xFFA15A, o, lo(REG_D[2]));
+            if (ram16(PR(p, P1_TOUCHED_B))) branched(AT(0x0ACAC), AT(0x0ACB2));
+            else { REG_D[2] += 4; ran_to(AT(0x0ACB2)); }
+            set_obj16(0xFFA1E6, o, 1);
+            set_obj16(0xFF492A, o, 4);
+            set_obj16(OBJ_PASS, o, 1);
+            REG_A[6] = OBJ_PASS;
+            CALL(0x0ADD0, 0x0ACD6);
+        }
+next:
+        REG_D[0] = (REG_D[0] & 0xFFFF0000u) | (uint16_t)(o + 2);
+        uint16_t n = lo(REG_D[1]);
+        set_lo(1, (uint16_t)(n - 1));
+        if (n == 0) { ran_to(AT(0x0ACE2)); break; }
+        ran_to(AT(0x0ACDE));
+        branched(AT(0x0ACDE), AT(0x0AC06));
+    }
+    return done();
+}
+int logic_player_drop_loot_p1(void) { return player_drop_loot(0); }
+int logic_player_drop_loot_p2(void) { return player_drop_loot(1); }
+
+/* sub_0AF7E: the guards in view d7 / 2 (1 player 1's, 2 player 2's), not after anyone,
+ * on the ground or the top floor, are told (sub_17A44, d3 = d7) */
+int logic_tell_guards(void)
+{
+    if (!start()) return 0;
+    begin(0x0AF7E);
+    REG_A[0] = OBJ_ACTIVE;
+    REG_A[1] = OBJ_ON_SCREEN;
+    REG_A[2] = GUARD_SEEN;
+    REG_D[0] = (REG_D[0] & 0xFFFF0000u) | 0xC;
+    set_lo(1, 0x1F);
+    set_lo(2, (uint16_t)(lo(REG_D[7]) >> 1));
+    ran_to(0x0AF9C);
+    for (;;) {
+        uint16_t o = lo(REG_D[0]);
+        if (!obj16(OBJ_ACTIVE, o)) { branched(0x0AFA0, 0x0AFE0); goto next; }
+        set_lo(3, obj16(OBJ_ON_SCREEN, o) & lo(REG_D[2]));
+        if (!lo(REG_D[3])) { branched(0x0AFAA, 0x0AFE0); goto next; }
+        if (obj16(GUARD_SEEN, o)) { branched(0x0AFB2, 0x0AFE0); goto next; }
+        REG_A[6] = OBJ_HEIGHT;
+        if (!obj16(OBJ_HEIGHT, o)) branched(0x0AFC0, 0x0AFCE);
+        else if (obj16(OBJ_HEIGHT, o) != 0x10) { branched(0x0AFCA, 0x0AFE0); goto next; }
+        else ran_to(0x0AFCE);
+        {
+            uint32_t d2 = REG_D[2], d7 = REG_D[7];
+            set_lo(3, lo(REG_D[7]));
+            set_lo(2, o);
+            call(0x17A44, 0x0AFD6);
+            REG_D[2] = d2; REG_D[7] = d7;
+        }
+next:
+        REG_D[0] = (REG_D[0] & 0xFFFF0000u) | (uint16_t)(o + 2);
+        uint16_t n = lo(REG_D[1]);
+        set_lo(1, (uint16_t)(n - 1));
+        if (n == 0) { ran_to(0x0AFE6); break; }
+        ran_to(0x0AFE2);
+        branched(0x0AFE2, 0x0AF9C);
+    }
+    return done();
+}
+
+/* ---------------------------------------------------------------- moving along a path */
+
+/* sub_0B442 / sub_0B45A: the point at a6 (dx, dy: one of his eight) around player p,
+ * moved by d7, d6: d0 its x, d1 its y, d3 its dy (a6 on to the dy) */
+static int player_point(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0B442));
+    set_lo(0, (uint16_t)(obj16(OBJ_X, O) + lo(REG_D[7]) + mem16(REG_A[6])));
+    REG_A[6] += 2;
+    set_lo(3, (uint16_t)(mem16(REG_A[6]) + lo(REG_D[6])));
+    set_lo(1, (uint16_t)(obj16(OBJ_Y, O) + lo(REG_D[3])));
+    ran_to(AT(0x0B458));
+    return done();
+}
+int logic_player_point_p1(void) { return player_point(0); }
+int logic_player_point_p2(void) { return player_point(1); }
+
+/* (a step of the path's moves ended: the next one, P1_STEPS_LEFT on: dx, dy, frames) */
+static void path_next_move(int p, uint32_t r)
+{
+    uint16_t n = (uint16_t)(ram16(PR(p, P1_STEP)) - 1);
+    set16(PR(p, P1_STEP), n);
+    if (n) { branched(AT(r + 6), AT(r + 0x32)); return; }
+    set_lo(7, (uint16_t)(ram16(PR(p, P1_STEPS_LEFT)) << 3));
+    REG_A[6] = ram32(PR(p, P1_PATH)) + (int16_t)lo(REG_D[7]);
+    set_obj16(OBJ_DX, O, mem16(REG_A[6]));
+    set_obj16(OBJ_DY, O, mem16(REG_A[6] + 2));
+    REG_A[6] += 4;
+    set16(PR(p, P1_STEP), mem16(REG_A[6]));
+    set16(PR(p, P1_STEPS_LEFT), (uint16_t)(ram16(PR(p, P1_STEPS_LEFT)) + 1));
+    ran_to(AT(r + 0x32));
+}
+
+/* sub_0A8EA / sub_0A942: player p moves by his dx, dy, through anything, along his path */
+static int path_move_free(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0A8EA));
+    set_lo(7, (uint16_t)(obj16(OBJ_DX, O) + obj16(OBJ_X, O)));
+    set_obj16(OBJ_X, O, lo(REG_D[7]));
+    set_lo(7, (uint16_t)(obj16(OBJ_DY, O) + obj16(OBJ_Y, O)));
+    set_obj16(OBJ_Y, O, lo(REG_D[7]));
+    ran_to(AT(0x0A90E));
+    path_next_move(p, 0x0A90E);
+    return done();
+}
+int logic_path_move_free_p1(void) { return path_move_free(0); }
+int logic_path_move_free_p2(void) { return path_move_free(1); }
+
+/* sub_0A56A / sub_0A72A: player p moves along his path, stopped by walls: across unless
+ * a door's side or a wall at two of his points that way (sub_1019E), or lying from a
+ * jump ($56F0); up or down unless a wall at two of his points that way */
+static int path_move(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0A56A));
+    set_lo(7, obj16(OBJ_DX, O));
+    if (ram16(PR(p, P1_TOUCHING))) {
+        set_lo(0, ram16(PR(p, P1_CAUGHT_SIDE)));
+        if ((uint8_t)lo(REG_D[0]) != facing(p)) { branched(AT(0x0A586), AT(0x0A642)); goto updown; }
+        ran_to(AT(0x0A58A));
+    } else branched(AT(0x0A576), AT(0x0A58A));
+    {
+        set_lo(6, lo(REG_D[7]));
+        int right = (int16_t)lo(REG_D[7]) >= 0;
+        /* the two points (their offsets from $56F2) and where the jsr's are */
+        static const uint16_t pts[2][2] = {{0x0, 0x14}, {0x8, 0x1C}};
+        static const uint16_t at[2][2] = {{0xA590, 0xA5B6}, {0xA5E0, 0xA606}};
+        if (right) branched(AT(0x0A58C), AT(0x0A5E0)); else ran_to(AT(0x0A590));
+        for (int k = 0; k < 2; k++) {
+            uint32_t a = at[right][k];
+            REG_A[6] = PR(p, 0xFF56F2) + pts[right][k];
+            REG_D[6] = 0;
+            CALL(0x0B442, a + 8);
+            uint32_t d7 = REG_D[7];
+            CALL(0x1016A, a + 0x12);
+            CALL(0x1019E, a + 0x18);
+            REG_D[7] = d7;
+            if (z_clear()) { branched(AT(a + 0x22), AT(0x0A642)); goto updown; }
+        }
+        if (!right) branched(AT(0x0A5DC), AT(0x0A62C)); else ran_to(AT(0x0A62C));
+        if (ram16(PR(p, P1_FROM_JUMP))) { branched(AT(0x0A632), AT(0x0A642)); goto updown; }
+        set_lo(7, (uint16_t)(lo(REG_D[7]) + obj16(OBJ_X, O)));
+        set_obj16(OBJ_X, O, lo(REG_D[7]));
+        ran_to(AT(0x0A642));
+    }
+updown:
+    {
+        set_lo(6, obj16(OBJ_DY, O));
+        set_lo(7, lo(REG_D[6]));
+        int down = (int16_t)lo(REG_D[6]) >= 0;
+        static const uint16_t pts[2][2] = {{0x0, 0x8}, {0x14, 0x1C}};
+        static const uint16_t at[2][2] = {{0xA64E, 0xA674}, {0xA69E, 0xA6C4}};
+        if (down) branched(AT(0x0A64A), AT(0x0A69E)); else ran_to(AT(0x0A64E));
+        for (int k = 0; k < 2; k++) {
+            uint32_t a = at[down][k];
+            REG_A[6] = PR(p, 0xFF56F2) + pts[down][k];
+            REG_D[7] = 0;
+            CALL(0x0B442, a + 8);
+            uint32_t d6 = REG_D[6];
+            CALL(0x1016A, a + 0x12);
+            CALL(0x1019E, a + 0x18);
+            REG_D[6] = d6;
+            if (z_clear()) { branched(AT(a + 0x22), AT(0x0A6F6)); goto next; }
+        }
+        if (!down) branched(AT(0x0A69A), AT(0x0A6EA)); else ran_to(AT(0x0A6EA));
+        set_lo(6, (uint16_t)(lo(REG_D[6]) + obj16(OBJ_Y, O)));
+        set_obj16(OBJ_Y, O, lo(REG_D[6]));
+        ran_to(AT(0x0A6F6));
+    }
+next:
+    path_next_move(p, 0x0A6F6);
+    return done();
+}
+int logic_path_move_p1(void) { return path_move(0); }
+int logic_path_move_p2(void) { return path_move(1); }
+
+/* ---------------------------------------------------------------- the little scripts' commands */
+
+/* command 0 of player p's little script (sub_09B32 / sub_09BE6; a6 at its word): fall dy
+ * (the script, sub_09AB6, speeds up from 1 to 6). Any of his feet (sub_0B8BC at three
+ * points, the table the script began with) on a floor: the script ends, the step to the
+ * floor (sub_0BF10), and a fall of $4A or more knocks him flat ($8010). He moves, the
+ * distance fallen counted (P1_SCRIPT_STEP) */
+static int script_fall(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x09B32));
+    set_lo(7, mem16(REG_A[6]));
+    REG_A[6] += 2;
+    set32(PR(p, P1_SCRIPT), REG_A[6]);
+    static const uint16_t jsr_at[3] = {0x9B48, 0x9B6C, 0x9B90};
+    int land = 0;
+    for (int k = 0; k < 3 && !land; k++) {
+        uint16_t fx = obj16(OBJ_X, O);
+        if (k == 0) fx = (uint16_t)(fx - 0x20);
+        else {
+            REG_A[6] = ram32(PR(p, P1_SCRIPT_AT));
+            fx = k == 1 ? (uint16_t)(fx + mem16(REG_A[6] + 4) + 3) : (uint16_t)(fx + mem16(REG_A[6] + 0xC) - 2);
+        }
+        set_lo(0, fx);
+        uint32_t d7 = REG_D[7];
+        CALL(0x0B8BC, jsr_at[k]);
+        REG_D[7] = d7;
+        if (z_clear()) { branched(AT(jsr_at[k] + 0xA), AT(0x09BBC)); land = 1; }
+    }
+    if (land) {
+        set16(PR(p, P1_SCRIPT_ON), 0);
+        CALL(0x0BF10, 0x09BC2);
+        if (ram16(PR(p, P1_SCRIPT_STEP)) < 0x4A) branched(AT(0x09BD0), AT(0x09B9E));
+        else {
+            uint32_t d7 = REG_D[7];
+            set_lo(7, 0x8010);
+            CALL(0x09846, 0x09BDA);
+            REG_D[7] = d7;
+            ran_to(AT(0x09BE4));
+            branched(AT(0x09BE4), AT(0x09B9E));
+        }
+    } else ran_to(AT(0x09B9E));
+    set_lo(6, (uint16_t)(obj16(OBJ_Y, O) + lo(REG_D[7])));
+    set_obj16(OBJ_Y, O, lo(REG_D[6]));
+    set_lo(6, (uint16_t)(ram16(PR(p, P1_SCRIPT_STEP)) + lo(REG_D[7])));
+    set16(PR(p, P1_SCRIPT_STEP), lo(REG_D[6]));
+    ran_to(AT(0x09BBA));
+    return done();
+}
+int logic_script_fall_p1(void) { return script_fall(0); }
+int logic_script_fall_p2(void) { return script_fall(1); }
+
+/* command 1 (sub_09C9A / sub_09CAA): the script goes on at the address in it */
+static int script_goto(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x09C9A));
+    set_lo(7, mem16(REG_A[6]));
+    REG_A[5] = mem32(REG_A[6] + 2);
+    REG_A[6] += 6;
+    set32(PR(p, P1_SCRIPT), REG_A[5]);
+    ran_to(AT(0x09CA4));
+    return player_jump(p, 0x09AE8, 0x09CA4);
+}
+int logic_script_goto_p1(void) { return script_goto(0); }
+int logic_script_goto_p2(void) { return script_goto(1); }
+
+/* ---------------------------------------------------------------- room above his head */
+
+/* sub_0D7E4 / sub_0FBFE: is there no room for player p above him (onto stairs mid-jump)?
+ * Walls (sub_10224) at his head (OBJ_DELAY: -15 / -17 for player 1, -19 / -21 for player 2,
+ * jumping or not) and 42 up, 24 and 40 to his left: bit 0 / bit 1. Both sides, or a wall
+ * at 32 to his left 22 or 42 up: no room (d7 = 1). One side: with left or right held, no
+ * room as it is; with up or down, he is nudged a pixel away from it, and no room. None:
+ * room (d7 = 0). The flags as the routine leaves them. */
+static int probe_head(int p, uint32_t at, int16_t dx, int head, uint16_t dy, int test)
+{
+    set_lo(0, (uint16_t)(obj16(OBJ_X, O) + dx));
+    set_lo(3, head ? obj16(OBJ_DELAY, O) : dy);
+    set_lo(1, (uint16_t)(obj16(OBJ_Y, O) + lo(REG_D[3])));
+    uint32_t d7 = REG_D[7];
+    int k = head ? 0x1C : 0x1A;
+    CALL(0x1016A, at + k);
+    CALL(0x10224, at + k + 6);
+    REG_D[7] = d7;
+    if (!test) return z_clear();
+    if (z_clear()) { REG_D[7] |= 1u << (test - 1); ran_to(AT(at + k + 0x18)); }
+    else branched(AT(at + k + 0x10), AT(at + k + 0x18));
+    return 0;
+}
+static int player_head_room(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0D7E4));
+    int jumping = ram16(PR(p, P1_STATE)) == 0x8002;
+    set_lo(7, p ? (jumping ? 0xFFED : 0xFFEB) : (jumping ? 0xFFF1 : 0xFFEF));
+    if (jumping) branched(AT(0x0D7F0), AT(0x0D7F8)); else ran_to(AT(0x0D7F8));
+    set_obj16(OBJ_DELAY, O, lo(REG_D[7]));
+    REG_D[7] = 0;
+    probe_head(p, 0x0D800, -0x18, 1, 0, 1);
+    probe_head(p, 0x0D834, -0x18, 0, 0xFFD6, 1);
+    probe_head(p, 0x0D866, -0x28, 1, 0, 2);
+    probe_head(p, 0x0D89A, -0x28, 0, 0xFFD6, 2);
+    if (lo(REG_D[7]) == 3) { branched(AT(0x0D8D0), AT(0x0D966)); goto no_room; }
+    ran_to(AT(0x0D8D4));
+    if (probe_head(p, 0x0D8D4, -0x20, 0, 0xFFEA, 0)) { branched(AT(0x0D8FE), AT(0x0D966)); goto no_room; }
+    ran_to(AT(0x0D902));
+    if (probe_head(p, 0x0D902, -0x20, 0, 0xFFD6, 0)) { branched(AT(0x0D92C), AT(0x0D966)); goto no_room; }
+    if (!lo(REG_D[7])) {
+        FLAG_N = 0; FLAG_Z = 0; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+        branched(AT(0x0D932), AT(0x0D968));
+        return done();
+    }
+    {
+        uint8_t lr = ram8(PR(p, P1_PAD)) & 0xC;
+        REG_D[6] = (REG_D[6] & ~0xFFu) | lr;
+        if (lr) {
+            FLAG_N = 0; FLAG_Z = lr; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+            branched(AT(0x0D940), AT(0x0D968));
+            return done();
+        }
+        uint8_t ud = ram8(PR(p, P1_PAD)) & 3;
+        REG_D[6] = (REG_D[6] & ~0xFFu) | ud;
+        if (!ud) { branched(AT(0x0D94E), AT(0x0D966)); goto no_room; }
+        int carry = lo(REG_D[7]) & 1;
+        set_lo(6, 0xFFFF);
+        set_lo(7, (uint16_t)(lo(REG_D[7]) >> 1));
+        if (carry) branched(AT(0x0D958), AT(0x0D960));
+        else { set_lo(6, 1); ran_to(AT(0x0D960)); }
+        set_obj16(OBJ_X, O, (uint16_t)(obj16(OBJ_X, O) + lo(REG_D[6])));
+        ran_to(AT(0x0D966));
+    }
+no_room:
+    REG_D[7] = 1;
+    FLAG_N = 0; FLAG_Z = 1; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR;
+    ran_to(AT(0x0D968));
+    return done();
+}
+int logic_player_head_room_p1(void) { return player_head_room(0); }
+int logic_player_head_room_p2(void) { return player_head_room(1); }
+
+/* sub_0AB68 / sub_0ABAA: is door d0 in player p's way as he goes up or down? d7 = 1 if it
+ * is not at his height, is open, and open the way he goes (its animation, table 0xABEE by
+ * the side) */
+static int player_door_across(int p)
+{
+    if (!start()) return 0;
+    begin(AT(0x0AB68));
+    uint16_t d = lo(REG_D[0]);
+    REG_D[7] = 0;
+    uint16_t h = obj16(OBJ_HEIGHT, d);
+    set_lo(6, h);
+    REG_A[6] = OBJ_HEIGHT;
+    if (h == obj16(OBJ_HEIGHT, O)) { branched(AT(0x0AB76), AT(0x0ABA8)); return done(); }
+    REG_A[6] = 0xFF9E9E;
+    if (!obj16(0xFF9E9E, d)) { branched(AT(0x0AB84), AT(0x0ABA8)); return done(); }
+    uint16_t side = (uint16_t)(ram16(PR(p, P1_CAUGHT_SIDE)) * 2);
+    uint16_t anim = rom16(0x0ABEE + (int16_t)side);
+    set_lo(6, anim);
+    REG_A[6] = OBJ_ANIM;
+    if (anim != obj16(OBJ_ANIM, d)) { branched(AT(0x0ABA2), AT(0x0ABA8)); return done(); }
+    REG_D[7] = 1;
+    ran_to(AT(0x0ABA8));
+    return done();
+}
+int logic_player_door_across_p1(void) { return player_door_across(0); }
+int logic_player_door_across_p2(void) { return player_door_across(1); }
+
+/* sub_0AE02: all the loot back where it started (objects $26..$45 not taken away, $9E12):
+ * its place, height, its picture and time (sub_0ADD0), none taken, none carried; then
+ * what the players hold goes (sub_0AE8A, sub_0AEA6) */
+int logic_loot_reset(void)
+{
+    if (!start()) return 0;
+    begin(0x0AE02);
+    uint32_t d0 = REG_D[0], d1 = REG_D[1];
+    REG_D[0] = (REG_D[0] & 0xFFFF0000u) | 0x4C;
+    set_lo(1, 0x1F);
+    ran_to(0x0AE0E);
+    for (;;) {
+        uint16_t o = lo(REG_D[0]);
+        REG_A[6] = 0xFF9E12;
+        set_lo(7, obj16(0xFF9E12, o));
+        if (lo(REG_D[7])) { branched(0x0AE18, 0x0AE72); goto next; }
+        set_obj16(OBJ_X, o, obj16(0xFF508E, o));
+        set_obj16(OBJ_Y, o, obj16(OBJ_END_Y, o));
+        set_obj16(OBJ_HEIGHT, o, obj16(0xFF51E6, o));
+        set_obj16(0xFFA5CC, o, 0);
+        call(0x0ADD0, 0x0AE5C);
+        set16(0xFF9E0E, 0);
+        set_obj16(0xFF9E9E, o, 0);
+        REG_A[6] = 0xFF9E9E;
+        ran_to(0x0AE72);
+next:
+        REG_D[0] = (REG_D[0] & 0xFFFF0000u) | (uint16_t)(o + 2);
+        uint16_t n = lo(REG_D[1]);
+        set_lo(1, (uint16_t)(n - 1));
+        if (n == 0) { ran_to(0x0AE78); break; }
+        ran_to(0x0AE74);
+        branched(0x0AE74, 0x0AE0E);
+    }
+    call(0x0AE8A, 0x0AE78);
+    call(0x0AEA6, 0x0AE7E);
+    REG_D[0] = d0; REG_D[1] = d1;
+    ran_to(0x0AE88);
+    return done();
+}

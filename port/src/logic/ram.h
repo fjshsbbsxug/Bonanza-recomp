@@ -104,6 +104,7 @@
 #define P1_SCRIPT_STEP    0xFF56B8
 #define P1_SCRIPT_AT      0xFF6C06   /* (long) (what the script started with: a6) */
 #define P1_LIFT           0xFF6C0E   /* how high his feet are looked for (16; player 2's 12) */
+#define P1_TOUCHED_B      0xFFA3A8   /* (cleared each frame after his state, as P1_TOUCHING) */
 #define P1_TOUCHING       0xFFA3AE   /* (nonzero: he touches something, on side P1_CAUGHT_SIDE) */
 #define P1_SCRIPT_ON      0xFF56B2   /* nonzero: a little script moves him (sub_09ADE) ... */
 #define P1_SCRIPT         0xFF56B4   /* (long) ... where it is */

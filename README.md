@@ -131,7 +131,12 @@ builder/      the HTML builder page
     scrolling, what is under him, the way out), and every state in the state table:
     standing, walking, jumping (its path commands), against a wall, firing, tripping,
     taking loot, going through a door, falling down a hole, shot, hiding, opening a door,
-    knocked flat, carrying, the stairs, off an edge, at the way out and going out. The game has the
+    knocked flat, carrying, the stairs, off an edge, at the way out and going out; and
+    their helpers (moving along a path through walls or not, the little scripts' falls,
+    the checks for stairs, doors, walls to the side and room above the head, the state
+    requests, dropping and resetting loot, telling the guards). Kept as the game's code:
+    the stage start (it runs while a stage is set up, when a frame may run out of time
+    inside it) and the demo-input takeover (player 2's copy runs on into player 1's). The game has the
     players' code twice; the C is written once with player 1's addresses, and
     `tools/player_map.py` lines player 2's copy up with it (`player2_map.h`: the places,
     tables and work memory of player 2's copy; `--diff` lists where the two differ, e.g.

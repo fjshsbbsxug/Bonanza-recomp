@@ -33,7 +33,7 @@ PAIRS = [
     (0x0AAE2, 0x0AB24), (0x0AB68, 0x0ABAA), (0x0ABF6, 0x0ACE4), (0x0AE8A, 0x0AEA6),
     (0x0AEC2, 0x0AEFA), (0x0AF32, 0x0AF58), (0x0AFE8, 0x0B050), (0x0B0B8, 0x0B17C),
     (0x0B23A, 0x0B2BC), (0x0B33E, 0x0B3C0), (0x0B442, 0x0B45A),
-    (0x0BF10, 0x0E392),
+    (0x0BF10, 0x0E392), (0x0D7E4, 0x0FBFE),
 ]
 STATES = (0x0B492, 0x0D996, 0x36)       # the state tables: player 1's, player 2's, entries
 # whole blocks lined up as one (the states' code: a state's next part is set as a pointer,
@@ -41,8 +41,13 @@ STATES = (0x0B492, 0x0D996, 0x36)       # the state tables: player 1's, player 2
 BLOCKS = [(0x0B56A, 0x0D660, 0x0DA6E, 0x0FA70)]
 
 
+def mnem(i):
+    """(a call by bsr or jsr is the same call)"""
+    return "jsr" if i.mnem.startswith("bsr") else i.mnem
+
+
 def norm(i):
-    s = "%s %s" % (i.mnem, ",".join(i.ops))
+    s = "%s %s" % (mnem(i), ",".join(i.ops))
     s = re.sub(r"\$ff[0-9a-f]{4}", "RAM", s)     # each player's own work memory
     return re.sub(r"\$[0-9a-f]+", "N", s)
 
@@ -97,7 +102,7 @@ def main():
             if not same:
                 continue
             for a, b in zip(x[i1:i2], y[j1:j2]):
-                if tr.ins[a].mnem != tr.ins[b].mnem:
+                if mnem(tr.ins[a]) != mnem(tr.ins[b]):
                     continue
                 if values(tr.ins[a]) != values(tr.ins[b]) and (a, b) not in seen_v:
                     seen_v.add((a, b))
