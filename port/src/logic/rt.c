@@ -96,6 +96,16 @@ int player_jump(int p, uint32_t a, uint32_t jmp)
     return jump_to(to);
 }
 
+uint32_t player_imm32(int p, uint32_t a, uint32_t instr)
+{
+    uint32_t v = rom32(P(p, instr) + 2);
+    if (!p && v != a) {
+        fprintf(stderr, "logic: the long at %06X is %06X, not %06X\n", instr, v, a);
+        abort();
+    }
+    return v;
+}
+
 void player_call(int p, uint32_t a, uint32_t jsr)
 {
     uint32_t at = P(p, jsr), to = jsr_target(at);

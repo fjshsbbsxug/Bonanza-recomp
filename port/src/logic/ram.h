@@ -82,6 +82,18 @@
 #define P1_VIEW_WANT      0xFF1876   /* the ways it should scroll: bits up, down, left, right */
 #define P1_VIEW_LOOK      0xFF2284   /* the way he faced when the view began to follow */
 #define ANIMS_HELD        0xFF1806   /* nonzero: the players' animations stand still */
+#define P1_SIZE_KEPT      0xFF56DE   /* his size (OBJ 3706, 37B2) kept while shot */
+#define P1_FROM_JUMP      0xFF56F0   /* (shot: from a jump, or at an edge) */
+#define P1_HIDES_IN       0xFFA394   /* the object he hides in (o) */
+#define P1_STEPS_LEFT     0xFF56A2   /* (a path's steps left) */
+#define WAY_OUT_X         0xFF1840   /* where the way out is (the roof) */
+#define WAY_OUT_Y         0xFF1842
+#define LEAVING           0xFF1824   /* (a player went out) */
+#define OBJ_DZ            0xFF39B6   /* (o table) height per frame (the stairs) */
+#define P1_CARRIES        0xFFA38C   /* the object he carries (o) */
+#define P1_CARRY_KIND     0xFFA390   /* (1: carried the other way) */
+#define P1_STEP           0xFF56B0   /* (a state's own step; a path's third word) */
+#define P1_KNOCKED        0xFF6CAE   /* (against a wall: nonzero lets him knock on it) */
 #define P1_FALLING        0xFF56A4   /* (moving on a path: going down now) */
 #define P1_STAIRS_WAY     0xFF56A7   /* (byte; jumping: 1 down, 2 up the stairs he jumped onto) */
 #define P1_PATH_NEXT      0xFF56A8   /* (long) where a path goes on: its next command ... */

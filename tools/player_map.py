@@ -83,6 +83,7 @@ def main():
         pairs.append((a, b))
     m, diffs, clash, ram = {}, [], 0, {}
     vdiffs, seen_v = [], set()
+    same_obj = set()          # (player 2's copy using player 1's object: object 0's word)
     lists = [(reach(tr, e1), reach(tr, e2)) for e1, e2 in pairs]
     lists += [([a for a in sorted(tr.ins) if a0 <= a < a1], [b for b in sorted(tr.ins) if b0 <= b < b1])
               for a0, a1, b0, b1 in BLOCKS]
@@ -108,9 +109,15 @@ def main():
                 rb = re.findall(r"\$(ff[0-9a-f]{4})", ",".join(tr.ins[b].ops))
                 for u, v in zip(ra, rb):
                     ram.setdefault(int(u, 16), {}).setdefault(int(v, 16), []).append(a)
+                    if u == v and 0xFF2EF6 <= int(u, 16) < 0xFF5400:
+                        same_obj.add((a, b, u))
     if "--diff" in sys.argv:
         print("==== the same instructions with other numbers")
         for a, b in sorted(vdiffs):
+            print("  %05X %-30s %05X %s" % (a, tr.ins[a].mnem + " " + ",".join(tr.ins[a].ops),
+                                             b, tr.ins[b].mnem + " " + ",".join(tr.ins[b].ops)))
+        print("==== player 2's copy using player 1's object (the same per-object word)")
+        for a, b, u in sorted(same_obj):
             print("  %05X %-30s %05X %s" % (a, tr.ins[a].mnem + " " + ",".join(tr.ins[a].ops),
                                              b, tr.ins[b].mnem + " " + ",".join(tr.ins[b].ops)))
         print("==== other instructions")

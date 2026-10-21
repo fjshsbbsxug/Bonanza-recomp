@@ -59,6 +59,8 @@ static inline uint32_t PT(int p, uint32_t a) { return p ? player2_table(a) : a; 
 uint32_t jsr_target(uint32_t at);
 void player_call(int p, uint32_t a, uint32_t jsr);
 int  player_jump(int p, uint32_t a, uint32_t jmp);   /* ... the same for a jmp abs.l (its time too) */
+/* the long (a routine's address) the move.l #imm at instr sets: player 2's copy's own */
+uint32_t player_imm32(int p, uint32_t a, uint32_t instr);
 
 /* ---- registers: the low word of a data register, and setting it (the high word kept) */
 static inline uint16_t lo(uint32_t r) { return (uint16_t)r; }
