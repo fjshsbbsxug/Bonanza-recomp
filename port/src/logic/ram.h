@@ -20,6 +20,8 @@
 #define OBJ_DY            0xFF390A
 #define OBJ_ATTR          0xFF3C66   /* sprite attribute (palette line: & 0x6000) */
 #define OBJ_PASS          0xFF406E   /* shots pass through it */
+#define OBJ_SIZE_X        0xFF3706   /* half its width (touching, near a view) */
+#define OBJ_SIZE_Y        0xFF37B2   /* its height */
 /* points around an object where walls are looked for: (dx, dy) per object, by o * 2 */
 #define OBJ_POINTS_A      0xFF411A
 #define OBJ_POINTS_B      0xFF4272
@@ -62,9 +64,23 @@
 #define ESCAPE_WAIT       0xFF4BDA   /* (kind $30: frames to the next state) */
 #define ESCAPE_PARTS      0xFF4C86   /* (kind $30: frames before part $38 comes) */
 
+/* ---- sprites: the sprite table (RAM 0xFF0000, 8 bytes a sprite), the sprites made so far,
+ * and the frame's four lists (view 1 / 2, on the ground / higher up: 64 sprites each) */
+#define SPRITE_TABLE      0xFF0000
+#define SPRITE_COUNT      0xFF17A4
+#define SPRITES_V1_LOW    0xFF07A0
+#define SPRITES_V1_HIGH   0xFF0BA0
+#define SPRITES_V2_LOW    0xFF0FA0
+#define SPRITES_V2_HIGH   0xFF13A0
+#define SPRITES_N         0xFF17A6   /* the lists' counts: v1 low, v1 high, v2 low, v2 high */
+#define OBJ_MIRRORED      0xFF32FE   /* (o table) its picture mirrored */
+#define PIECES            0x24B80    /* by picture: its sprites (count, then y, x, size/tile) */
+
 /* ---- the players */
 #define P1_PAD            0xFF17C0   /* (byte) the buttons held: U D L R (bits 0-3), B C A */
 #define P1_PAD_PRESSED    0xFF17C1   /* (byte) the buttons pressed this frame */
+#define PAD_RAW           0xFF17BA   /* (bytes) player 1's pad as read: held, pressed (player 2's +2) */
+#define PAD_MAP           0xFFC05C   /* (3 bytes) the game's bits for the pad's A, B and C */
 #define BUTTONS_SWAPPED   0xFFC058   /* the options: the jump button (C) as B, not A */
 #define P1_FACING         0xFF3A62   /* (byte; o table) 1 left, 3 right... */
 #define P1_FACED          0xFF3B0E   /* (byte; o table) the way he faced before turning */
@@ -77,6 +93,8 @@
 #define P1_DOOR_BEFORE    0xFF3DBE   /* ... and the one he touched last frame */
 #define P1_VIEW_X         0xFF1852   /* his view: where it is */
 #define P1_VIEW_Y         0xFF1854
+#define P1_VIEW_TOP       0xFF1850   /* (the view's top, for sprites) */
+#define P1_VIEW_CX        0xFF1856   /* the view's middle across */
 #define P1_VIEW_SPEED_X   0xFF186E
 #define P1_VIEW_SPEED_Y   0xFF1870
 #define P1_VIEW_WANT      0xFF1876   /* the ways it should scroll: bits up, down, left, right */
@@ -110,6 +128,18 @@
 #define P1_SCRIPT         0xFF56B4   /* (long) ... where it is */
 #define P1_LEAVING        0xFF56E4   /* (nonzero: he is going out already) */
 #define LOOT_ALL          0xFF1818   /* all the loot is taken: the way out is open */
+#define LOOT_COUNT        0xFF9E0C   /* the stage's loot */
+#define LOOT_TAKEN        0xFF9E0E
+
+/* ---- the items (objects $26..$45: loot and the stages' gadgets) */
+#define ITEM_KIND         0xFF9E12   /* (times 4) its routine, table 0x1B0CC */
+#define ITEM_STATE        0xFF9E9E
+#define ITEM_SCORED       0xFFA5CC   /* (loot) its points given */
+#define ITEM_TAKER        0xFF9FB6   /* (loot) who took it: player 1 0, player 2 2 */
+#define ITEM_FLY_LEFT     0xFFA15A   /* (loot thrown) frames it still flies across */
+#define ITEM_FALL_LEFT    0xFFA1E6   /*   frames to the next step of its fall (table 0x1B532) */
+#define ITEM_FALL_AT      0xFF492A   /*   the step */
+#define ITEM_SPARKLE      0xFF49D6   /* (loot) the frame added every 4 frames, then taken off */
 #define P1_TAKEN_OVER     0xFF5682   /* nonzero: the routine at +2 (long) runs his frame */
 #define P1_STATE          0xFF5688   /* the state (standing, walking, shot...) */
 #define P1_STATE_RUN      0xFF568A   /* (long) the state's routine, run every frame */
@@ -213,5 +243,20 @@
 #define STAGE_ENTRY       0xFFC05A
 #define DIFFICULTY        0xFFC04E   /* 0 easy, 1 normal, 2 hard */
 #define GAME_MODE         0xFFC070
+#define DEMO              0xFF566C   /* the attract mode's play */
+#define TIME_FROZEN       0xFFA5C6
+#define TIMER             0xFF6C4A   /* bytes: frames to the next second, minutes, tens, ones */
+#define TIME_UP           0xFF6C4E   /* 0 the time runs; after it ran out a wait (counting
+                                        $8030 down past $8000, then 360 frames), then $7F
+                                        and a byte counting 20 frames until they come back */
+#define ESCAPING          0xFF1826   /* the way out came: the time left goes into points */
+#define STAGE_DONE        0xFF1828
+#define STAGE_LEFT        0xFF180C   /* the time counted down at the stage's end */
+#define P1_OUT            0xFF180E   /* player 1 out of play (P2_OUT 0xFF1810) */
+#define P1_LIVES          0xFFC054   /* (P2_LIVES 0xFFC056) */
+#define P1_LIVES_KEPT     0xFF6C50   /* (P2's 0xFF6C52) what they were when the time ran out */
+#define PLAYERS_OUT       0xFFC076   /* bits: player 1 out (1), player 2 (2) */
+#define HUD_P1_Y          0xFF6C2A   /* the map's marks: player 1's y / 10 and x / 16 */
+#define HUD_P1_X          0xFF6C28   /*   (player 2's 0xFF6C40 / 0xFF6C3E) */
 
 #endif

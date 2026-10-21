@@ -142,6 +142,17 @@ builder/      the HTML builder page
     tables and work memory of player 2's copy; `--diff` lists where the two differ, e.g.
     in values, or player 2's copy using player 1's object). A call, a `jmp` or a routine's
     address the code sets comes from that player's own copy;
+  * `items.c`: the items each frame (objects $26..$45, every kind): the loot (taken,
+    points, thrown out of a shot player's hands and falling), doors (opened by guards,
+    knocking over whoever is behind them, shutting when the doorway is clear),
+    springboards, rides, things to trip on, sticky traps, presses, holes, hiding places,
+    trapdoors and the way out;
+  * `sprites.c`: the objects' sprites each frame (which views each object is near, its
+    picture's pieces into each view's lists, the lists merged into the sprite table; a
+    level mod's own picture table is read where the game keeps its address);
+  * `hud.c`: the time (counted down and drawn, the hurry sound, "time up", the players
+    out and back in, the time left turned into points at the way out) and the map's
+    marks for the players and guards;
   * `screens.c`, `sound.c`: the first small routines.
   `tools/recomp.py` (`LOGIC`) calls each where its routine starts. While the code around a
   part is still translated 68000 code, the part also leaves the registers and flags its

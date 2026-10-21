@@ -1,5 +1,6 @@
 /* Objects: taking them away, placing them. */
 #include "rt.h"
+#include "objects.h"
 #include <stdio.h>
 
 /* sub_0AE8A / sub_0AEA6: the object player 1 / 2 left to be taken away goes */
@@ -401,10 +402,10 @@ remove:
 /* ---------------------------------------------------------------- animation and paths */
 
 /* (these small routines, as called by the jsr at `jsr`: its time and the routine's) */
-static void into(uint32_t jsr, uint32_t routine) { ran_to(jsr + 6); jumped_to(routine); }
+void into(uint32_t jsr, uint32_t routine) { ran_to(jsr + 6); jumped_to(routine); }
 
 /* sub_1B088: object o's animation anim starts (its steps from table 0x1CCBC) */
-static void anim_start(uint16_t o, uint16_t anim)
+void anim_start(uint16_t o, uint16_t anim)
 {
     set_obj16(OBJ_ANIM, o, anim);
     set_obj32(OBJ_ANIM_STEPS, o, rom32(0x1CCBC + (int16_t)(uint16_t)(anim << 2)));
@@ -416,7 +417,7 @@ static void anim_start(uint16_t o, uint16_t anim)
 
 /* sub_1B032: object o's animation on a frame: on the step's last frame, the next step
  * (a negative frame: back to the first) */
-static void anim_step(uint16_t o)
+void anim_step(uint16_t o)
 {
     uint16_t t = (uint16_t)(obj16(OBJ_ANIM_TIME, o) - 1);
     set_obj16(OBJ_ANIM_TIME, o, t);

@@ -17,7 +17,7 @@ set(CORE_SOURCES
   ext/nuked-opn2/ym3438.c
 )
 
-list(APPEND CORE_SOURCES src/slotcode.c src/draw.c src/logic/rt.c src/logic/sound.c src/logic/players.c src/logic/player_states.c src/logic/objects.c src/logic/screens.c src/logic/guards.c src/logic/guard_ops.c src/logic/map.c src/logic/guard_anim.c src/game.c src/engine/recomp_cycles.c src/engine/recomp_slot.c)
+list(APPEND CORE_SOURCES src/slotcode.c src/draw.c src/logic/rt.c src/logic/sound.c src/logic/players.c src/logic/player_states.c src/logic/objects.c src/logic/sprites.c src/logic/hud.c src/logic/items.c src/logic/screens.c src/logic/guards.c src/logic/guard_ops.c src/logic/map.c src/logic/guard_anim.c src/game.c src/engine/recomp_cycles.c src/engine/recomp_slot.c)
 
 # The game's code, translated to C from the ROM (tools/recomp.py, tools/z80recomp.py;
 # not in the repository). With the ROM it is made here and linked into the program;

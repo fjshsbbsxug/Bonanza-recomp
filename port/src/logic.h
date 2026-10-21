@@ -240,6 +240,16 @@ extern int  logic_script_goto_p1(void);       /* sub_09C9A */
 extern int  logic_script_goto_p2(void);       /* sub_09CAA */
 extern int  logic_player_head_room_p1(void);  /* sub_0D7E4 */
 extern int  logic_player_head_room_p2(void);  /* sub_0FBFE */
+/* the objects' sprites (logic/sprites.c) */
+extern int  logic_sprites_frame(void);        /* sub_0582E */
+extern int  logic_object_near_views(void);    /* sub_058B4 */
+extern int  logic_object_sprites(void);       /* sub_059C6 */
+extern int  logic_sprites_merge(void);        /* sub_05C98 */
+/* the time and the map's marks (logic/hud.c) */
+extern int  logic_hud_frame(void);            /* sub_105CC */
+/* the items (logic/items.c) */
+extern int  logic_items_frame(void);          /* sub_1AFDA */
+extern int  logic_pad_map(void);              /* sub_008AA (logic/screens.c) */
 extern int  logic_player_door_across_p1(void);/* sub_0AB68 */
 extern int  logic_player_door_across_p2(void);/* sub_0ABAA */
 extern int  logic_loot_reset(void);           /* sub_0AE02 */

@@ -482,6 +482,7 @@ int players_touching(uint16_t o, uint32_t jsr)
     ran_to(jsr + 6);
     jumped_to(0x1A878);
     uint16_t found = 0;
+    uint32_t d7 = 0;
     ran_to(0x1A880);
     for (int p = 0; p < 2; p++) {
         uint16_t act = obj16(OBJ_ACTIVE, (uint16_t)(2 * p));
@@ -491,6 +492,7 @@ int players_touching(uint16_t o, uint32_t jsr)
         }
         ran_to(at[p].jsr + 6);
         int hit = touching(o, (uint16_t)(2 * p), 1, 0x1A95C, 0, 1);
+        d7 = (uint32_t)hit;
         jumped_to(at[p].jsr + 6);
         if (!hit) { branched(at[p].beq_none, at[p].end); continue; }
         found |= (uint16_t)(p ? 2 : 1);
@@ -499,5 +501,7 @@ int players_touching(uint16_t o, uint32_t jsr)
     }
     ran_to(0x1A8F2);                                  /* (its rts too) */
     jumped_to(jsr + 6);
+    REG_D[7] = d7;                                    /* (as the game's code leaves them) */
+    REG_D[6] = found;
     return found;
 }

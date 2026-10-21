@@ -633,6 +633,16 @@ LOGIC = {
     0x0AB68: "logic_player_door_across_p1",
     0x0ABAA: "logic_player_door_across_p2",
     0x0AE02: "logic_loot_reset",
+    # the objects' sprites (sprites.c)
+    0x0582E: "logic_sprites_frame",
+    0x058B4: "logic_object_near_views",
+    0x059C6: "logic_object_sprites",
+    0x05C98: "logic_sprites_merge",
+    # the time and the map's marks (hud.c)
+    0x105CC: "logic_hud_frame",
+    # the items: loot and gadgets (items.c)
+    0x1AFDA: "logic_items_frame",
+    0x008AA: "logic_pad_map",
 }
 
 # Places where game code still translated hands back to C (port/src/logic: a part of a
