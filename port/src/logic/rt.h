@@ -59,6 +59,7 @@ void begin(uint32_t routine);        /* the routine starts here */
 void ran_to(uint32_t b);             /* it ran on up to (not including) b, no branch taken */
 void branched(uint32_t a, uint32_t b);   /* it ran up to the branch at a, taken, to b */
 int  done(void);                     /* the routine done (up to its rts): its time used; 1 */
+int  jump_to(uint32_t addr);         /* ... it goes on in the game's code at addr (a jmp): 2 */
 void jumped_to(uint32_t a);          /* it went on at a (after a jmp counted with ran_to) */
 void cyc_back(int n);                /* (time counted twice: an rts the caller counts) */
 

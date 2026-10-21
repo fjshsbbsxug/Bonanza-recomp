@@ -357,8 +357,9 @@ DRAW = {
     0x3C07E: "draw_seg_3C07E",
 }
 # the split screen's line effects: interrupt routines (rte)
-# The game's logic written in readable C (port/src/logic.c): called where the routines
-# start; the rts is done here. 0: the routine runs as translated (--translated).
+# The game's logic written in readable C (port/src/logic/): called where the routines
+# start; 1: the rts is done here; 2: it went on into the game's code (REG_PC); 0: the
+# routine runs as translated (BONANZA_TRANSLATED=1).
 LOGIC = {
     0x02D54: "logic_sound_request",
     0x09EDA: "logic_protect_p1",
@@ -413,6 +414,8 @@ LOGIC = {
     0x1763C: "logic_guard_turn_step",
     0x1A95C: "logic_touching",
     0x1A9E8: "logic_touching2",
+    0x18736: "logic_make_object",
+    0x187EA: "logic_objects_frame",
 }
 
 # Places where game code still translated hands back to C (port/src/logic: a part of a
@@ -695,7 +698,8 @@ class Gen:
             L.append("\tif (cpu_stopping && cpu_stop_here(0x%Xu)) { REG_PC = 0x%Xu; return; }" % (a, a))
         if a in LOGIC:
             self.stats["logic"] = self.stats.get("logic", 0) + 1
-            L.append("\tif (%s()) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; }" % LOGIC[a])
+            L.append("\t{ int r_ = %s(); if (r_ == 1) { REG_PC = m68ki_pull_32(); USE_CYCLES(16); goto dispatch; } "
+                     "if (r_ == 2) goto dispatch; }" % LOGIC[a])
         if a in DRAW:
             # 0: an interrupt would come within it: the routine below, as translated
             self.stats["draw"] += 1

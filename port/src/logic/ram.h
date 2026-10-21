@@ -27,6 +27,16 @@
 #define OBJ_POINTS_D      0xFF4522
 #define OBJ_POINTS_E      0xFF467A
 
+/* ---- objects 0x46..0x55 (o $8C..$AA): shots, bullets, thrown things, puffs... */
+#define OBJS_FIRST        0x8C
+#define OBJ_KIND          0xFF99F0   /* its kind (times 4): its start and frame routines */
+#define OBJ_OWNER         0xFF9BF4   /* the object that made it */
+#define OBJ_TIMER         0xFF9B48
+#define OBJ_FLICKER       0xFF3BBA   /* (shots: every other frame) */
+#define OBJ_DEFLECTED     0xFF9A9C   /* (shots: stopped by a shield, flying off a path) */
+#define GUARD_CARRIES     0xFF8D78   /* (guards: the object over it) */
+#define SHOT_TOGGLE       0xFF9E04   /* (the next shot's flicker phase) */
+
 /* ---- the players */
 #define P1_STATE          0xFF5688   /* the state (standing, walking, shot...) */
 #define P1_STATE_RUN      0xFF568A   /* (long) the state's routine, run every frame */

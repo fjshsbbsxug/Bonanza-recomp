@@ -62,5 +62,7 @@ extern int  logic_guard_turn_begin2(void);    /* sub_173DC */
 extern int  logic_guard_turn_step(void);      /* sub_1763C */
 extern int  logic_touching(void);             /* sub_1A95C */
 extern int  logic_touching2(void);            /* sub_1A9E8 */
+extern int  logic_make_object(void);          /* sub_18736 */
+extern int  logic_objects_frame(void);        /* sub_187EA */
 
 #endif

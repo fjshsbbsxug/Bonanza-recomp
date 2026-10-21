@@ -44,11 +44,24 @@ int done(void)
     return 1;
 }
 
+int jump_to(uint32_t addr)
+{
+    USE_CYCLES(cyc);
+    cyc = 0;
+    REG_PC = addr;
+    return 2;
+}
+
 void call(uint32_t addr, uint32_t jsr_at)
 {
     uint16_t op = rom16(jsr_at);
-    uint32_t next = jsr_at + ((op & 0xFF00) == 0x6100 ? ((op & 0xFF) ? 2 : 4)    /* bsr */
-                              : (op & 0x3F) == 0x39 ? 6 : 4);                    /* jsr abs.l / abs.w, (pc) */
+    uint32_t next;
+    if ((op & 0xFF00) == 0x6100) {
+        next = jsr_at + ((op & 0xFF) ? 2 : 4);                                   /* bsr.s / bsr.w */
+    } else {
+        int mode = (op >> 3) & 7, reg = op & 7;                                  /* jsr <ea> */
+        next = jsr_at + (mode == 2 ? 2 : mode == 7 && reg == 1 ? 6 : 4);
+    }
     ran_to(next);                          /* (the jsr's own time) */
     int saved_pc = (int)pc_at;
     USE_CYCLES(cyc);                       /* the time so far, before the routine's */
