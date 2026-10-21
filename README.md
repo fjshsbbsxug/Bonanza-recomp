@@ -111,18 +111,30 @@ builder/      the HTML builder page
   md.c runs the program it finds in Z80 RAM (`z80r_program`); writing over its code
   bytes makes it look again. The sound chips (YM2612, PSG) are simulated only to record
   the sounds, or to play them when there is no recording (below).
-* **Game logic in readable C** (`port/src/logic.c`): the decompilation of the game's
-  own rules, one routine at a time, starting with the small, well understood ones: the
-  sound request, the players' protection, animations, states, kept poses, paths and
-  height steps, objects taken away, guards forgetting a player, and the event sent to
-  a guard (shot, touched, player seen). `tools/recomp.py` (`LOGIC`) calls each where its
-  routine starts. Each is plain C on the game's work memory with named addresses; at its
-  end it also leaves the registers, stack words and flags the 68000 routine left, and
-  takes its time (`port/gen/m68k_costs.c`), because the code around it is still
-  translated 68000 code and the game's clock is its cycle count. Checking: with
-  `BONANZA_TRANSLATED=1` the game's own routines run instead; every scene must give the
-  same pictures and game state frame for frame both ways (`LOGICSTATS=1` lists the
-  headless runner's calls by routine).
+* **Game logic in readable C** (`port/src/logic/`): the decompilation of the game's own
+  rules, written as plain C on the game's work memory by name (`ram.h`), one file per part:
+  * `guards.c`: the guards' frame (out of view: back to their posts; forgetting players
+    out of view; looking for players, walls and closed doors in between; events starting
+    scripts; the script interpreter; animation steps; falling; touching and catching the
+    players); `guard_ops.c`: all 65 script ops (waits, walks, runs and lane changes with
+    their wall, stairs and contact checks, jumps, stairs, turning, firing, the script's
+    jumps, calls, variables and compares); `guard_anim.c`: turning and animations;
+  * `map.c`: the stage's map (the cell at a place, wall tests by lane, the probes around an
+    object and the checks built on them, objects touching);
+  * `players.c`, `objects.c`, `screens.c`, `sound.c`: the first small routines.
+  `tools/recomp.py` (`LOGIC`) calls each where its routine starts. While the code around a
+  part is still translated 68000 code, the part also leaves the registers and flags its
+  callers read (`tools/liveness.py` works them out: registers by byte, word and long,
+  handler pointers and tables followed) and takes the routine's time (a frame that runs out
+  of time goes on in the next). Parts of a routine not written yet run as the game's code
+  up to stop points the recompiler marks (`STOPS`), and C calls routines not written yet
+  with `cpu_call`. The port's own changes at places now in C (Insane mode's hooks) are
+  called from the C. Checking: `BONANZA_TRANSLATED=1` runs the game's own routines;
+  `LOGIC_SCRAMBLE=1` fills the registers C leaves alone with junk; every recorded scene must
+  give the same pictures and game state both ways (`LOGICSTATS=1` lists the calls by part
+  and by script op; `LOGIC_OPS_OFF=48,F0` runs those ops as the game's code). One frame of
+  the ending differs: the game's frame runs out of time inside the guards' frame there, and
+  the C version finishes it at once (the next frame is the same again).
 * **Drawing** (`port/src/draw.c`, `video.c`, `vdp.c`):
   * The game's drawing routines are written in C: tile loading (raw and packed), lines
     of text and the queued text, the HUD (frame, stage name, time, scores, counters),

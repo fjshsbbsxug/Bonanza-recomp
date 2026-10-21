@@ -22,6 +22,10 @@ uint8_t map_lane_stairs(uint16_t y);
 int probe_wall(uint16_t o, uint32_t points, int16_t dx, int16_t dy, int16_t lane_dy, int swapped,
                int stairs, uint16_t *info);
 
+/* sub_1A878: the players guard o touches (bit 0 player 1, bit 1 player 2); time from the
+ * jsr at jsr */
+int players_touching(uint16_t o, uint32_t jsr);
+
 /* the time of the routines, for the parts still counting it */
 void map_cell_time(int floors_down, int with_rts);
 void wall_test_time(uint32_t routine, int up);

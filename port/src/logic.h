@@ -56,5 +56,11 @@ extern int  logic_stairs_ahead(void);         /* sub_17B82 */
 extern int  logic_contact_free(void);         /* sub_17BD8 */
 extern int  logic_contact_up(void);           /* sub_17C1A */
 extern int  logic_guard_told(void);           /* sub_17A44 */
+extern int  logic_guard_anim_start(void);     /* sub_1767C */
+extern int  logic_guard_turn_begin(void);     /* sub_173D6 */
+extern int  logic_guard_turn_begin2(void);    /* sub_173DC */
+extern int  logic_guard_turn_step(void);      /* sub_1763C */
+extern int  logic_touching(void);             /* sub_1A95C */
+extern int  logic_touching2(void);            /* sub_1A9E8 */
 
 #endif

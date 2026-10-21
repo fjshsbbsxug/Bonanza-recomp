@@ -421,6 +421,20 @@ int main(int argc, char **argv)
             net_frame_done(net_frame() % 60 == 59 ? md_state_hash() : 0);
         if (hash)
             printf("frame %d hash %08x pc %06x\n", fr, md_state_hash(), cpu_get_pc());
+        if (getenv("RAMDUMP")) {             /* RAMDUMP=F[,F...]: the work memory after those frames (tests) */
+            for (const char *s = getenv("RAMDUMP"); *s;) {
+                char *e;
+                long f = strtol(s, &e, 10);
+                if (e == s) break;
+                if (f == fr) {
+                    char nm[64];
+                    snprintf(nm, sizeof nm, "ram_%d.bin", fr);
+                    FILE *df = fopen(nm, "wb");
+                    if (df) { fwrite(md.ram, 1, sizeof md.ram, df); fclose(df); }
+                }
+                s = *e ? e + 1 : e;
+            }
+        }
         if (getenv("RAMLOG")) {              /* RAMLOG=ADDR[,ADDR...]: RAM words every frame (tests) */
             const char *s = getenv("RAMLOG");
             printf("frame %d ram", fr);

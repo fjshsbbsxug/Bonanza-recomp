@@ -46,6 +46,10 @@ static inline void set_obj32(uint32_t table, uint16_t o, uint32_t v) { set32(tab
 static inline uint16_t lo(uint32_t r) { return (uint16_t)r; }
 static inline void set_lo(int d, uint16_t v) { REG_D[d] = (REG_D[d] & 0xFFFF0000u) | v; }
 
+/* ---- the condition flags (Musashi's: FLAG_Z holds the result, so Z is set when it is 0;
+ * a bne is taken when FLAG_Z != 0) */
+static inline int z_clear(void) { return FLAG_Z != 0; }
+
 /* ---- the condition flags a move / tst leaves (N, Z; V and C clear; X kept) */
 static inline void flags_of16(uint16_t v) { FLAG_N = NFLAG_16(v); FLAG_Z = v; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR; }
 static inline void flags_of32(uint32_t v) { FLAG_N = NFLAG_32(v); FLAG_Z = v; FLAG_V = VFLAG_CLEAR; FLAG_C = CFLAG_CLEAR; }
@@ -56,6 +60,7 @@ void ran_to(uint32_t b);             /* it ran on up to (not including) b, no br
 void branched(uint32_t a, uint32_t b);   /* it ran up to the branch at a, taken, to b */
 int  done(void);                     /* the routine done (up to its rts): its time used; 1 */
 void jumped_to(uint32_t a);          /* it went on at a (after a jmp counted with ran_to) */
+void cyc_back(int n);                /* (time counted twice: an rts the caller counts) */
 
 /* the game's routine at addr (not in C yet), called by the jsr / bsr at jsr_at */
 void call(uint32_t addr, uint32_t jsr_at);
@@ -63,6 +68,11 @@ void call(uint32_t addr, uint32_t jsr_at);
  * counted) until it reaches one of stops (tools/recomp.py STOPS); the address reached,
  * where the time counted goes on from */
 uint32_t run_part(uint32_t addr, const uint32_t *stops, int n);
+
+/* ---- the port's own changes to the game (gamemods.c: Insane mode...) at a place in a
+ * routine now in C: as the recompiler's hook there (tools/recomp.py HOOKS) would; only
+ * hooks that go on in the routine (0) are expected at these places */
+static inline void hook(uint32_t pc) { if (game_hooks) (void)game_hook(pc); }
 
 /* ---- checks: registers (bits 0-7 d0-d7, 8-14 a0-a6) and flags a part written in C
  * does not leave as the game's code did: with LOGIC_SCRAMBLE=1 they are filled with

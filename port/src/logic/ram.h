@@ -58,6 +58,10 @@
 #define GUARD_SCRIPT_SP   0xFF7CB0   /* (long) its script's call stack */
 #define GUARD_STACKS      0xFF7D48   /* the stacks: 64 bytes each, from (o + 2) * 64 */
 #define GUARD_LOOKS       0xFF9284   /* it looks for players */
+#define GUARD_LOOK_COUNT  0xFF93B4   /* it looks every 4th frame */
+#define GUARD_LOOK_WHICH  0xFF9400   /* ... at players 1 and 2 in turn */
+#define LOOK_FOUND        0xFF6CC0   /* the player found by a look: 2 player 1, 4 player 2 */
+#define LOOK_CELLS        0xFF6CBE   /* how many cells away he is */
 #define GUARD_SEEN        0xFF931C   /* the player it has seen: 2 player 1, 4 player 2 */
 #define GUARD_DOWN        0xFF8DC4   /* knocked down */
 #define GUARD_POST_X      0xFF9108   /* where it stands guard */
@@ -67,6 +71,22 @@
 #define GUARD_POST_SCRIPT 0xFF8FD8   /* (long) */
 #define GUARD_POST_SP     0xFF9070   /* (long) */
 #define GUARD_PLACED      0xFF9238   /* put back at its post while out of view */
+#define GUARD_WANT_FACING 0xFF92D0   /* the way it is to turn to (8: none) */
+#define GUARD_TURN_SEQ    0xFF8E10   /* (long) the facings it turns through */
+#define GUARD_TURN_TIME   0xFF8F40   /* frames left on this facing */
+#define GUARD_TURN_STEP   0xFF8F8C   /* frames each facing lasts */
+#define GUARD_FACING_ANIMS 0xFF8EA8  /* (long) its animations by facing: (animation, extra) */
+#define GUARD_FACING_SHOWN 0xFF76DC  /* the facing its animation shows */
+#define GUARD_PATH        0xFF47D2   /* (long) a path being followed: (dx, dy, frames)... */
+#define GUARD_PATH_LEFT   0xFF492A   /* frames left on the path's step */
+#define GUARD_FLAG_LESS   0xFF6CC4   /* the script's flags: a compare found less (or a
+                                        player seen by op 18) ... */
+#define GUARD_FLAG_EQUAL  0xFF6D10   /* ... and equal */
+#define GUARD_ON_STAIRS   0xFF944C   /* climbing stairs: 1 up, 2 down */
+#define GUARD_STOPPED     0xFF9498   /* why a run stopped: 1 a wall, 2 a step, 3 a player
+                                        held, 4 a wall at its feet, 5 a player its way, 6
+                                        stairs, 7 a wall beside it */
+#define GUARD_DZ          0xFF39B6   /* height step per frame */
 #define GUARD_STILL       0xFF9744   /* (no falling, no touching this frame) */
 #define GUARD_FALLING     0xFF9790   /* falling: its steps from a list */
 #define GUARD_FALL_DY     0xFF98C0   /* the step down per frame */

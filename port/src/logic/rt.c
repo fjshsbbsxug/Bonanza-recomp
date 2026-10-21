@@ -17,6 +17,8 @@ void begin(uint32_t a) { cyc = 0; pc_at = a; }
 
 void jumped_to(uint32_t a) { pc_at = a; }
 
+void cyc_back(int n) { cyc -= n; }
+
 void ran_to(uint32_t b)
 {
     for (; pc_at < b; pc_at += 2)

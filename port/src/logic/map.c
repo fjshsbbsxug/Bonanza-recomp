@@ -413,3 +413,91 @@ int logic_guard_told(void)
     ran_to(0x17A88);
     return done();
 }
+
+/* ================================================================ touching */
+
+/* sub_1A95C / sub_1A9E8: do objects a (d0) and b (d1) touch? Neither lets shots pass
+ * ($406E), (sub_1A95C: at the same height,) and closer across than their half widths
+ * ($3706) together, and up and down the view than their depths ($37B2) together. The
+ * side b is on: $A3AC (1: a is left of it... 2: right). d7 = 1: they touch. */
+static int touching(uint16_t a, uint16_t b, int same_height, uint32_t routine, int *d6_out, int with_rts)
+{
+    uint32_t r = routine;
+    int lvl = same_height ? 0 : -0x12;               /* (sub_1A9E8: no height test: 18 bytes shorter) */
+    jumped_to(r);
+    int hit = 0;
+    int16_t d6 = (int16_t)lo(REG_D[6]);
+    if (obj16(OBJ_PASS, a)) { branched(r + 0xC, r + 0x8A + lvl); goto out; }
+    if (obj16(OBJ_PASS, b)) { branched(r + 0x14, r + 0x8A + lvl); goto out; }
+    if (same_height) {
+        d6 = (int16_t)obj16(OBJ_HEIGHT, a);
+        if (obj16(OBJ_HEIGHT, a) != obj16(OBJ_HEIGHT, b)) { branched(0x1A982, 0x1A9E6); goto out; }
+    }
+    {
+        int16_t dx = (int16_t)(obj16(OBJ_X, a) - obj16(OBJ_X, b));
+        uint16_t side = 2;
+        if (dx >= 0) branched(r + 0x3C + lvl, r + 0x46 + lvl);
+        else { dx = (int16_t)-dx; side = 1; ran_to(r + 0x46 + lvl); }
+        set16(0xFFA3AC, side);
+        d6 = dx;
+        uint16_t w = (uint16_t)(obj16(0xFF3706, a) + obj16(0xFF3706, b));
+        if ((uint16_t)dx >= w) { branched(r + 0x5C + lvl, r + 0x8A + lvl); goto out; }
+        int16_t dy = (int16_t)(obj16(OBJ_Y, a) - obj16(OBJ_Y, b));
+        if (dy >= 0) branched(r + 0x6E + lvl, r + 0x74 + lvl);
+        else { dy = (int16_t)-dy; ran_to(r + 0x74 + lvl); }
+        d6 = dy;
+        uint16_t h = (uint16_t)(obj16(0xFF37B2, a) + obj16(0xFF37B2, b));
+        if ((uint16_t)dy >= h) { branched(r + 0x84 + lvl, r + 0x8A + lvl); goto out; }
+        hit = 1;
+        ran_to(r + 0x8A + lvl);
+    }
+out:
+    if (with_rts) ran_to(r + 0x8C + lvl);
+    if (d6_out) *d6_out = d6;
+    return hit;
+}
+
+static int logic_touching_any(int same, uint32_t routine)
+{
+    if (!start()) return 0;
+    int d6;
+    begin(routine);
+    int hit = touching(lo(REG_D[0]), lo(REG_D[1]), same, routine, &d6, 0);
+    REG_D[7] = (uint32_t)hit;                         /* (for the callers) */
+    set_lo(6, (uint16_t)d6);
+    return done();
+}
+
+int logic_touching(void)  { return logic_touching_any(1, 0x1A95C); }
+int logic_touching2(void) { return logic_touching_any(0, 0x1A9E8); }
+
+/* sub_1A878: the players guard o touches (at its height): bit 0 player 1, bit 1 player
+ * 2 (each in play, at state 1: on foot); the side each is on, $A3BC / $A3BE. Time from
+ * the jsr at `jsr` to its rts. */
+int players_touching(uint16_t o, uint32_t jsr)
+{
+    static const struct { uint32_t beq, bne, jsr, beq_none, end; } at[2] = {
+        {0x1A886, 0x1A88E, 0x1A898, 0x1A8A4, 0x1A8B4}, {0x1A8BA, 0x1A8C2, 0x1A8CE, 0x1A8DA, 0x1A8EC},
+    };
+    ran_to(jsr + 6);
+    jumped_to(0x1A878);
+    uint16_t found = 0;
+    ran_to(0x1A880);
+    for (int p = 0; p < 2; p++) {
+        uint16_t act = obj16(OBJ_ACTIVE, (uint16_t)(2 * p));
+        if (act != 1) {
+            branched(act ? at[p].bne : at[p].beq, at[p].end);
+            continue;
+        }
+        ran_to(at[p].jsr + 6);
+        int hit = touching(o, (uint16_t)(2 * p), 1, 0x1A95C, 0, 1);
+        jumped_to(at[p].jsr + 6);
+        if (!hit) { branched(at[p].beq_none, at[p].end); continue; }
+        found |= (uint16_t)(p ? 2 : 1);
+        set16(p ? P2_TOUCH_SIDE : P1_TOUCH_SIDE, ram16(0xFFA3AC));
+        ran_to(at[p].end);
+    }
+    ran_to(0x1A8F2);                                  /* (its rts too) */
+    jumped_to(jsr + 6);
+    return found;
+}

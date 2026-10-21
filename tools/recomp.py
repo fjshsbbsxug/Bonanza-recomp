@@ -407,6 +407,12 @@ LOGIC = {
     0x17BD8: "logic_contact_free",
     0x17C1A: "logic_contact_up",
     0x17A44: "logic_guard_told",
+    0x1767C: "logic_guard_anim_start",
+    0x173D6: "logic_guard_turn_begin",
+    0x173DC: "logic_guard_turn_begin2",
+    0x1763C: "logic_guard_turn_step",
+    0x1A95C: "logic_touching",
+    0x1A9E8: "logic_touching2",
 }
 
 # Places where game code still translated hands back to C (port/src/logic: a part of a
