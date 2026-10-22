@@ -307,3 +307,83 @@ int logic_jobs_clear(void)
     ran_to(0x01418);
     return done();
 }
+
+/* sub_007A8: the three controller ports' TH lines made outputs */
+int logic_pads_init(void)
+{
+    if (!start()) return 0;
+    begin(0x007A8);
+    REG_D[0] = 0x40;
+    WR8(0xA10009, 0x40);
+    WR8(0xA1000B, 0x40);
+    WR8(0xA1000D, 0x40);
+    ran_to(0x007BC);
+    return done();
+}
+
+/* sub_0093C: what is in the controller port at a6, from its answers to the TH line set
+ * and cleared (table 0x986: each write and the bits to test), as bits in d7; the Z80
+ * held and the interrupts off meanwhile; d1, d2, a5 kept */
+int logic_pad_detect(void)
+{
+    if (!start()) return 0;
+    begin(0x0093C);
+    uint32_t d1 = REG_D[1], d2 = REG_D[2], a5 = REG_A[5];
+    REG_A[7] -= 12;
+    WR32(REG_A[7], d1); WR32(REG_A[7] + 4, d2); WR32(REG_A[7] + 8, a5);
+    uint32_t sr = m68ki_get_sr();
+    REG_A[7] -= 2; WR16(REG_A[7], (uint16_t)sr);
+    m68ki_set_sr(sr | 0x700);
+    WR16(0xA11100, 0x100);
+    ran_to(0x0094E);
+    for (;;) {
+        if (!(RD8(0xA11100) & 1)) { ran_to(0x00958); break; }
+        branched(0x00956, 0x0094E);
+    }
+    REG_A[5] = 0x986;
+    WR8(REG_A[6] + 6, RD8(0x986));
+    REG_D[7] = 0;
+    REG_D[1] = 8;
+    ran_to(0x00964);
+    for (;;) {
+        WR8(REG_A[6], RD8(REG_A[5])); REG_A[5]++;
+        REG_D[2] = (REG_D[2] & 0xFFFFFF00u) | (uint8_t)(RD8(REG_A[6]) & RD8(REG_A[5]));
+        REG_A[5]++;
+        if (!(uint8_t)REG_D[2]) branched(0x0096E, 0x00972);
+        else { REG_D[7] |= (uint8_t)REG_D[1]; ran_to(0x00972); }
+        REG_D[1] = (REG_D[1] & 0xFFFFFF00u) | (uint8_t)((uint8_t)REG_D[1] >> 1);
+        if (!(uint8_t)REG_D[1]) { ran_to(0x00976); break; }
+        branched(0x00974, 0x00964);
+    }
+    WR16(0xA11100, 0);
+    m68ki_set_sr(RD16(REG_A[7]));
+    REG_A[7] += 2;
+    REG_D[1] = RD32(REG_A[7]); REG_D[2] = RD32(REG_A[7] + 4); REG_A[5] = RD32(REG_A[7] + 8);
+    REG_A[7] += 12;
+    ran_to(0x00984);
+    return done();
+}
+
+/* (the vertical blank, 0xAA2 / 0xAB4: this frame's player's line routine for his new
+ * columns (0xFFC10C / 0xFFC110) called; 0xABC: with none, the map's column jobs
+ * (sub_017D8), then the tiles waiting unless a column was drawn (sub_0135A)) */
+static int vblank_lines(uint32_t at)
+{
+    if (!start()) return 0;
+    begin(at);
+    REG_A[0] = REG_D[0];
+    call(REG_A[0], at + 2);
+    branched(at + 4, 0x00B58);
+    return jump_to(0x00B58);
+}
+int logic_vblank_lines1(void) { return vblank_lines(0x00AA2); }
+int logic_vblank_lines2(void) { return vblank_lines(0x00AB4); }
+int logic_vblank_columns(void)
+{
+    if (!start()) return 0;
+    begin(0x00ABC);
+    call(0x017D8, 0x00ABC);
+    if (ram16(0xFF2EF4)) branched(0x00AC8, 0x00AD2);
+    else call(0x0135A, 0x00ACC);
+    return jump_to(0x00AD2);
+}

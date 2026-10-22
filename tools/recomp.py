@@ -752,6 +752,11 @@ LOGIC = {
     0x28914: "logic_column_right_p2",
     0x289D2: "logic_column_left_p2",
     # small routines
+    0x007A8: "logic_pads_init",
+    0x0093C: "logic_pad_detect",
+    0x00AA2: "logic_vblank_lines1",
+    0x00AB4: "logic_vblank_lines2",
+    0x00ABC: "logic_vblank_columns",
     0x1A8F2: "logic_players_on",
     0x179B0: "logic_guard_clear",
     0x05DB0: "logic_picture_draw",

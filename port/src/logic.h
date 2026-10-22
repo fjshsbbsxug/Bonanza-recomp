@@ -383,6 +383,11 @@ extern int  logic_z80_reset(void);               /* sub_02D3A (logic/sound.c) */
 extern int  logic_sound_now(void);               /* sub_02D76 (logic/sound.c) */
 extern int  logic_sound_play(void);              /* sub_02D98 (logic/sound.c) */
 extern int  logic_sound_send(void);              /* sub_02DC2 (logic/sound.c) */
+extern int  logic_pads_init(void);               /* sub_007A8 (logic/screens.c) */
+extern int  logic_pad_detect(void);              /* sub_0093C (logic/screens.c) */
+extern int  logic_vblank_lines1(void);           /* sub_00AA2 (logic/screens.c) */
+extern int  logic_vblank_lines2(void);           /* sub_00AB4 (logic/screens.c) */
+extern int  logic_vblank_columns(void);          /* sub_00ABC (logic/screens.c) */
 /* the players' panels (logic/panel.c) */
 extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */
