@@ -670,3 +670,18 @@ int logic_guard_clear(void)
     ran_to(0x17A42);
     return done();
 }
+
+/* sub_141F8: the stage's guards set up: their count (table 0x14216 by the stage entry),
+ * then sub_147FA, which runs past a frame's end: the game's code calls it (its rts at
+ * 0x14214 returns for this routine) */
+int logic_guards_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x141F8);
+    set_lo(0, (uint16_t)((ram16(STAGE_ENTRY) - 1) * 2));
+    REG_A[0] = 0x14216;
+    set16(GUARD_COUNT, mem16(0x14216 + (int16_t)lo(REG_D[0])));
+    ran_to(0x14214);
+    REG_A[7] -= 4; set32(REG_A[7], 0x14214);
+    return jump_to(0x147FA);
+}

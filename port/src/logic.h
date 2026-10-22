@@ -392,6 +392,7 @@ extern int  logic_hud_fixed(void);               /* sub_10912 (logic/hud.c) */
 extern int  logic_games_over(void);              /* sub_05496 (logic/play.c) */
 extern int  logic_player_start(void);            /* sub_08E74 (logic/play.c) */
 extern int  logic_player_start_p2(void);         /* sub_08F26 (logic/play.c) */
+extern int  logic_guards_setup(void);            /* sub_141F8 (logic/guards.c) */
 /* the players' panels (logic/panel.c) */
 extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */
