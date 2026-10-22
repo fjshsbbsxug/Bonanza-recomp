@@ -50,22 +50,73 @@ int logic_pad_map(void)
     return done();
 }
 
-/* sub_13744: a6 into the first of 4 free slots at $6C92 (none free: nothing) */
-int logic_slot_add(void)
+/* sub_13744 / sub_132F2: a6 into the first of 4 free slots at $6C92 / $6C82 (none
+ * free: nothing) */
+static int slot_add(uint32_t r, uint32_t slots)
 {
-    if (!start()) return 0;
-    begin(0x13744);
-    uint32_t a0 = 0xFF6C92;
+    begin(r);
+    stack_put(-8, REG_D[0]); stack_put(-4, REG_A[0]);   /* (movem.l d0/a0, -(a7)) */
+    uint32_t a0 = slots;
     for (int k = 0;; k++, a0 += 4) {
         if (!ram32(a0)) {
-            branched(0x13752, 0x13762);
+            branched(r + 0xE, r + 0x1E);
             set32(a0, REG_A[6]);
-            ran_to(0x13768);
+            ran_to(r + 0x24);
             break;
         }
-        if (k == 3) { ran_to(0x1375C); ran_to(0x13760); break; }
-        branched(0x13758, 0x13750);
+        if (k == 3) { ran_to(r + 0x1C); break; }
+        branched(r + 0x14, r + 0xC);
     }
+    return done();
+}
+int logic_slot_add(void)  { if (!start()) return 0; return slot_add(0x13744, 0xFF6C92); }
+int logic_slot_add2(void) { if (!start()) return 0; return slot_add(0x132F2, 0xFF6C82); }
+
+/* sub_187CE: objects $46..$49 (the messages' slots) out of play */
+int logic_messages_clear(void)
+{
+    if (!start()) return 0;
+    begin(0x187CE);
+    set_lo(0, 0x8C);
+    REG_A[6] = OBJ_ACTIVE;
+    for (int k = 0; k < 4; k++) set_obj16(OBJ_ACTIVE, (uint16_t)(0x8C + 2 * k), 0);
+    flags_of16(0);
+    ran_to(0x187E8);
+    return done();
+}
+
+/* sub_01318: a job into the first of 8 free slots at $5550 ($10 bytes each, from a0:
+ * two longs, three words); d7 1 if there was room ($554E counts them), else 0 */
+int logic_text_job(void)
+{
+    if (!start()) return 0;
+    begin(0x01318);
+    uint32_t a6 = 0xFF5550;
+    set_lo(6, 7);
+    ran_to(0x01322);
+    for (;;) {
+        if (!ram16(a6)) break;
+        a6 += 0x10;
+        uint16_t c = lo(REG_D[6]);
+        set_lo(6, (uint16_t)(c - 1));
+        if (!c) { REG_A[6] = a6; REG_D[7] = 0; ran_to(0x01332); return done(); }
+        ran_to(0x0132C);
+        branched(0x0132C, 0x01322);
+    }
+    branched(0x01324, 0x01334);
+    uint32_t a0 = REG_A[0];
+    set32(a6 + 2, mem32(a0));
+    set32(a6 + 6, mem32(a0 + 4));
+    set16(a6 + 0xA, mem16(a0 + 8));
+    set16(a6 + 0xC, mem16(a0 + 10));
+    set16(a6 + 0xE, mem16(a0 + 12));
+    REG_A[0] = a0 + 14;
+    set_lo(6, (uint16_t)((lo(REG_D[6]) + 1) & 7));
+    REG_D[7] = 1;
+    set16(a6, 1);
+    set16(0xFF554E, (uint16_t)(ram16(0xFF554E) + 1));
+    REG_A[6] = a6;
+    ran_to(0x01358);
     return done();
 }
 

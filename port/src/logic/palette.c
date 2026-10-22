@@ -310,3 +310,71 @@ int logic_palette_cycle(void)
     ran_to(0x0FE36);
     return done();
 }
+
+/* sub_0141A: a fade job into the first of 4 free slots at $55D6 (from a6: frames per
+ * step, the colors to come up to, the palette's colors, its kind, the colors less one,
+ * the steps) */
+int logic_fade_job_add(void)
+{
+    if (!start()) return 0;
+    begin(0x0141A);
+    stack_put(-8, REG_D[0]); stack_put(-4, REG_A[0]);   /* (movem.l d0/a0, -(a7)) */
+    uint32_t a0 = 0xFF55D6, d0 = REG_D[0], a0k = REG_A[0];
+    set_lo(0, 3);
+    ran_to(0x01428);
+    for (;;) {
+        if (!ram8(a0)) break;
+        a0 += 0x20;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x01436); branched(0x01436, 0x01462); goto out; }
+        ran_to(0x01432);
+        branched(0x01432, 0x01428);
+    }
+    branched(0x0142A, 0x0143A);
+    {
+        uint32_t a6 = REG_A[6];
+        set16(a0 + 2, mem16(a6));
+        set16(a0 + 4, ram16(a0 + 2));
+        set32(a0 + 8, mem32(a6 + 2));
+        set32(a0 + 0xC, mem32(a6 + 6));
+        set8(a0 + 1, (uint8_t)RD8(a6 + 10));
+        set8(a0 + 6, (uint8_t)RD8(a6 + 11));
+        set8(a0 + 7, (uint8_t)RD8(a6 + 12));
+        REG_A[6] = a6 + 13;
+        set8(a0, 1);
+        set16(0xFF55D4, (uint16_t)(ram16(0xFF55D4) + 1));
+        ran_to(0x01462);
+    }
+out:
+    REG_D[0] = d0; REG_A[0] = a0k;
+    ran_to(0x01466);
+    return done();
+}
+
+/* sub_01928: both palettes (the one shown, $0200, and the target, $0720) black, the
+ * jobs cleared */
+int logic_palettes_clear(void)
+{
+    if (!start()) return 0;
+    begin(0x01928);
+    ran_to(0x01938);
+    for (int k = 0; k < 0x40; k++) {
+        set16(PALETTE + 2 * k, 0);
+        set16(0xFF0720 + 2 * k, 0);
+        if (k < 0x3F) branched(0x0193C, 0x01938);
+    }
+    ran_to(0x01940);
+    set16(PALETTE_CHANGED, 1);
+    ran_to(0x01952);
+    for (int k = 0; k < 0x80; k++) {
+        set8(0xFF55D6 + k, 0);
+        if (k < 0x7F) branched(0x01954, 0x01952);
+    }
+    set16(0xFF55D4, 0);
+    REG_D[0] = (REG_D[0] & 0xFFFF0000u) | 0xFFFF;
+    REG_A[0] = 0xFF55D6 + 0x80;
+    REG_A[1] = 0xFF0720 + 0x80;
+    ran_to(0x0195E);
+    return done();
+}

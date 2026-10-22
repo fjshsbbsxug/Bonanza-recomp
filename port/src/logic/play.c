@@ -395,3 +395,28 @@ end:
     ran_to(0x04308);
     return done();
 }
+
+/* sub_1A67E: after the players went out: the message ($1822) gone, pausing allowed,
+ * the loot put back (sub_0AE02), each player still in the game back in play */
+int logic_players_back(void)
+{
+    if (!start()) return 0;
+    begin(0x1A67E);
+    set_lo(7, ram16(0xFF1822));
+    if (!lo(REG_D[7])) { branched(0x1A684, 0x1A6D4); return done(); }
+    REG_A[6] = OBJ_ACTIVE;
+    set_obj16(OBJ_ACTIVE, lo(REG_D[7]), 0);
+    set16(0xFF1822, 0);
+    set16(0xFF180A, 0);
+    call(0x0AE02, 0x1A69E);
+    for (int p = 0; p < 2; p++) {
+        uint32_t b = p ? 0x18 : 0;
+        if (!ram16(OBJ_ACTIVE + 2 * p)) branched(0x1A6AA + b, 0x1A6BC + b);
+        else {
+            set16(OBJ_ACTIVE + 2 * p, 1);
+            set16(0xFF6C6A + 2 * p, 0);
+            ran_to(0x1A6BC + b);
+        }
+    }
+    return done();
+}

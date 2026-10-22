@@ -171,6 +171,14 @@ builder/      the HTML builder page
     palette copied and preset;
   * `stage.c` (with `map.c`, `items.c`): setting up a stage: its objects placed, its map
     (the cells expanded, its floors and lanes), its items' kinds and sizes and its loot;
+  * `logic/menu.c`: the screens around the game: the screen dispatcher, the SEGA logo,
+    the title (its scroll, colours and running figure, "push start"), the start menu,
+    the options screen (every line: level, lives, the sound test, the pad, exit, stage)
+    and setting up the attract demo and a stage's start;
+  * `cutscene.c`: the story scene at the game's end (the van and the guards): its steps,
+    fades and scrolls, and its script, whose commands run as the game's code (some
+    run past a frame's end, so the game's code calls them and the C goes on where they
+    return);
   * `screens.c`, `sound.c`: small routines (a screen's wait, the pad's buttons as the
     options map them, the jobs list). Where C stands for game code that pushes registers
     or return addresses, it writes them to the stack as the game does (`stack_put`): a

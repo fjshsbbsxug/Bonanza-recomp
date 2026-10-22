@@ -287,23 +287,24 @@ int logic_sprite_add(void)
     return done();
 }
 
-/* sub_13CEA: a blinking sprite at 162, 183 (its picture every 8 frames from table
- * 0x13CE2, palette line 1, in front) */
-int logic_blink_sprite(void)
+/* sub_13CEA / sub_139C6: a blinking sprite (its picture every 8 frames from a table,
+ * palette line 1, in front) at 162, 183 / 326, 311 */
+static int blink_sprite(uint32_t r, uint32_t table, uint16_t x, uint16_t y)
 {
-    if (!start()) return 0;
-    begin(0x13CEA);
+    begin(r);
     set_lo(0, (uint16_t)((ram16(FRAME_COUNT) & 0x18) >> 2));
-    REG_A[0] = 0x13CE2;
-    set_lo(0, (uint16_t)(rom16(0x13CE2 + lo(REG_D[0])) | 0xA000));
-    set_lo(1, 0xA2);
-    set_lo(2, 0xB7);
+    REG_A[0] = table;
+    set_lo(0, (uint16_t)(rom16(table + lo(REG_D[0])) | 0xA000));
+    set_lo(1, x);
+    set_lo(2, y);
     REG_D[3] = 1;
     REG_D[4] = 1;
-    call(0x12E64, 0x13D0E);
-    ran_to(0x13D14);
+    call(0x12E64, r + 0x24);
+    ran_to(r + 0x2A);
     return done();
 }
+int logic_blink_sprite(void)  { if (!start()) return 0; return blink_sprite(0x13CEA, 0x13CE2, 0xA2, 0xB7); }
+int logic_blink_sprite2(void) { if (!start()) return 0; return blink_sprite(0x139C6, 0x139BE, 0x146, 0x137); }
 
 /* sub_05D88: object d0's picture as sprites straight on the screen (the messages: x
  * 192..319 only), each piece at the object's place, linked on; mirrored: x from the

@@ -734,3 +734,18 @@ int logic_map_setup(void)
     ran_to(0x0FF84);
     return done();
 }
+
+/* sub_1798C: object d0's line on its floor (its y's last 3 bits) looked up in its
+ * table ($990C): d7 */
+int logic_floor_line(void)
+{
+    if (!start()) return 0;
+    begin(0x1798C);
+    uint16_t o = lo(REG_D[0]);
+    set_lo(7, (uint16_t)((obj16(OBJ_Y, o) & 7) * 2));
+    set_lo(6, (uint16_t)(o * 2));
+    REG_A[6] = ram32(0xFF990C + (int16_t)lo(REG_D[6]));
+    set_lo(7, mem16(REG_A[6] + (int16_t)lo(REG_D[7])));
+    ran_to(0x179AE);
+    return done();
+}

@@ -315,6 +315,61 @@ extern int  logic_stage_objects(void);        /* sub_0156C (logic/stage.c) */
 extern int  logic_place_object(void);         /* sub_015F2 */
 extern int  logic_stage_graphics(void);       /* sub_04484, to its load list */
 extern int  logic_stage_graphics2(void);      /* sub_04484 from 0x04498 */
+extern int  logic_blink_sprite2(void);        /* sub_139C6 */
+extern int  logic_slot_add2(void);            /* sub_132F2 */
+extern int  logic_messages_clear(void);       /* sub_187CE */
+extern int  logic_text_job(void);             /* sub_01318 */
+extern int  logic_fade_job_add(void);         /* sub_0141A */
+extern int  logic_palettes_clear(void);       /* sub_01928 */
+extern int  logic_floor_line(void);           /* sub_1798C */
+extern int  logic_players_back(void);         /* sub_1A67E */
+/* the screens around the game (logic/menu.c) */
+extern int  logic_screen_mode(void);             /* sub_02E06 */
+extern int  logic_logo_wait(void);               /* sub_02F4A */
+extern int  logic_logo_fade_up(void);            /* sub_02F7A */
+extern int  logic_logo_fade_out(void);           /* sub_02FC0 */
+extern int  logic_logo_shine(void);              /* sub_03050 */
+extern int  logic_logo_frame(void);              /* sub_03012 */
+extern int  logic_title_colors(void);            /* sub_03622 */
+extern int  logic_title_runner(void);            /* sub_03648 */
+extern int  logic_title_start(void);             /* sub_03484 */
+extern int  logic_title_fade_up(void);           /* sub_034BA */
+extern int  logic_title_scroll(void);            /* sub_034E6 */
+extern int  logic_title_push_start(void);        /* sub_0353A */
+extern int  logic_title_fade_out(void);          /* sub_035A0 */
+extern int  logic_menu_start(void);              /* sub_0372C */
+extern int  logic_menu_frame(void);              /* sub_037C0 */
+extern int  logic_menu_choose(void);             /* sub_037DE */
+extern int  logic_menu_fade_out(void);           /* sub_0392C */
+extern int  logic_options_fade_up(void);         /* sub_03BA6 */
+extern int  logic_options_frame(void);           /* sub_03BCC */
+extern int  logic_options_line(void);            /* sub_03CA0 */
+extern int  logic_option_level(void);            /* sub_03CC8 */
+extern int  logic_option_lives(void);            /* sub_03CF6 */
+extern int  logic_option_sound(void);            /* sub_03D22 */
+extern int  logic_option_control(void);          /* sub_03DD2 */
+extern int  logic_option_exit(void);             /* sub_03E1E */
+extern int  logic_option_stage(void);            /* sub_03E52 */
+extern int  logic_options_draw_line(void);       /* sub_03E7A */
+extern int  logic_options_draw_control(void);    /* sub_03F14 */
+extern int  logic_options_draw_exit(void);       /* sub_03F3C */
+extern int  logic_options_draw_stage(void);      /* sub_03F48 */
+extern int  logic_options_fade_out(void);        /* sub_03F6A */
+extern int  logic_demo_setup(void);              /* sub_041C4 */
+extern int  logic_demo_setup2(void);             /* sub_041DA */
+extern int  logic_stage_go(void);                /* sub_0442A */
+extern int  logic_demo_go(void);                 /* sub_04200 */
+/* the story cutscene (logic/cutscene.c) */
+extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
+extern int  logic_cutscene_wait(void);           /* sub_23B28 */
+extern int  logic_cutscene_fade_up(void);        /* sub_23C0C */
+extern int  logic_cutscene_scroll(void);         /* sub_23C38 */
+extern int  logic_cutscene_fade_out(void);       /* sub_23C7A */
+extern int  logic_cutscene_scene(void);          /* sub_23D80 */
+extern int  logic_cutscene_script(void);         /* sub_23E74 */
+extern int  logic_cutscene_scene_rest(void);       /* (sub_23D80 at 0x23D90) */
+extern int  logic_cutscene_script_after(void);     /* (sub_23E74 at 0x23E98) */
+extern int  logic_cutscene_end(void);            /* sub_23EC0 */
 extern int  logic_map_setup(void);            /* sub_0FF22 (logic/map.c) */
 extern int  logic_map_expand(void);           /* sub_1009A */
 extern int  logic_items_setup(void);          /* sub_1AD74 (logic/items.c) */
