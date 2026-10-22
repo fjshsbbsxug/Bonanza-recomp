@@ -426,6 +426,8 @@ extern int  logic_stagein_targets_setup(void);   /* sub_11476 */
 extern int  logic_coffee_frame(void);            /* sub_24938 */
 extern int  logic_coffee_setup(void);            /* sub_24536 */
 extern int  logic_coffee_setup2(void);           /* sub_2454E */
+extern int  logic_intro_town_setup(void);        /* sub_12614 */
+extern int  logic_intro_rise_setup(void);        /* sub_12C50 */
 extern int  logic_intro_setup(void);             /* sub_120E4 (logic/intro.c) */
 extern int  logic_intro_setup2(void);            /* (at 0x121D2) */
 extern int  logic_coffee_tiles4(void);           /* sub_246B6 (logic/stagein.c) */

@@ -403,3 +403,65 @@ static int alone_setup(void)
     ran_to(0x12BA0);
     return done();
 }
+
+/* sub_12614 (step 0's end, long): the town: the screen off, the shadow and highlight
+ * off, its colours, tiles and map blocks (overseas: one shorter, and a sign); the
+ * scroll, the wait, the palette's step, step 1 */
+int logic_intro_town_setup(void)
+{
+    begin_long(0x12614);
+    screen_off();
+    call(0x00522, 0x12626);
+    reg_keep(REG_MODE4, ram16(REG_MODE4) & 0x8CF7);
+    set_lo(7, 0x2B);
+    call(0x018FC, 0x12642);
+    set_lo(7, 0x2C);
+    call(0x018FC, 0x1264C);
+    tiles(0x2A5E0, 0x40000000, 0xC0, 0, 0x12666);
+    tiles(0x40020, 0x60000000, 0x41, 0, 0x12680);
+    map_block(0x2D060, 0x2CF00, 0xC000, 0xF, 0xF, 0x126AC);
+    if (overseas()) {
+        map_block(0x2D988, 0x2D908, 0xE000, 0xF, 8, 0x126E6);
+        map_rect(0x128B8, 0x126FA);
+        branched(0x12700, 0x12730);
+    } else {
+        branched(0x126BC, 0x12704);
+        map_block(0x2D988, 0x2D908, 0xE000, 0xF, 0xF, 0x1272A);
+    }
+    set16(SCROLL_A_X, 0x100);
+    screen_on();
+    set16(INTRO_WAIT, 0xC0);
+    set16(INTRO_COUNT, 0x58);
+    set16(INTRO_STEP, 1);
+    ran_to(0x12762);
+    return done_long();
+}
+
+/* sub_12C50 (step 3's end, long): the view rising: the screen off, its colours, tiles and
+ * map blocks (by the console's version); the scroll, 33 frames, step 4 */
+int logic_intro_rise_setup(void)
+{
+    begin_long(0x12C50);
+    screen_off();
+    call(0x00522, 0x12C62);
+    set_lo(7, 0x2F);
+    call(0x018FC, 0x12C6C);
+    tiles(0x59180, 0x40000000, 0x23, 0, 0x12C86);
+    if (overseas()) {
+        tiles(0x5981E, 0x60000000, 0xFF, 0, 0x12CAE);
+        map_block(0x305F8, 0x304A0, 0xC000, 0xF, 0xF, 0x12CDA);
+        branched(0x12CE0, 0x12D2A);
+    } else {
+        branched(0x12C96, 0x12CE4);
+        tiles(0x5935E, 0x60000000, 0xFF, 0, 0x12CF8);
+        map_block(0x302A0, 0x30180, 0xC000, 0xF, 0xF, 0x12D24);
+    }
+    map_block(0x2FF80, 0x2FF70, 0xE000, 0xF, 0xF, 0x12D50);
+    screen_on();
+    set16(SCROLL_B_Y, 0xDC);
+    set16(SCROLL_A_X, 0x10C);
+    set16(INTRO_WAIT, 0x21);
+    set16(INTRO_STEP, 4);
+    ran_to(0x12D88);
+    return done_long();
+}
