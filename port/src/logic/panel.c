@@ -72,7 +72,8 @@ static void join_end(int p, uint32_t jsr)
 /* sub_137A6 (player 2's sub_13ADC): run each frame while the player is out: with the
  * game over not yet up, its count down, then it put up (and the other player's panel
  * moved aside if he is out too); with it up, "insert coin" / the credits, and joining in
- * with start. Returns the Z flag its last instruction leaves (player 2's panel tests it). */
+ * with start. Returns the Z flag its last instruction leaves (player 2's panel tests it),
+ * or 2 when it goes on in the game's code (the long map block drawn). */
 static int over_check(int p)
 {
     uint32_t k = p ? 0x336 : 0, m = p ? 0x324 : 0;
@@ -115,9 +116,9 @@ shown:
         call(slot_add_at(p), 0x13826 + k);
         ran_to(0x1382C + k);
     }
-    {                                                 /* (the panel's map block drawn) */
-        set_lo(0, ram16(MAP_WIDTH));
-        uint32_t d0 = REG_D[0];
+    {                                                 /* (the panel's map block drawn: */
+        set_lo(0, ram16(MAP_WIDTH));                  /*  long, so the game's code calls */
+        uint32_t d0 = REG_D[0];                       /*  it; on at 0x13862) */
         REG_A[7] -= 4; set32(REG_A[7], d0);
         set32(ROW_JOB, p ? 0x2E6F0 : 0x2E650);
         set32(ROW_JOB + 4, p ? 0x2E4D8 : 0x2E598);
@@ -126,9 +127,10 @@ shown:
         set16(ROW_JOB + 12, 4);
         REG_A[0] = ROW_JOB + 14;
         set16(MAP_WIDTH, 0x10);
-        call(0x28386, 0x1385C + k);
-        REG_D[0] = ram32(REG_A[7]); REG_A[7] += 4;
-        set16(MAP_WIDTH, lo(REG_D[0]));
+        ran_to(0x13862 + k);
+        REG_A[7] -= 4; set32(REG_A[7], 0x13862 + k);
+        jump_to(0x28386);
+        return 2;
     }
 end:
     set16(wait, 0x4A);
@@ -190,9 +192,27 @@ static int over_check_logic(int p)
     if (!start()) return 0;
     begin(p ? 0x13ADC : 0x137A6);
     int z = over_check(p);
+    if (z == 2) return 2;
     FLAG_Z = z ? 0 : 1;
     return done();
 }
+/* (sub_137A6 / sub_13ADC from 0x13862, after the panel's map block) */
+static int over_check_after(int p)
+{
+    if (!start()) return 0;
+    uint32_t k = p ? 0x336 : 0;
+    begin(0x13862 + k);
+    REG_D[0] = ram32(REG_A[7]); REG_A[7] += 4;
+    set16(MAP_WIDTH, lo(REG_D[0]));
+    set16(PANEL_WAIT + 2 * p, 0x4A);
+    set16(PANEL_DRAW + 2 * p, 1);
+    set16(GAME_OVER + 2 * p, 0);
+    ran_to(0x13882 + k);
+    FLAG_Z = 0;
+    return done();
+}
+int logic_over_check_after(void)    { return over_check_after(0); }
+int logic_over_check_after_p2(void) { return over_check_after(1); }
 int logic_over_check(void)    { return over_check_logic(0); }
 int logic_over_check_p2(void) { return over_check_logic(1); }
 

@@ -748,6 +748,9 @@ LOGIC = {
     0x28914: "logic_column_right_p2",
     0x289D2: "logic_column_left_p2",
     # small routines
+    0x1A8F2: "logic_players_on",
+    0x179B0: "logic_guard_clear",
+    0x05DB0: "logic_picture_draw",
     0x1AD5E: "logic_item_touching",
     0x1A108: "logic_item_effect",
     0x1B502: "logic_loot_sparkle",
@@ -762,6 +765,8 @@ LOGIC = {
     0x13354: "logic_panel_step_p2",
     0x137A6: "logic_over_check",
     0x13ADC: "logic_over_check_p2",
+    0x13862: "logic_over_check_after",
+    0x13B98: "logic_over_check_after_p2",
     # the attract mode's opening (intro.c)
     0x122FE: "logic_intro_frame",
     0x123A4: "logic_intro_walk",

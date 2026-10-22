@@ -376,11 +376,16 @@ extern int  logic_jobs_clear(void);              /* sub_013FE (logic/screens.c) 
 extern int  logic_sprites_end(void);             /* sub_125EC (logic/sprites.c) */
 extern int  logic_points_redraw(void);           /* sub_11D36 (logic/hud.c) */
 extern int  logic_points_redraw_p2(void);        /* sub_11D50 (logic/hud.c) */
+extern int  logic_players_on(void);              /* sub_1A8F2 (logic/map.c) */
+extern int  logic_guard_clear(void);             /* sub_179B0 (logic/guards.c) */
+extern int  logic_picture_draw(void);            /* sub_05DB0 (logic/sprites.c) */
 /* the players' panels (logic/panel.c) */
 extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */
 extern int  logic_over_check(void);              /* sub_137A6 */
 extern int  logic_over_check_p2(void);           /* sub_13ADC */
+extern int  logic_over_check_after(void);        /* (at 0x13862) */
+extern int  logic_over_check_after_p2(void);     /* (at 0x13B98) */
 /* the attract mode's opening (logic/intro.c) */
 extern int  logic_intro_frame(void);             /* sub_122FE */
 extern int  logic_intro_walk(void);              /* sub_123A4 */

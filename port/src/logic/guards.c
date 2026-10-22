@@ -642,3 +642,31 @@ static void look_from(uint16_t o, uint32_t jsr)
     if (!which) { ran_to(0x16C5E); look_at(o, 0); jumped_to(0x16C5E); ran_to(0x16C60); }
     else { branched(0x16C54, 0x16C60); ran_to(0x16C66); look_at(o, 1); jumped_to(0x16C66); ran_to(0x16C68); }
 }
+
+/* sub_179B0: guard d0's state cleared: what he carries out of play, his script's place
+ * back to its start, his counters, waits and marks cleared */
+int logic_guard_clear(void)
+{
+    if (!start()) return 0;
+    begin(0x179B0);
+    int16_t o = (int16_t)lo(REG_D[0]);
+    REG_A[6] = 0xFF8D78;
+    set_lo(7, ram16(0xFF8D78 + o));
+    if (!lo(REG_D[7])) branched(0x179BA, 0x179CC);
+    else {
+        set16(0xFF8D78 + o, 0);
+        REG_A[6] = OBJ_ACTIVE;
+        set16(OBJ_ACTIVE + (int16_t)lo(REG_D[7]), 0);
+        ran_to(0x179CC);
+    }
+    REG_A[5] = 0xFF7560;
+    set16(0xFF7560 + o, ram16(0xFF7514 + o));
+    static const uint32_t cleared[] = {
+        0xFF931C, 0xFF9498, 0xFF9368, 0xFF9744, 0xFF734C, 0xFF7398, 0xFF73E4, 0xFF7430,
+        0xFF747C, 0xFF74C8,
+    };
+    for (unsigned i = 0; i < sizeof cleared / sizeof *cleared; i++) set16(cleared[i] + o, 0);
+    REG_A[6] = 0xFF74C8;
+    ran_to(0x17A42);
+    return done();
+}

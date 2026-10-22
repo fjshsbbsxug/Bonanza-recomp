@@ -370,3 +370,55 @@ int logic_sprites_end(void)
     ran_to(0x12612);
     return done();
 }
+
+/* sub_05DB0: picture d7 (table 0x24B80: its count of pieces, then each one's y and x
+ * offsets, size and link, and tile) for object d0 at its place, into the sprite table;
+ * mirrored when the object faces left ($32FE: each piece's x from the right by its
+ * width, the tile flipped) */
+int logic_picture_draw(void)
+{
+    if (!start()) return 0;
+    begin(0x05DB0);
+    int16_t o = (int16_t)lo(REG_D[0]);
+    set_lo(7, (uint16_t)(lo(REG_D[7]) << 2));
+    REG_A[6] = mem32(0x24B80 + (int16_t)lo(REG_D[7]));
+    set_lo(4, (uint16_t)(mem16(REG_A[6]) >> 8));
+    REG_A[6] += 2;
+    set_lo(7, (uint16_t)(ram16(SPRITE_COUNT) << 3));
+    REG_A[5] = 0xFF0000 + (uint32_t)(int16_t)lo(REG_D[7]);
+    REG_A[4] = 0xFF32FE;
+    int flip = ram16(0xFF32FE + o) != 0;
+    uint32_t loop = flip ? 0x05E28 : 0x05DDE, dbra = flip ? 0x05E80 : 0x05E22;
+    if (flip) branched(0x05DDA, loop); else ran_to(loop);
+    for (;;) {
+        set16(SPRITE_COUNT, (uint16_t)(ram16(SPRITE_COUNT) + 1));
+        REG_D[7] = (uint32_t)(int32_t)(int8_t)RD8(REG_A[6]);
+        REG_D[7] &= 0xFFFF;
+        REG_A[6] += 1;
+        set_lo(7, (uint16_t)(lo(REG_D[7]) + ram16(0xFF30FA + o)));
+        set16(REG_A[5], lo(REG_D[7]));
+        REG_D[7] = (uint16_t)(int16_t)(int8_t)RD8(REG_A[6]);
+        REG_A[6] += 1;
+        REG_A[4] = 0xFF304E;
+        if (!flip) {
+            set_lo(7, (uint16_t)(lo(REG_D[7]) + ram16(0xFF304E + o)));
+        } else {
+            set_lo(6, (uint16_t)((((mem16(REG_A[6]) >> 7) & 0x18) + 8) + lo(REG_D[7])));
+            set_lo(7, (uint16_t)(ram16(0xFF304E + o) - lo(REG_D[6])));
+        }
+        set16(REG_A[5] + 6, lo(REG_D[7]));
+        set_lo(7, mem16(REG_A[6])); REG_A[6] += 2;
+        set_lo(6, ram16(SPRITE_COUNT) & 0x3F);
+        set_lo(7, (uint16_t)(lo(REG_D[7]) + lo(REG_D[6])));
+        set16(REG_A[5] + 2, lo(REG_D[7]));
+        if (!flip) set16(REG_A[5] + 4, mem16(REG_A[6]));
+        else { set_lo(7, (uint16_t)(mem16(REG_A[6]) ^ 0x800)); set16(REG_A[5] + 4, lo(REG_D[7])); }
+        REG_A[6] += 2;
+        REG_A[5] += 8;
+        uint16_t c = lo(REG_D[4]);
+        set_lo(4, (uint16_t)(c - 1));
+        if (!c) { ran_to(dbra + 4); break; }
+        branched(dbra, loop);
+    }
+    return done();
+}

@@ -506,6 +506,42 @@ int players_touching(uint16_t o, uint32_t jsr)
     return found;
 }
 
+/* sub_1A8F2: the players on object d0 (each in play; sub_1A9E8, no height test): bit 0
+ * player 1, bit 1 player 2 in d6; the side each is on, $A3BC / $A3BE; d1 kept */
+int logic_players_on(void)
+{
+    if (!start()) return 0;
+    static const struct { uint32_t beq, jsr, beq_none, end; } at[2] = {
+        {0x1A900, 0x1A90A, 0x1A916, 0x1A926}, {0x1A92C, 0x1A938, 0x1A944, 0x1A956},
+    };
+    begin(0x1A8F2);
+    uint16_t o = lo(REG_D[0]);
+    uint32_t d1 = REG_D[1];
+    REG_A[7] -= 4; set32(REG_A[7], d1);
+    REG_D[7] = 0;
+    REG_D[6] = 0;
+    for (int p = 0; p < 2; p++) {
+        if (!obj16(OBJ_ACTIVE, (uint16_t)(2 * p))) { branched(at[p].beq, at[p].end); continue; }
+        if (p) REG_D[7] = 0;
+        REG_D[1] = (uint32_t)(2 * p);
+        uint32_t d6 = REG_D[6];
+        REG_A[7] -= 4; set32(REG_A[7], d6);
+        stack_put(-4, at[p].jsr + 6);                 /* (the jsr's return) */
+        ran_to(at[p].jsr + 6);
+        int hit = touching(o, (uint16_t)(2 * p), 0, 0x1A9E8, 0, 1);
+        REG_D[7] = (uint32_t)hit;
+        jumped_to(at[p].jsr + 6);
+        REG_D[6] = d6; REG_A[7] += 4;
+        if (!hit) { branched(at[p].beq_none, at[p].end); continue; }
+        if (!p) REG_D[6] = 1; else set_lo(6, (uint16_t)(lo(REG_D[6]) | 2));
+        set16(p ? 0xFFA3BE : 0xFFA3BC, ram16(0xFFA3AC));
+        ran_to(at[p].end);
+    }
+    REG_D[1] = d1; REG_A[7] += 4;
+    ran_to(0x1A95A);
+    return done();
+}
+
 /* ================================================================ the players' lane walls */
 
 /* sub_1019E / sub_10224 / sub_102A6 (player 2's: sub_101C8 / sub_1024C / sub_102E4):
