@@ -175,6 +175,11 @@ builder/      the HTML builder page
     the title (its scroll, colours and running figure, "push start"), the start menu,
     the options screen (every line: level, lives, the sound test, the pad, exit, stage)
     and setting up the attract demo and a stage's start;
+  * `panel.c`: the players' panels during play: a player's game over put up and its
+    count down, "continue" counting down, the credits, joining in again with start (the
+    game has it twice, player 2's copy differing in a few places, e.g. a `bne` after
+    the game over's check where player 1's has a `bra`, so the C returns the flag that
+    check leaves);
   * `cutscene.c`: the story scene at the game's end (the van and the guards): its steps,
     fades and scrolls, and its script, whose commands run as the game's code (some
     run past a frame's end, so the game's code calls them and the C goes on where they

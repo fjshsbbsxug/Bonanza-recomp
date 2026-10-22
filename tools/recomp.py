@@ -757,6 +757,11 @@ LOGIC = {
     0x125EC: "logic_sprites_end",
     0x11D36: "logic_points_redraw",
     0x11D50: "logic_points_redraw_p2",
+    # the players' panels (panel.c)
+    0x12F02: "logic_panel_step",
+    0x13354: "logic_panel_step_p2",
+    0x137A6: "logic_over_check",
+    0x13ADC: "logic_over_check_p2",
     # the story cutscene (cutscene.c)
     0x23AB6: "logic_cutscene_frame",
     0x23B28: "logic_cutscene_wait",

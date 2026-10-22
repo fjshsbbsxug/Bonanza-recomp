@@ -376,6 +376,11 @@ extern int  logic_jobs_clear(void);              /* sub_013FE (logic/screens.c) 
 extern int  logic_sprites_end(void);             /* sub_125EC (logic/sprites.c) */
 extern int  logic_points_redraw(void);           /* sub_11D36 (logic/hud.c) */
 extern int  logic_points_redraw_p2(void);        /* sub_11D50 (logic/hud.c) */
+/* the players' panels (logic/panel.c) */
+extern int  logic_panel_step(void);              /* sub_12F02 */
+extern int  logic_panel_step_p2(void);           /* sub_13354 */
+extern int  logic_over_check(void);              /* sub_137A6 */
+extern int  logic_over_check_p2(void);           /* sub_13ADC */
 /* the story cutscene (logic/cutscene.c) */
 extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
 extern int  logic_cutscene_wait(void);           /* sub_23B28 */
