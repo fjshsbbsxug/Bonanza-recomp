@@ -234,8 +234,20 @@ static struct {
 static int long_depth;
 uint64_t logic_long_back;                  /* (LOGICSTATS: how often one was put back) */
 
-int start_long_named(const char *name)
+int start_long_named(const char *name, uint32_t addr)
 {
+    static uint32_t bypass_at;
+    if (bypass_at == addr) { bypass_at = 0; return 0; }
+    static int ref = -1;
+    if (ref < 0) ref = getenv("LOGIC_LONG_REF") != 0;
+    if (ref && !logic_off) {               /* (the game's code for it, in one go: from addr */
+        uint32_t sp = REG_A[7];            /*  to its rts) */
+        uint32_t ret = m68ki_read_32(sp);
+        bypass_at = addr;
+        REG_PC = addr;
+        cpu_run_to(ret, sp + 4);
+        return 2;                          /* (done: on at REG_PC, its return) */
+    }
     if (!start_named(name)) return 0;
     if (long_depth++) return 1;            /* (within another: that one keeps the machine) */
     kept.cpu = m68ki_cpu;

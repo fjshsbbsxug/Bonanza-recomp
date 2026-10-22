@@ -304,7 +304,7 @@ int logic_coffee_tiles12(void)
 }
 
 /* ---------------------------------------------------------------- the set-ups (long: a
- * frame can end inside them, see start_long) */
+ * frame can end inside them, see begin_long) */
 
 /* (the "stage" boxes' sprites from table 0x112AC at a0, each linked to the next, until
  * -1; the loop's places at `loop`, its beq at `beq` to `out`, its bra at `bra`) */
@@ -332,8 +332,7 @@ static void stage_boxes(uint32_t loop, uint32_t beq, uint32_t out, uint32_t bra)
  * shadow and highlight, 240 frames, its frame (0x113E6), its music and colours */
 int logic_stagein_setup(void)
 {
-    if (!start_long()) return 0;
-    begin(0x11120);
+    begin_long(0x11120);
     screen_off();
     call(0x01928, 0x11132);
     call(0x00522, 0x11138);
@@ -374,8 +373,7 @@ int logic_stagein_setup(void)
  * picture (0x114F0, a video part) */
 int logic_stagein_targets_setup(void)
 {
-    if (!start_long()) return 0;
-    begin(0x11476);
+    begin_long(0x11476);
     screen_off();
     call(0x00522, 0x11488);
     screen_on();

@@ -112,12 +112,16 @@ void count_named(const char *name);     /* (LOGICSTATS: a part's calls, by name)
 #define start() start_named(__func__)
 
 /* ---- a long routine (a screen's set-up): the game lets a frame end inside it, which a
- * routine in C cannot. It starts with: if (!start_long()) return 0; and ends with
- * return done_long(); (or jump_long(addr)). The machine is kept as it was at the start;
- * when the routine has run past the frame's end, it is put back and the game's own code
- * runs it this time (0), so the frame ends inside it as it does on the console. */
-int start_long_named(const char *name);
-#define start_long() start_long_named(__func__)
+ * routine in C cannot. It starts with begin_long(addr) (in place of start() and
+ * begin()) and ends with return done_long(); (or jump_long(addr)). The machine is kept
+ * as it was at the start; when the routine has run past the frame's end, it is put back
+ * and the game's own code runs it this time (0), so the frame ends inside it as it does
+ * on the console.
+ * Tests: LOGIC_LONG_KEEP=1 keeps the C's result, LOGIC_LONG_REF=1 runs the game's code for
+ * it in one go instead (no frame's end inside either): the two must give the same game. */
+int start_long_named(const char *name, uint32_t addr);   /* 1: C; 0: the game's code; 2: done */
+#define begin_long(addr) \
+    do { int r_ = start_long_named(__func__, addr); if (r_ != 1) return r_; begin(addr); } while (0)
 int done_long(void);
 int jump_long(uint32_t addr);
 

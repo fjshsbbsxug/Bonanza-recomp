@@ -752,6 +752,8 @@ LOGIC = {
     0x28914: "logic_column_right_p2",
     0x289D2: "logic_column_left_p2",
     # small routines
+    0x0430A: "logic_stage_setup",
+    0x04322: "logic_stage_setup2",
     0x141F8: "logic_guards_setup",
     0x08E74: "logic_player_start",
     0x08F26: "logic_player_start_p2",

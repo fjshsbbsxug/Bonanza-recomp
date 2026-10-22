@@ -142,3 +142,71 @@ int logic_stage_graphics2(void)
     ran_to(0x04564);
     return done();
 }
+
+/* ---------------------------------------------------------------- setting up a stage */
+
+#include "setup.h"
+
+/* sub_0430A (screen mode 3): a stage set up: the screen off, the work memory cleared
+ * (sub_00470: a frame ends inside it, so the game's code runs it; on at 0x4322) */
+int logic_stage_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x0430A);
+    screen_off();
+    ran_to(0x04322);
+    REG_A[7] -= 4; set32(REG_A[7], 0x04322);
+    return jump_to(0x00470);
+}
+
+/* (0x4322, long: see begin_long) the sprites and planes cleared, the HUD, the palette
+ * cycles, the map and the points, the stage's tiles, objects and views (sub_04484), the
+ * stage's own start (table 0x45CE); each player in the game started, the others' game
+ * over put up; the views' tasks, the guards, the items; then a second's wait and the
+ * stage's start (0x442A) from its frame (0x4460) */
+int logic_stage_setup2(void)
+{
+    begin_long(0x04322);
+    call(0x00522, 0x04322);
+    call(0x050C4, 0x04328);
+    call(0x0FD90, 0x0432E);
+    call(0x1044A, 0x04334);
+    call(0x0FF22, 0x0433A);
+    call(0x11D36, 0x04340);
+    call(0x11D50, 0x04346);
+    set16(0xFF17A2, 0);
+    call(0x04484, 0x04352);
+    set_lo(0, (uint16_t)((ram16(STAGE_ENTRY) - 1) << 2));
+    REG_A[0] = mem32(0x45CE + (int16_t)lo(REG_D[0]));
+    call(REG_A[0], 0x0436A);
+    if (ram16(STAGE_ENTRY) != 6) branched(0x04374, 0x04380);
+    else { set16(0xFFA5C6, 1); ran_to(0x04380); }
+    set32(OBJ_ACTIVE, 0);
+    static const struct { uint32_t beq, out, jsr_in, bra, jsr_over, next; } at[2] = {
+        {0x04390, 0x043A8, 0x0439E, 0x043A4, 0x043B6, 0x043BC},
+        {0x043C6, 0x043DE, 0x043D4, 0x043DA, 0x043EC, 0x043F2},
+    };
+    for (int p = 0; p < 2; p++) {
+        set_lo(7, ram16(0xFFC076) & (p ? 2 : 1));
+        if (lo(REG_D[7])) {
+            set16(OBJ_ACTIVE + 2 * (uint32_t)p, 1);
+            REG_D[0] = 0;
+            call(p ? 0x08F26 : 0x08E74, at[p].jsr_in);
+            branched(at[p].bra, at[p].next);
+        } else {
+            branched(at[p].beq, at[p].out);
+            set16(p ? 0xFFC056 : 0xFFC054, 0);
+            set8(0xFF6C6F + 2 * (uint32_t)p, 1);
+            call(p ? 0x13ADC : 0x137A6, at[p].jsr_over);
+        }
+    }
+    call(0x080F8, 0x043F2);
+    call(0x141F8, 0x043F8);
+    call(0x1AD74, 0x043FE);
+    set16(0xFF5546, 0x3C);
+    set32(SCREEN_RUN, 0x4460);
+    set32(0xFFC072, 0x442A);
+    set16(0xFF1816, 1);
+    ran_to(0x04428);
+    return done_long();
+}

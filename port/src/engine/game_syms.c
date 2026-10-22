@@ -547,6 +547,8 @@ const bonanza_sym game_engine_syms[] = {
     {"logic_stage_graphics", (void *)logic_stage_graphics},
     {"logic_stage_graphics2", (void *)logic_stage_graphics2},
     {"logic_stage_objects", (void *)logic_stage_objects},
+    {"logic_stage_setup", (void *)logic_stage_setup},
+    {"logic_stage_setup2", (void *)logic_stage_setup2},
     {"logic_stagein_building", (void *)logic_stagein_building},
     {"logic_stagein_count", (void *)logic_stagein_count},
     {"logic_stagein_fade", (void *)logic_stagein_fade},
