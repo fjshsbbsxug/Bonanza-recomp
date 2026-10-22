@@ -389,3 +389,68 @@ int logic_stagein_targets_setup(void)
     ran_to(0x114F0);
     return rest_long(0x114F0);
 }
+
+/* sub_24536: the coffee break set up: the screen off, the work memory cleared (sub_00470:
+ * a frame ends inside it, so the game's code runs it; on at 0x2454E) */
+int logic_coffee_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x24536);
+    screen_off();
+    ran_to(0x2454E);
+    REG_A[7] -= 4; set32(REG_A[7], 0x2454E);
+    return jump_to(0x00470);
+}
+
+/* (0x2454E, long) the palettes, sprites and planes cleared, the stage's map, objects and
+ * guards as for play, its tiles (and the break's own, table 0x246A6), its map block and
+ * colours, its music; 240 frames, the scroll, its frame (0x248DE); the figures' animations
+ * going (table 0x2469E: how many), the scroll set, the screen on */
+int logic_coffee_setup2(void)
+{
+    begin_long(0x2454E);
+    call(0x01928, 0x2454E);
+    call(0x00522, 0x24554);
+    call(0x006FA, 0x2455A);
+    call(0x0FF22, 0x24560);
+    call(0x0156C, 0x24566);
+    call(0x141F8, 0x2456C);
+    reg_keep(REG_MODE4, 0x8C00);
+    planes_size(0x9011);
+    tiles(0x55100, 0x40000000, 0xBE, 0, 0x245B0);
+    REG_D[0] &= 0xFFFF0000u;
+    set_lo(0, ram16(STAGE_ENTRY));
+    REG_A[0] = mem32(0x246A6 + (int16_t)lo(REG_D[0]));
+    call(REG_A[0], 0x245C6);
+    map_rect(0x24692, 0x245D6);
+    set_lo(7, 0x30);
+    call(0x018FC, 0x245E0);
+    set_lo(0, 0x8C);
+    call(0x02D54, 0x245EA);
+    set16(WAIT, 0xF0);
+    set16(STEP, 0);
+    set16(FRAME_COUNT, 0);
+    set16(0xFF6C54, 0x224);
+    set16(0xFF6C56, 0x1CF);
+    set32(SCREEN_RUN, 0x248DE);
+    set_lo(0, 0);
+    set_lo(0, (uint16_t)(ram16(STAGE_ENTRY) >> 1));
+    REG_A[0] = 0x2469E;
+    set_lo(0, mem16(0x2469E + (int16_t)lo(REG_D[0])));
+    REG_A[0] = 0xFF2FAE;
+    ran_to(0x2463C);
+    for (;;) {
+        set16(REG_A[0], 3);
+        REG_A[0] += 2;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x24644); break; }
+        branched(0x24640, 0x2463C);
+    }
+    scroll_put(0x40000010, ram16(0xFF6C54));
+    scroll_put(0x40020010, ram16(0xFF6C56));
+    scroll_put(0x70020002, 0);
+    screen_on();
+    ran_to(0x24690);
+    return done_long();
+}

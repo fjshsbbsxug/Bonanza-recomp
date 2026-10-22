@@ -206,6 +206,8 @@ const bonanza_sym game_engine_syms[] = {
     {"logic_climb_p1", (void *)logic_climb_p1},
     {"logic_climb_p2", (void *)logic_climb_p2},
     {"logic_coffee_frame", (void *)logic_coffee_frame},
+    {"logic_coffee_setup", (void *)logic_coffee_setup},
+    {"logic_coffee_setup2", (void *)logic_coffee_setup2},
     {"logic_coffee_tiles12", (void *)logic_coffee_tiles12},
     {"logic_coffee_tiles4", (void *)logic_coffee_tiles4},
     {"logic_coffee_tiles8", (void *)logic_coffee_tiles8},

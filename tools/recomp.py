@@ -805,6 +805,8 @@ LOGIC = {
     0x11120: "logic_stagein_setup",
     0x11476: "logic_stagein_targets_setup",
     0x24938: "logic_coffee_frame",
+    0x24536: "logic_coffee_setup",
+    0x2454E: "logic_coffee_setup2",
     0x120E4: "logic_intro_setup",
     0x121D2: "logic_intro_setup2",
     0x246B6: "logic_coffee_tiles4",
