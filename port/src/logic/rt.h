@@ -111,4 +111,14 @@ int start_named(const char *name);
 void count_named(const char *name);     /* (LOGICSTATS: a part's calls, by name) */
 #define start() start_named(__func__)
 
+/* ---- a long routine (a screen's set-up): the game lets a frame end inside it, which a
+ * routine in C cannot. It starts with: if (!start_long()) return 0; and ends with
+ * return done_long(); (or jump_long(addr)). The machine is kept as it was at the start;
+ * when the routine has run past the frame's end, it is put back and the game's own code
+ * runs it this time (0), so the frame ends inside it as it does on the console. */
+int start_long_named(const char *name);
+#define start_long() start_long_named(__func__)
+int done_long(void);
+int jump_long(uint32_t addr);
+
 #endif

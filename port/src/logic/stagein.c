@@ -302,3 +302,92 @@ int logic_coffee_tiles12(void)
     };
     return tile_loads(0x2478A, t, 13, 0x248DC);
 }
+
+/* ---------------------------------------------------------------- the set-ups (long: a
+ * frame can end inside them, see start_long) */
+
+/* (the "stage" boxes' sprites from table 0x112AC at a0, each linked to the next, until
+ * -1; the loop's places at `loop`, its beq at `beq` to `out`, its bra at `bra`) */
+static void stage_boxes(uint32_t loop, uint32_t beq, uint32_t out, uint32_t bra)
+{
+    REG_A[1] = 0x112AC;
+    ran_to(loop);
+    for (;;) {
+        set_lo(7, mem16(REG_A[1])); REG_A[1] += 2;
+        if (lo(REG_D[7]) == 0xFFFF) { branched(beq, out); return; }
+        set16(REG_A[0], lo(REG_D[7]));
+        set16(REG_A[0] + 6, mem16(REG_A[1])); REG_A[1] += 2;
+        set_lo(7, (uint16_t)((ram16(SPRITE_COUNT) + 1) | mem16(REG_A[1]))); REG_A[1] += 2;
+        set16(REG_A[0] + 2, lo(REG_D[7]));
+        set_lo(7, (uint16_t)(mem16(REG_A[1]) | mem16(REG_A[1] + 2))); REG_A[1] += 4;
+        set16(REG_A[0] + 4, lo(REG_D[7]));
+        REG_A[0] += 8;
+        set16(SPRITE_COUNT, (uint16_t)(ram16(SPRITE_COUNT) + 1));
+        branched(bra, loop);
+    }
+}
+
+/* sub_11120: the building's screen set up: its tiles, its map block, the "stage" boxes,
+ * the two figures' places and pictures (by the console's version and the stage), the
+ * shadow and highlight, 240 frames, its frame (0x113E6), its music and colours */
+int logic_stagein_setup(void)
+{
+    if (!start_long()) return 0;
+    begin(0x11120);
+    screen_off();
+    call(0x01928, 0x11132);
+    call(0x00522, 0x11138);
+    tiles(0x5447E, 0x40000000, 0xFF, 0, 0x11152);
+    tiles(0x296FA, 0x60000000, 0xE8, 0, 0x1116C);
+    tiles(0x40020, 0x40000001, 0xFF, 0, 0x11186);
+    map_block(0x7DFC0, 0x7DD48, 0xC000, 0xF, 0xF, 0x111B2);
+    REG_A[0] = 0xFF0000;
+    stage_boxes(0x111C4, 0x111CA, 0x111F6, 0x111F4);
+    set16(0xFF304E, 0x100);
+    set16(0xFF30FA, 0xC0);
+    set16(0xFF3050, 0x100);
+    set16(0xFF30FC, 0xAC);
+    REG_D[5] = (REG_D[5] & 0xFFFFFF00u) | (uint8_t)(RD8(0xA10001) & 0x80);
+    if ((uint8_t)REG_D[5]) { REG_A[0] = 0x113AE; branched(0x11228, 0x11230); }
+    else { branched(0x11220, 0x1122C); REG_A[0] = 0x11392; ran_to(0x11230); }
+    set_lo(0, (uint16_t)(ram16(STAGE_ENTRY) << 1));
+    set16(OBJ_FRAME, mem16(REG_A[0] + (int16_t)lo(REG_D[0])));
+    REG_A[0] = 0x113CA;
+    set16(OBJ_FRAME + 2, mem16(0x113CA + (int16_t)lo(REG_D[0])));
+    reg_keep(REG_MODE4, ram16(REG_MODE4) | 0x8C08);
+    set16(WAIT, 0xF0);
+    set16(STEP, 0);
+    set32(SCREEN_RUN, 0x113E6);
+    set_lo(0, 0x87);
+    call(0x02D54, 0x1127A);
+    REG_A[0] = 0x11376;
+    set_lo(0, (uint16_t)(ram16(STAGE_ENTRY) << 1));
+    set_lo(7, mem16(0x11376 + (int16_t)lo(REG_D[0])));
+    call(0x018FC, 0x11292);
+    screen_on();
+    ran_to(0x112AA);
+    return done_long();
+}
+
+/* sub_11476 (step 0's end): the targets' screen: the stage's tiles (table 0x119B0), the
+ * targets' frame tiles and colours (0x115D4), the shadow and highlight; then the targets'
+ * picture (0x114F0, a video part) */
+int logic_stagein_targets_setup(void)
+{
+    if (!start_long()) return 0;
+    begin(0x11476);
+    screen_off();
+    call(0x00522, 0x11488);
+    screen_on();
+    set_lo(0, (uint16_t)(ram16(STAGE_ENTRY) << 2));
+    REG_A[0] = mem32(0x119B0 + (int16_t)lo(REG_D[0]));
+    call(REG_A[0], 0x114B0);
+    tiles(0x51CFA, 0x40000002, 0x1D, 0, 0x114C6);
+    REG_A[0] = 0x115D4;
+    set_lo(0, (uint16_t)(lo(REG_D[0]) >> 1));
+    set_lo(7, mem16(0x115D4 + (int16_t)lo(REG_D[0])));
+    call(0x018FC, 0x114D6);
+    reg_keep(REG_MODE4, ram16(REG_MODE4) | 0x8C08);
+    ran_to(0x114F0);
+    return jump_long(0x114F0);
+}

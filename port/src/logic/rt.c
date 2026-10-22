@@ -219,8 +219,64 @@ int start_named(const char *name)
     return 1;
 }
 
+/* ---- long routines: the machine kept, and put back when one runs past the frame */
+
+#include "../vdp.h"
+#include <stddef.h>
+
+static struct {
+    m68ki_cpu_core cpu;
+    int cycles, irq_dirty;
+    uint32_t call_ret;
+    uint8_t md[sizeof(md_t) - offsetof(md_t, ram)];
+    uint8_t vdp[offsetof(vdp_t, fbmd)];
+} kept;
+static int long_depth;
+uint64_t logic_long_back;                  /* (LOGICSTATS: how often one was put back) */
+
+int start_long_named(const char *name)
+{
+    if (!start_named(name)) return 0;
+    if (long_depth++) return 1;            /* (within another: that one keeps the machine) */
+    kept.cpu = m68ki_cpu;
+    kept.cycles = GET_CYCLES();
+    kept.irq_dirty = cpu_irq_dirty;
+    kept.call_ret = cpu_call_ret;
+    memcpy(kept.md, (uint8_t *)&md + offsetof(md_t, ram), sizeof kept.md);
+    memcpy(kept.vdp, &vdp, sizeof kept.vdp);
+    return 1;
+}
+
+/* (the time taken: back to the start when it ran past the frame's end; 1 when not) */
+static int long_end(void)
+{
+    USE_CYCLES(cyc);
+    cyc = 0;
+    if (--long_depth) return 1;
+    if (GET_CYCLES() > 0) return 1;
+    static int keep = -1;                  /* LOGIC_LONG_KEEP=1 (tests): never put back, so */
+    if (keep < 0) keep = getenv("LOGIC_LONG_KEEP") != 0;   /* the C runs: only the frame */
+    if (keep) return 1;                    /* it ran past differs then */
+    m68ki_cpu = kept.cpu;
+    SET_CYCLES(kept.cycles);
+    cpu_irq_dirty = kept.irq_dirty;
+    cpu_call_ret = kept.call_ret;
+    memcpy((uint8_t *)&md + offsetof(md_t, ram), kept.md, sizeof kept.md);
+    memcpy(&vdp, kept.vdp, sizeof kept.vdp);
+    logic_long_back++;
+    return 0;
+}
+int done_long(void) { return long_end() ? 1 : 0; }
+int jump_long(uint32_t addr)
+{
+    if (!long_end()) return 0;
+    REG_PC = addr;
+    return 2;
+}
+
 void logic_report(FILE *f)
 {
+    fprintf(f, "  (long routines put back: %llu)\n", (unsigned long long)logic_long_back);
     for (int i = 0; i < 1024 && calls[i].name; i++)
         fprintf(f, "  %-28s %llu\n", calls[i].name, (unsigned long long)calls[i].n);
 }
