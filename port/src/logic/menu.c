@@ -1048,3 +1048,20 @@ int logic_logo_setup3(void)
     ran_to(0x02F48);
     return done_long();
 }
+
+/* sub_03F8A (the options' step after EXIT): the screen off a moment, the music stopped;
+ * then the start menu again (mode 4) */
+int logic_options_end(void)
+{
+    if (!start()) return 0;
+    begin(0x03F8A);
+    screen_off();
+    call(0x00522, 0x03F9C);
+    screen_on();
+    set_lo(0, 0xE1);
+    call(0x02D54, 0x03FB8);
+    screen_next(0x2E06);
+    set16(GAME_MODE, 4);
+    ran_to(0x03FD0);
+    return done();
+}

@@ -452,3 +452,40 @@ int logic_boot_pads(void)
     ran_to(0x00458);
     return jump_to(0x00458);
 }
+
+/* (the vertical blank at 0xA22: the pads read (sub_007BE), the sound asked for sent
+ * (sub_02DC2); then its sprites' part (0xA2C)) */
+int logic_vblank_pads(void)
+{
+    if (!start()) return 0;
+    begin(0x00A22);
+    call(0x007BE, 0x00A22);
+    call(0x02DC2, 0x00A26);
+    return jump_to(0x00A2C);
+}
+
+/* (the vertical blank's end at 0xBE8: the screen's routine (SCREEN_RUN) called - it
+ * waits for frames, so the game's code calls it; on at 0xBF0) */
+int logic_vblank_screen(void)
+{
+    if (!start()) return 0;
+    begin(0x00BE8);
+    REG_A[0] = ram32(SCREEN_RUN);
+    ran_to(0x00BF0);
+    REG_A[7] -= 4; set32(REG_A[7], 0x00BF0);
+    return jump_to(REG_A[0]);
+}
+
+/* (0xBF0) the video registers the game keeps written (sub_0070A), the jobs list run
+ * (sub_01468) unless paused, the frame's flag cleared; then its rte (0xC0E) */
+int logic_vblank_end(void)
+{
+    if (!start()) return 0;
+    begin(0x00BF0);
+    call(0x0070A, 0x00BF0);
+    if (ram16(0xFF1806)) branched(0x00BFC, 0x00C06);
+    else call(0x01468, 0x00C00);
+    set16(0xFF17B4, 0);
+    ran_to(0x00C0E);
+    return jump_to(0x00C0E);
+}

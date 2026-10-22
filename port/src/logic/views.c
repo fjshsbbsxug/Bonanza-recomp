@@ -734,3 +734,22 @@ int logic_split_copy(void)        { return split_copy(0, 0); }
 int logic_split_copy_top(void)    { return split_copy(0, 1); }
 int logic_split_copy_p2(void)     { return split_copy(1, 0); }
 int logic_split_copy_top_p2(void) { return split_copy(1, 1); }
+
+/* sub_04602 ... sub_04FB6 (table 0x45CE by stage): the stage's start for the views: each
+ * player's view put back (the stage's two routines above, called in turn; stages 4, 8
+ * and 12 have none) */
+static int stage_views(uint32_t r, uint32_t p1, uint32_t p2)
+{
+    if (!start()) return 0;
+    begin(r);
+    call(p1, r);
+    call(p2, r + 6);
+    ran_to(r + 0xC);
+    return done();
+}
+#define STAGE_VIEWS(n, r, p1, p2) int logic_stage_views##n(void) { return stage_views(r, p1, p2); }
+STAGE_VIEWS(1, 0x04602, 0x04610, 0x04690) STAGE_VIEWS(2, 0x04710, 0x0471E, 0x0479E)
+STAGE_VIEWS(3, 0x0481E, 0x0482C, 0x048AC) STAGE_VIEWS(5, 0x0492E, 0x0493C, 0x049D0)
+STAGE_VIEWS(6, 0x04A64, 0x04A72, 0x04AF2) STAGE_VIEWS(7, 0x04B72, 0x04B80, 0x04C00)
+STAGE_VIEWS(9, 0x04C82, 0x04C90, 0x04D10) STAGE_VIEWS(10, 0x04D90, 0x04D9E, 0x04E22)
+STAGE_VIEWS(11, 0x04EA6, 0x04EB4, 0x04F34) STAGE_VIEWS(13, 0x04FB6, 0x04FC4, 0x05044)

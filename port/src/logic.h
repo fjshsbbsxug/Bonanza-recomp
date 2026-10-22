@@ -403,6 +403,20 @@ extern int  logic_stage_setup2(void);            /* sub_04322 (logic/stage.c) */
 extern int  logic_boot_options(void);            /* (at 0x00384, logic/screens.c) */
 extern int  logic_boot_video(void);              /* (at 0x003BA, logic/screens.c) */
 extern int  logic_boot_pads(void);               /* (at 0x003F2, logic/screens.c) */
+extern int  logic_stage_views1(void);            /* sub_04602 (logic/views.c) */
+extern int  logic_stage_views2(void);            /* sub_04710 (logic/views.c) */
+extern int  logic_stage_views3(void);            /* sub_0481E (logic/views.c) */
+extern int  logic_stage_views5(void);            /* sub_0492E (logic/views.c) */
+extern int  logic_stage_views6(void);            /* sub_04A64 (logic/views.c) */
+extern int  logic_stage_views7(void);            /* sub_04B72 (logic/views.c) */
+extern int  logic_stage_views9(void);            /* sub_04C82 (logic/views.c) */
+extern int  logic_stage_views10(void);           /* sub_04D90 (logic/views.c) */
+extern int  logic_stage_views11(void);           /* sub_04EA6 (logic/views.c) */
+extern int  logic_stage_views13(void);           /* sub_04FB6 (logic/views.c) */
+extern int  logic_options_end(void);             /* sub_03F8A (logic/menu.c) */
+extern int  logic_vblank_pads(void);             /* sub_00A22 (logic/screens.c) */
+extern int  logic_vblank_screen(void);           /* sub_00BE8 (logic/screens.c) */
+extern int  logic_vblank_end(void);              /* sub_00BF0 (logic/screens.c) */
 /* the players' panels (logic/panel.c) */
 extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */
