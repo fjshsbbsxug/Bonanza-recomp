@@ -195,15 +195,19 @@ builder/      the HTML builder page
     options map them, the jobs list). Where C stands for game code that pushes registers
     or return addresses, it writes them to the stack as the game does (`stack_put`): a
     later, deeper routine can find them there, above the stack pointer, before it writes
-    its own. C runs a routine whole, so a frame cannot end inside it: routines in which
-    the game's own code lets a frame end stay the game's code (clearing the work memory,
-    the sound driver's upload, setting up a stage and its guards, the player's start, the
-    screens' set-ups whose tile loads run past a frame's end). Where a frame can end at
-    one call in a routine otherwise in C (a set-up's colours or music, a long map block),
-    the C hands that call to the game's code with a return address of its own and goes on
-    in a second part where it returns (as with the frame's wait above). The screens'
-    set-ups share their steps (`setup.h`: the screen off and on, video registers kept,
-    tiles, map blocks, the fade's speed).
+    its own. C runs a routine whole, so a frame cannot end inside it, where the game's
+    own code can. So a routine in C that the game's code starts near the frame's end (the
+    last 20000 cycles), and every long one (the screens' and the stage's set-ups, the
+    guards' set-up: `begin_long`), keeps the machine first (the CPU, the work memory, the
+    video state); if it has run past the frame's end, it is put back and the game's code
+    runs it that time, so the frame ends inside it as on the console. Only the work
+    memory's clear and the sound driver's load, which always run across frames, stay the
+    game's code alone; C hands them over with a return address of its own and goes on
+    where they return. `LOGIC_LONG_KEEP=1` keeps the C's result even then and
+    `LOGIC_LONG_REF=1` runs the game's code for a long routine in one go: the two must
+    give the same game (how the long routines are checked, as normally they are put back
+    whenever they run across a frame). The screens' set-ups share their steps (`setup.h`:
+    the screen off and on, video registers kept, tiles, map blocks, the fade's speed).
   `tools/recomp.py` (`LOGIC`) calls each where its routine starts. While the code around a
   part is still translated 68000 code, the part also leaves the registers and flags its
   callers read (`tools/liveness.py` works them out: registers by byte, word and long,
@@ -212,16 +216,15 @@ builder/      the HTML builder page
   up to stop points the recompiler marks (`STOPS`), and C calls routines not written yet
   with `cpu_call`. The port's own changes at places now in C (Insane mode's hooks, the stage
   select code's menu line) are called from the C (`hook_at`: where a hook sends the game
-  elsewhere, the game's code runs from there until it comes back). Checking: `BONANZA_TRANSLATED=1` runs the game's own routines;
+  elsewhere, the game's code runs from there until it comes back). Checking:
+  `BONANZA_TRANSLATED=1` runs the game's own routines;
   `LOGIC_SCRAMBLE=1` fills the registers C leaves alone with junk; every recorded scene must
   give the same pictures and game state both ways (`LOGICSTATS=1` lists the calls by part
   and by script op; `LOGIC_OPS_OFF=48,F0` runs those ops as the game's code;
   `LOGIC_SKIP=state_walk,...` runs those parts as the game's code; `LOGIC_TRACE=1` lists
   each part as it starts, with the frame's time left, both ways). When C calls the game's
   code, the generated code's `rts` goes back to the C as soon as it reaches the place
-  `cpu_call` waits for, even within the same translated region. One frame of
-  the ending differs: the game's frame runs out of time inside the guards' frame there, and
-  the C version finishes it at once (the next frame is the same again).
+  `cpu_call` waits for, even within the same translated region.
 * **Drawing** (`port/src/draw.c`, `video.c`, `vdp.c`):
   * The game's drawing routines are written in C: tile loading (raw and packed), lines
     of text and the queued text, the HUD (frame, stage name, time, scores, counters),
