@@ -359,6 +359,10 @@ extern int  logic_demo_setup(void);              /* sub_041C4 */
 extern int  logic_demo_setup2(void);             /* sub_041DA */
 extern int  logic_stage_go(void);                /* sub_0442A */
 extern int  logic_demo_go(void);                 /* sub_04200 */
+extern int  logic_row_tiles(void);               /* sub_284E2 (logic/views.c) */
+extern int  logic_row_tiles_p2(void);            /* sub_287D2 (logic/views.c) */
+extern int  logic_row_request(void);             /* sub_285A6 (logic/views.c) */
+extern int  logic_row_request_p2(void);          /* sub_28896 (logic/views.c) */
 extern int  logic_column_right(void);            /* sub_28624 (logic/views.c) */
 extern int  logic_column_left(void);             /* sub_286E2 (logic/views.c) */
 extern int  logic_column_right_p2(void);         /* sub_28914 (logic/views.c) */

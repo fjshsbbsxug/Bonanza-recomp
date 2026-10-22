@@ -67,6 +67,124 @@ static uint16_t step4(uint16_t at, int dir)          /* (the place in the plane'
     return (uint16_t)((at & 0xFF80) + ((at + 4 * dir) & 0x7F));
 }
 
+#define ROW_JOB      0xFF2CD4    /* the row to draw: the map's column and row, the place */
+
+/* sub_284E2 (player 2's sub_287D2): a row of the map (ROW_JOB: 10 blocks across from its
+ * column, wrapping round the map's width; 5 rows of blocks down) into the tiles to draw,
+ * from its place in the plane's row (wrapping at its $80 bytes) */
+static void row_tiles(int v)
+{
+    uint32_t b = v ? 0x2F0 : 0;
+    REG_A[0] = ROW_JOB;
+    set_lo(3, 0);
+    set_lo(7, ram16(ROW_JOB));
+    set_lo(6, ram16(ROW_JOB + 2));
+    set_lo(5, (uint16_t)(ram16(MAP_WIDTH) * 2));
+    if ((int16_t)lo(REG_D[6]) >= 0) branched(0x284FC + b, 0x28504 + b);
+    else {
+        set_lo(6, (uint16_t)-lo(REG_D[6]));
+        set_lo(5, (uint16_t)-lo(REG_D[5]));
+        ran_to(0x28504 + b);
+    }
+    for (;;) {                                         /* (the row's place in the map) */
+        set_lo(6, (uint16_t)(lo(REG_D[6]) - 1));
+        if ((int16_t)lo(REG_D[6]) < 0) { branched(0x28506 + b, 0x2850E + b); break; }
+        set_lo(3, (uint16_t)(lo(REG_D[3]) + lo(REG_D[5])));
+        branched(0x2850C + b, 0x28504 + b);
+    }
+    set_lo(7, (uint16_t)(lo(REG_D[7]) * 2 + lo(REG_D[3])));
+    REG_A[6] = ram32(MAP_AT) + (uint32_t)(int16_t)lo(REG_D[7]);
+    set_lo(3, ram16(ROW_JOB + 4));
+    REG_A[4] = view_ram(v, VIEW_TILES) + (uint32_t)(int16_t)lo(REG_D[3]);
+    REG_A[3] = view_ram(v, VIEW_TILES + 0x80) + (uint32_t)(int16_t)lo(REG_D[3]);
+    REG_A[2] = view_ram(v, VIEW_TILES);
+    REG_A[5] = ram32(BLOCKS);
+    set_lo(0, 4);
+    ran_to(0x2853E + b);
+    for (;;) {                                         /* (each row of blocks) */
+        set_lo(1, 9);
+        REG_A[1] = REG_A[6];
+        REG_D[4] = REG_A[4];
+        set_lo(2, ram16(ROW_JOB));
+        set_lo(3, ram16(ROW_JOB + 4));
+        ran_to(0x2854E + b);
+        for (;;) {                                     /* (each block across) */
+            set_lo(7, (uint16_t)(mem16(REG_A[6]) << 3));
+            REG_A[6] += 2;
+            uint32_t t = REG_A[5] + (uint32_t)(int16_t)lo(REG_D[7]);
+            set32(REG_A[4], mem32(t)); REG_A[4] += 4;
+            set32(REG_A[3], mem32(t + 4)); REG_A[3] += 4;
+            set_lo(2, (uint16_t)(lo(REG_D[2]) + 1));
+            if (lo(REG_D[2]) != ram16(MAP_WIDTH)) branched(0x28562 + b, 0x2856C + b);
+            else {
+                set_lo(2, (uint16_t)(lo(REG_D[2]) * 2));
+                REG_A[6] -= (uint32_t)(int16_t)lo(REG_D[2]);
+                set_lo(2, 0);
+                ran_to(0x2856C + b);
+            }
+            set_lo(3, (uint16_t)(lo(REG_D[3]) + 4));
+            if (lo(REG_D[3]) != 0x80) branched(0x28572 + b, 0x28580 + b);
+            else {
+                set_lo(3, 0);
+                REG_A[4] = REG_A[2];
+                REG_A[3] = REG_A[2] + 0x80;
+                ran_to(0x28580 + b);
+            }
+            uint16_t c = lo(REG_D[1]);
+            set_lo(1, (uint16_t)(c - 1));
+            if (!c) { ran_to(0x28584 + b); break; }
+            branched(0x28580 + b, 0x2854E + b);
+        }
+        set_lo(1, (uint16_t)(ram16(MAP_WIDTH) * 2));
+        REG_A[6] = REG_A[1] + (uint32_t)(int16_t)lo(REG_D[1]);
+        set_lo(4, (uint16_t)(lo(REG_D[4]) + 0x100));
+        REG_A[4] = REG_D[4];
+        REG_A[3] = REG_D[4] + 0x80;
+        REG_A[2] += 0x100;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x285A4 + b); break; }
+        branched(0x285A0 + b, 0x2853E + b);
+    }
+}
+
+/* sub_285A6 (player 2's sub_28896): at the map's top or bottom while the view moves up or
+ * down, the view held: its row a block on, the HUD's split asked for, on the other side */
+static void row_request(int v)
+{
+    uint32_t b = v ? 0x2F0 : 0;
+    uint16_t move = ram16(view_ram(v, VIEW_MOVE));
+    set_lo(0, move);
+    if (!move) { branched(0x285AC + b, 0x28622 + b); return; }
+    int up = move & 1;
+    if (!up) {
+        branched(0x285B4 + b, 0x285EA + b);
+        if (!(move & 2)) { branched(0x285EE + b, 0x28622 + b); return; }
+    }
+    set_lo(0, ram16(view_ram(v, VIEW_Y)));
+    uint16_t edge = up ? (v ? 0x109 : 0xFF79) : (v ? 0x1A9 : 0x19);
+    if (lo(REG_D[0]) != edge) { branched((up ? 0x285C2 : 0x285FC) + b, 0x28622 + b); return; }
+    uint32_t row = view_ram(v, VIEW_ROW);
+    set16(row, (uint16_t)(ram16(row) + (up ? -5 : 5)));
+    REG_A[0] = view_ram(v, VIEW_TASKS);
+    set16(REG_A[0] + 2, 1);
+    set16(view_ram(v, VIEW_SPLIT), up ? 0 : 1);
+    set16(view_ram(v, VIEW_HELD), 1);
+    if (up) branched(0x285E6 + b, 0x28622 + b);
+    else ran_to(0x28622 + b);
+}
+static int row_logic(int v, int request)
+{
+    if (!start()) return 0;
+    begin((request ? 0x285A6 : 0x284E2) + (v ? 0x2F0 : 0));
+    if (request) row_request(v); else row_tiles(v);
+    return done();
+}
+int logic_row_tiles(void)       { return row_logic(0, 0); }
+int logic_row_tiles_p2(void)    { return row_logic(1, 0); }
+int logic_row_request(void)     { return row_logic(0, 1); }
+int logic_row_request_p2(void)  { return row_logic(1, 1); }
+
 /* sub_28624 / sub_286E2 (player 2's sub_28914 / sub_289D2): the map's column at the right
  * or the left edge into the tiles to draw (the view's row, a block up or down while it
  * moves), handed to the line routine; the edges a column on */
@@ -209,7 +327,11 @@ static void task_row(int v, uint32_t b, int second)
     }
     set16(0xFF2CD8, line);
     set_lo(7, line);
-    call(v ? 0x287D2 : 0x284E2, 0x08236 + b + e);
+    ran_to(0x0823C + b + e);                          /* (jsr, inline) */
+    jumped_to(0x284E2 + (v ? 0x2F0 : 0));
+    row_tiles(v);
+    ran_to(0x285A6 + (v ? 0x2F0 : 0));
+    jumped_to(0x0823C + b + e);
     uint32_t t = view_ram(v, VIEW_TASKS);
     REG_A[0] = t;
     set16(t + 6 + 2 * second, 0);
@@ -361,7 +483,12 @@ static void view_scroll(int v)
         set16(R(0xFF1850), (uint16_t)(ram16(R(0xFF1850)) + d));
         set16(R(0xFF1854), (uint16_t)(ram16(R(0xFF1854)) + d));
         uint32_t s1 = REG_D[1];
-        call(v ? 0x28896 : 0x285A6, (dy < 0 ? 0x085E0 : 0x0862C) + b);
+        uint32_t j = (dy < 0 ? 0x085E0 : 0x0862C) + b;  /* (jsr, inline) */
+        ran_to(j + 6);
+        jumped_to(0x285A6 + (v ? 0x2F0 : 0));
+        row_request(v);
+        ran_to(0x28624 + (v ? 0x2F0 : 0));
+        jumped_to(j + 6);
         REG_D[1] = s1;
         if (dy < 0) branched(0x085EA + b, 0x08636 + b); else ran_to(0x08636 + b);
     }
