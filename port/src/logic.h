@@ -363,6 +363,10 @@ extern int  logic_row_tiles(void);               /* sub_284E2 (logic/views.c) */
 extern int  logic_row_tiles_p2(void);            /* sub_287D2 (logic/views.c) */
 extern int  logic_row_request(void);             /* sub_285A6 (logic/views.c) */
 extern int  logic_row_request_p2(void);          /* sub_28896 (logic/views.c) */
+extern int  logic_split_copy(void);              /* sub_08B08 (logic/views.c) */
+extern int  logic_split_copy_top(void);          /* sub_08B28 (logic/views.c) */
+extern int  logic_split_copy_p2(void);           /* sub_08D62 (logic/views.c) */
+extern int  logic_split_copy_top_p2(void);       /* sub_08D82 (logic/views.c) */
 extern int  logic_column_right(void);            /* sub_28624 (logic/views.c) */
 extern int  logic_column_left(void);             /* sub_286E2 (logic/views.c) */
 extern int  logic_column_right_p2(void);         /* sub_28914 (logic/views.c) */

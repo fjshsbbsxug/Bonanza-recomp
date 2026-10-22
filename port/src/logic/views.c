@@ -709,3 +709,28 @@ static int view_reset(int i, int v)
     int logic_view_reset##i##_p2(void) { if (!start()) return 0; return view_reset(i, 1); }
 VIEW_RESET_FN(0) VIEW_RESET_FN(1) VIEW_RESET_FN(2) VIEW_RESET_FN(3) VIEW_RESET_FN(4)
 VIEW_RESET_FN(5) VIEW_RESET_FN(6) VIEW_RESET_FN(7) VIEW_RESET_FN(8) VIEW_RESET_FN(9)
+
+/* sub_08B08 / sub_08B28 (player 2's sub_08D62 / sub_08D82): the line routines a view's
+ * split asks for: its two rows' worth of the plane copied in video memory ($500 bytes,
+ * sub_28200, from $C114 / $C118), the view's top set back to the map's top (the second
+ * of each), the routine done ($C10C / $C110 cleared) */
+static int split_copy(int v, int top)
+{
+    if (!start()) return 0;
+    uint32_t r = (v ? 0x8D62 : 0x8B08) + (top ? 0x20 : 0);
+    begin(r);
+    REG_A[0] = v ? 0xFFC118 : 0xFFC114;
+    set_lo(7, ram16(REG_A[0]));
+    REG_A[0] += 2;
+    set_lo(6, ram16(REG_A[0]));
+    set_lo(5, 0x500);
+    call(0x28200, r + 0xE);
+    if (top) set16(view_ram(v, VIEW_Y), v ? 0x159 : 0xFFC9);
+    set32(v ? 0xFFC110 : 0xFFC10C, 0);
+    ran_to(r + (top ? 0x26 : 0x1E));
+    return done();
+}
+int logic_split_copy(void)        { return split_copy(0, 0); }
+int logic_split_copy_top(void)    { return split_copy(0, 1); }
+int logic_split_copy_p2(void)     { return split_copy(1, 0); }
+int logic_split_copy_top_p2(void) { return split_copy(1, 1); }
