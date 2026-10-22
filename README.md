@@ -195,17 +195,24 @@ builder/      the HTML builder page
     options map them, the jobs list). Where C stands for game code that pushes registers
     or return addresses, it writes them to the stack as the game does (`stack_put`): a
     later, deeper routine can find them there, above the stack pointer, before it writes
-    its own. Routines that take longer than a frame (clearing the work memory, setting
-    up a stage) stay the game's code: C runs a routine whole, which would move the
-    frame's end.
+    its own. C runs a routine whole, so a frame cannot end inside it: routines in which
+    the game's own code lets a frame end stay the game's code (clearing the work memory,
+    the sound driver's upload, setting up a stage and its guards, the player's start, the
+    screens' set-ups whose tile loads run past a frame's end). Where a frame can end at
+    one call in a routine otherwise in C (a set-up's colours or music, a long map block),
+    the C hands that call to the game's code with a return address of its own and goes on
+    in a second part where it returns (as with the frame's wait above). The screens'
+    set-ups share their steps (`setup.h`: the screen off and on, video registers kept,
+    tiles, map blocks, the fade's speed).
   `tools/recomp.py` (`LOGIC`) calls each where its routine starts. While the code around a
   part is still translated 68000 code, the part also leaves the registers and flags its
   callers read (`tools/liveness.py` works them out: registers by byte, word and long,
   handler pointers and tables followed) and takes the routine's time (a frame that runs out
   of time goes on in the next). Parts of a routine not written yet run as the game's code
   up to stop points the recompiler marks (`STOPS`), and C calls routines not written yet
-  with `cpu_call`. The port's own changes at places now in C (Insane mode's hooks) are
-  called from the C. Checking: `BONANZA_TRANSLATED=1` runs the game's own routines;
+  with `cpu_call`. The port's own changes at places now in C (Insane mode's hooks, the stage
+  select code's menu line) are called from the C (`hook_at`: where a hook sends the game
+  elsewhere, the game's code runs from there until it comes back). Checking: `BONANZA_TRANSLATED=1` runs the game's own routines;
   `LOGIC_SCRAMBLE=1` fills the registers C leaves alone with junk; every recorded scene must
   give the same pictures and game state both ways (`LOGICSTATS=1` lists the calls by part
   and by script op; `LOGIC_OPS_OFF=48,F0` runs those ops as the game's code;
