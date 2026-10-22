@@ -302,6 +302,7 @@ const bonanza_sym game_engine_syms[] = {
     {"logic_hit_go_p2", (void *)logic_hit_go_p2},
     {"logic_hit_script_p1", (void *)logic_hit_script_p1},
     {"logic_hit_script_p2", (void *)logic_hit_script_p2},
+    {"logic_hud_fixed", (void *)logic_hud_fixed},
     {"logic_hud_frame", (void *)logic_hud_frame},
     {"logic_intro_alone", (void *)logic_intro_alone},
     {"logic_intro_end", (void *)logic_intro_end},

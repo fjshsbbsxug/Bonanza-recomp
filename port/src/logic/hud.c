@@ -28,6 +28,15 @@ static void hud_fixed(void)
     REG_A[6] = a6;
 }
 
+int logic_hud_fixed(void)
+{
+    if (!start()) return 0;
+    begin(0x10912);
+    hud_fixed();
+    ran_to(0x109DC);
+    return done();
+}
+
 /* the time's three digits (a0: the timer) into the HUD's tiles; at: its addq.l #1, a0 */
 static void hud_digits(uint32_t at)
 {

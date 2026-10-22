@@ -388,6 +388,7 @@ extern int  logic_pad_detect(void);              /* sub_0093C (logic/screens.c) 
 extern int  logic_vblank_lines1(void);           /* sub_00AA2 (logic/screens.c) */
 extern int  logic_vblank_lines2(void);           /* sub_00AB4 (logic/screens.c) */
 extern int  logic_vblank_columns(void);          /* sub_00ABC (logic/screens.c) */
+extern int  logic_hud_fixed(void);               /* sub_10912 (logic/hud.c) */
 /* the players' panels (logic/panel.c) */
 extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */
