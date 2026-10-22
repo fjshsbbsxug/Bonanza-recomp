@@ -200,10 +200,13 @@ builder/      the HTML builder page
     last 20000 cycles), and every long one (the screens' and the stage's set-ups, the
     guards' set-up: `begin_long`), keeps the machine first (the CPU, the work memory, the
     video state); if it has run past the frame's end, it is put back and the game's code
-    runs it that time, so the frame ends inside it as on the console. Only the work
-    memory's clear and the sound driver's load, which always run across frames, stay the
-    game's code alone; C hands them over with a return address of its own and goes on
-    where they return. `LOGIC_LONG_KEEP=1` keeps the C's result even then and
+    runs it that time, so the frame ends inside it as on the console (the work memory's
+    clear and the sound driver's load always run across frames, so they always run as the
+    game's code; their C is checked as below). Routines that reach outside what is kept
+    (the sound player, the controller ports: `start_io`) are never put back. Left as the
+    game's code: the reset and exception stubs, the boot's hardware set-up and checksum,
+    the idle and frame-wait loops, and the vertical blank's start (it lets the line
+    interrupts in). `LOGIC_LONG_KEEP=1` keeps the C's result even then and
     `LOGIC_LONG_REF=1` runs the game's code for a long routine in one go: the two must
     give the same game (how the long routines are checked, as normally they are put back
     whenever they run across a frame). The screens' set-ups share their steps (`setup.h`:

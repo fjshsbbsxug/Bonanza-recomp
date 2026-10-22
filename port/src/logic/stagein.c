@@ -454,3 +454,16 @@ int logic_coffee_setup2(void)
     ran_to(0x24690);
     return done_long();
 }
+
+/* sub_11106 (screen mode 6): the screen before a stage, by the stage (table 0x1133A: the
+ * building's screen, the coffee breaks', the ending's) */
+int logic_stagein_choose(void)
+{
+    if (!start()) return 0;
+    begin(0x11106);
+    set16(SPRITE_COUNT, 0);
+    set_lo(0, (uint16_t)(ram16(STAGE_ENTRY) << 2));
+    REG_A[0] = mem32(0x1133A + (int16_t)lo(REG_D[0]));
+    ran_to(0x11120);
+    return jump_to(REG_A[0]);
+}

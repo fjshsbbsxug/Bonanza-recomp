@@ -825,6 +825,7 @@ LOGIC = {
     0x11842: "logic_stagein_count",
     0x118C4: "logic_stagein_wait",
     0x11946: "logic_stagein_fade",
+    0x11106: "logic_stagein_choose",
     0x11120: "logic_stagein_setup",
     0x11476: "logic_stagein_targets_setup",
     0x24938: "logic_coffee_frame",

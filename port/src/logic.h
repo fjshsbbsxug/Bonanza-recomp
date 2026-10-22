@@ -444,6 +444,7 @@ extern int  logic_stagein_targets(void);         /* sub_1180C */
 extern int  logic_stagein_count(void);           /* sub_11842 */
 extern int  logic_stagein_wait(void);            /* sub_118C4 */
 extern int  logic_stagein_fade(void);            /* sub_11946 */
+extern int  logic_stagein_choose(void);          /* sub_11106 */
 extern int  logic_stagein_setup(void);           /* sub_11120 */
 extern int  logic_stagein_targets_setup(void);   /* sub_11476 */
 extern int  logic_coffee_frame(void);            /* sub_24938 */

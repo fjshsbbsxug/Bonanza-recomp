@@ -580,6 +580,7 @@ const bonanza_sym game_engine_syms[] = {
     {"logic_stage_views7", (void *)logic_stage_views7},
     {"logic_stage_views9", (void *)logic_stage_views9},
     {"logic_stagein_building", (void *)logic_stagein_building},
+    {"logic_stagein_choose", (void *)logic_stagein_choose},
     {"logic_stagein_count", (void *)logic_stagein_count},
     {"logic_stagein_fade", (void *)logic_stagein_fade},
     {"logic_stagein_setup", (void *)logic_stagein_setup},
