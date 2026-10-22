@@ -180,6 +180,10 @@ builder/      the HTML builder page
     game has it twice, player 2's copy differing in a few places, e.g. a `bne` after
     the game over's check where player 1's has a `bra`, so the C returns the flag that
     check leaves);
+  * `intro.c`: the attract mode's opening (the brothers walking with the police cars
+    behind them along their paths, the town, the van, the view rising; start skips it);
+    its steps' set-ups, which load tiles and maps with the screen off, stay the game's
+    code;
   * `cutscene.c`: the story scene at the game's end (the van and the guards): its steps,
     fades and scrolls, and its script, whose commands run as the game's code (some
     run past a frame's end, so the game's code calls them and the C goes on where they

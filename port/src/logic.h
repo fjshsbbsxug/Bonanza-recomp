@@ -381,6 +381,18 @@ extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */
 extern int  logic_over_check(void);              /* sub_137A6 */
 extern int  logic_over_check_p2(void);           /* sub_13ADC */
+/* the attract mode's opening (logic/intro.c) */
+extern int  logic_intro_frame(void);             /* sub_122FE */
+extern int  logic_intro_walk(void);              /* sub_123A4 */
+extern int  logic_intro_town(void);              /* sub_128C4 */
+extern int  logic_intro_van(void);               /* sub_12A3A */
+extern int  logic_intro_alone(void);             /* sub_12BAE */
+extern int  logic_intro_rise(void);              /* sub_12D8A */
+extern int  logic_intro_wait(void);              /* sub_12DC0 */
+extern int  logic_intro_end(void);               /* sub_12DE0 */
+extern int  logic_intro_scroll0(void);           /* sub_12E9C */
+extern int  logic_intro_scroll1f8(void);         /* sub_12EBA */
+extern int  logic_intro_scroll100(void);         /* sub_12ED8 */
 /* the story cutscene (logic/cutscene.c) */
 extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
 extern int  logic_cutscene_wait(void);           /* sub_23B28 */

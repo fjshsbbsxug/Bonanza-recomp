@@ -762,6 +762,18 @@ LOGIC = {
     0x13354: "logic_panel_step_p2",
     0x137A6: "logic_over_check",
     0x13ADC: "logic_over_check_p2",
+    # the attract mode's opening (intro.c)
+    0x122FE: "logic_intro_frame",
+    0x123A4: "logic_intro_walk",
+    0x128C4: "logic_intro_town",
+    0x12A3A: "logic_intro_van",
+    0x12BAE: "logic_intro_alone",
+    0x12D8A: "logic_intro_rise",
+    0x12DC0: "logic_intro_wait",
+    0x12DE0: "logic_intro_end",
+    0x12E9C: "logic_intro_scroll0",
+    0x12EBA: "logic_intro_scroll1f8",
+    0x12ED8: "logic_intro_scroll100",
     # the story cutscene (cutscene.c)
     0x23AB6: "logic_cutscene_frame",
     0x23B28: "logic_cutscene_wait",
