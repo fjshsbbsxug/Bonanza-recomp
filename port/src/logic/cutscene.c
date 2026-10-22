@@ -246,3 +246,106 @@ int logic_cutscene_end(void)
     ran_to(0x23EFC);
     return done();
 }
+
+/* The script's commands (table 0x3BB4A); those loading tiles stay the game's code */
+#define FIGURE_GO        0xFF2FAE   /* (words) a figure's animation going */
+
+/* a block of the map's tiles drawn (sub_28A90, its table at a6), the tile step $40 */
+static void script_rect(uint32_t at, uint32_t table)
+{
+    REG_A[6] = table;
+    set16(0xFF1830, 0x40);
+    call(0x28A90, at + 0xE);
+}
+#define SCRIPT_RECT(name, at, table)                                         \
+    int logic_##name(void)                                                   \
+    {                                                                        \
+        if (!start()) return 0;                                              \
+        begin(at);                                                           \
+        script_rect(at, table);                                              \
+        ran_to(at + 0x14);                                                   \
+        return done();                                                       \
+    }
+SCRIPT_RECT(script_rect1, 0x3BC9A, 0x3C0E2)    /* sub_3BC9A ... */
+SCRIPT_RECT(script_rect2, 0x3BCB0, 0x3C0EE)
+SCRIPT_RECT(script_rect3, 0x3BCC6, 0x3C0FA)
+SCRIPT_RECT(script_rect4, 0x3BCDC, 0x3C106)
+SCRIPT_RECT(script_rect5, 0x3BCF2, 0x3C112)
+SCRIPT_RECT(script_rect6, 0x3BD08, 0x3C11E)
+SCRIPT_RECT(script_rect7, 0x3BD1E, 0x3C12A)
+SCRIPT_RECT(script_rect8, 0x3BD34, 0x3C136)    /* ... sub_3BD34 */
+
+/* sub_3BC56: the title's block, by the console's version (overseas, 60 Hz) */
+int logic_script_title(void)
+{
+    if (!start()) return 0;
+    begin(0x3BC56);
+    REG_D[5] = (REG_D[5] & 0xFFFFFF00u) | (uint8_t)RD8(0xA10001);
+    if ((REG_D[5] & 0x80) && !(REG_D[5] & 0x40)) {
+        ran_to(0x3BC6C);
+        script_rect(0x3BC6C, 0x3C0D6);
+        ran_to(0x3BC80);
+        return done();
+    }
+    if (!(REG_D[5] & 0x80)) branched(0x3BC60, 0x3BC82);
+    else branched(0x3BC68, 0x3BC82);
+    script_rect(0x3BC82, 0x3C0CA);
+    ran_to(0x3BC96);
+    return done();
+}
+
+/* sub_3C0A2: the last block, and the scroll across starting (object 0's step -1) */
+int logic_script_last(void)
+{
+    if (!start()) return 0;
+    begin(0x3C0A2);
+    script_rect(0x3C0A2, 0x3C142);
+    set16(OBJ_DX, 0xFFFF);
+    ran_to(0x3C0BE);
+    return done();
+}
+
+/* sub_3BC4C / sub_3BDBE / sub_3C0C0: the scroll across going (-1) or stopped */
+int logic_script_scroll_go(void)
+{
+    if (!start()) return 0;
+    begin(0x3BC4C);
+    set16(OBJ_DX, 0xFFFF);
+    ran_to(0x3BC54);
+    return done();
+}
+int logic_script_scroll_stop(void)
+{
+    if (!start()) return 0;
+    begin(0x3BDBE);
+    set16(OBJ_DX, 0);
+    ran_to(0x3BDC6);
+    return done();
+}
+int logic_script_scroll_stop2(void)
+{
+    if (!start()) return 0;
+    begin(0x3C0C0);
+    set16(OBJ_DX, 0);
+    ran_to(0x3C0C8);
+    return done();
+}
+
+/* sub_3BDC8: two figures' animations going */
+int logic_script_figures(void)
+{
+    if (!start()) return 0;
+    begin(0x3BDC8);
+    set16(FIGURE_GO + 8, 3);
+    set16(FIGURE_GO + 10, 3);
+    ran_to(0x3BDD8);
+    return done();
+}
+
+/* sub_3BBDE / sub_3BC98: nothing */
+int logic_script_none(void)
+{
+    if (!start()) return 0;
+    begin(REG_PC);
+    return done();
+}

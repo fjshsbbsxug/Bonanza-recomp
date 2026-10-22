@@ -370,6 +370,21 @@ extern int  logic_cutscene_script(void);         /* sub_23E74 */
 extern int  logic_cutscene_scene_rest(void);       /* (sub_23D80 at 0x23D90) */
 extern int  logic_cutscene_script_after(void);     /* (sub_23E74 at 0x23E98) */
 extern int  logic_cutscene_end(void);            /* sub_23EC0 */
+extern int  logic_script_rect1(void);            /* sub_3BC9A */
+extern int  logic_script_rect2(void);            /* sub_3BCB0 */
+extern int  logic_script_rect3(void);            /* sub_3BCC6 */
+extern int  logic_script_rect4(void);            /* sub_3BCDC */
+extern int  logic_script_rect5(void);            /* sub_3BCF2 */
+extern int  logic_script_rect6(void);            /* sub_3BD08 */
+extern int  logic_script_rect7(void);            /* sub_3BD1E */
+extern int  logic_script_rect8(void);            /* sub_3BD34 */
+extern int  logic_script_title(void);            /* sub_3BC56 */
+extern int  logic_script_last(void);             /* sub_3C0A2 */
+extern int  logic_script_scroll_go(void);        /* sub_3BC4C */
+extern int  logic_script_scroll_stop(void);      /* sub_3BDBE */
+extern int  logic_script_scroll_stop2(void);     /* sub_3C0C0 */
+extern int  logic_script_figures(void);          /* sub_3BDC8 */
+extern int  logic_script_none(void);             /* sub_3BBDE */
 extern int  logic_map_setup(void);            /* sub_0FF22 (logic/map.c) */
 extern int  logic_map_expand(void);           /* sub_1009A */
 extern int  logic_items_setup(void);          /* sub_1AD74 (logic/items.c) */
