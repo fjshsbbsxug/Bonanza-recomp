@@ -250,3 +250,60 @@ int logic_pads(void)
     ran_to(0x007EC);
     return done();
 }
+
+/* sub_01550: text number d7 (table 0x5E86) put up (sub_01318), d7 and a0 kept */
+int logic_text_number(void)
+{
+    if (!start()) return 0;
+    begin(0x01550);
+    uint32_t d7 = REG_D[7], a0 = REG_A[0];
+    REG_A[7] -= 8; set32(REG_A[7], d7); set32(REG_A[7] + 4, a0);
+    set_lo(7, (uint16_t)(lo(REG_D[7]) << 2));
+    REG_A[0] = mem32(0x5E86 + (int16_t)lo(REG_D[7]));
+    call(0x01318, 0x01560);
+    REG_D[7] = d7; REG_A[0] = a0;
+    REG_A[7] += 8;
+    ran_to(0x0156A);
+    return done();
+}
+
+/* sub_0181A: the map's column jobs cleared (the 8 slots, and the one drawn this frame) */
+int logic_column_jobs_clear(void)
+{
+    if (!start()) return 0;
+    begin(0x0181A);
+    set16(0xFF2EF4, 0);
+    REG_A[0] = 0xFF2CF4;
+    set_lo(0, 7);
+    ran_to(0x0182A);
+    for (;;) {
+        set16(REG_A[0], 0);
+        REG_A[0] += 0x40;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x01834); break; }
+        branched(0x01830, 0x0182A);
+    }
+    return done();
+}
+
+/* sub_013FE: the jobs list cleared (its 8 slots of $10 bytes, and its count) */
+int logic_jobs_clear(void)
+{
+    if (!start()) return 0;
+    begin(0x013FE);
+    REG_A[0] = 0xFF5550;
+    set_lo(0, 7);
+    ran_to(0x01408);
+    for (;;) {
+        set16(REG_A[0], 0);
+        REG_A[0] += 0x10;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x01412); break; }
+        branched(0x0140E, 0x01408);
+    }
+    set16(0xFF554E, 0);
+    ran_to(0x01418);
+    return done();
+}

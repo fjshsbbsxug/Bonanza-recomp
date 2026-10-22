@@ -1706,3 +1706,61 @@ int logic_press_crushes_guards(void)
     ran_to(0x1A876);
     return done();
 }
+
+/* sub_1AD5E: the item (ITEM_AT's) touching what is at d0 (sub_1A95C), d1 kept */
+int logic_item_touching(void)
+{
+    if (!start()) return 0;
+    begin(0x1AD5E);
+    uint32_t d1 = REG_D[1];
+    REG_A[7] -= 4; set32(REG_A[7], d1);
+    set_lo(1, ram16(0xFFA5C4));
+    call(0x1A95C, 0x1AD68);
+    REG_D[1] = d1;
+    REG_A[7] += 4;
+    ran_to(0x1AD72);
+    return done();
+}
+
+/* sub_1A108: an effect (object kind $48) at object d0's place, its offsets and picture
+ * from table 0x1A15E's entry d1 */
+int logic_item_effect(void)
+{
+    if (!start()) return 0;
+    begin(0x1A108);
+    REG_A[6] = mem32(0x1A15E + (int16_t)lo(REG_D[1]));
+    int16_t o = (int16_t)lo(REG_D[0]);
+    set_lo(6, (uint16_t)(mem16(REG_A[6]) + ram16(0xFF304E + o)));
+    set16(0xFFA39C, lo(REG_D[6]));
+    set_lo(6, (uint16_t)(mem16(REG_A[6] + 2) + ram16(0xFF30FA + o)));
+    set16(0xFFA39E, lo(REG_D[6]));
+    set_lo(6, (uint16_t)(mem16(REG_A[6] + 4) + ram16(0xFF31A6 + o)));
+    set16(0xFFA3A0, lo(REG_D[6]));
+    set16(0xFFA3A2, mem16(REG_A[6] + 6));
+    REG_A[6] += 8;
+    set32(0xFFA3A4, mem32(REG_A[6]));
+    REG_A[5] = 0xFF31A6;
+    set_lo(7, 0x48);
+    call(0x18736, 0x1A156);
+    ran_to(0x1A15C);
+    return done();
+}
+
+/* sub_1B502: the loot's sparkle: every 4 frames object d0's picture on by its step,
+ * the step turned round */
+int logic_loot_sparkle(void)
+{
+    if (!start()) return 0;
+    begin(0x1B502);
+    set_lo(7, ram16(FRAME_COUNT) & 3);
+    if (lo(REG_D[7])) { branched(0x1B50C, 0x1B530); return done(); }
+    int16_t o = (int16_t)lo(REG_D[0]);
+    REG_A[6] = OBJ_FRAME; REG_A[5] = 0xFF49D6;
+    set_lo(6, ram16(0xFF49D6 + o));
+    set_lo(7, (uint16_t)(ram16(OBJ_FRAME + o) + lo(REG_D[6])));
+    set16(OBJ_FRAME + o, lo(REG_D[7]));
+    set_lo(6, (uint16_t)-lo(REG_D[6]));
+    set16(0xFF49D6 + o, lo(REG_D[6]));
+    ran_to(0x1B530);
+    return done();
+}

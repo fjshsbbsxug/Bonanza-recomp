@@ -357,3 +357,16 @@ int logic_object_picture(void)
     REG_A[6] = a6;
     return done();
 }
+
+/* sub_125EC: the sprite list ended (an empty sprite after the last) */
+int logic_sprites_end(void)
+{
+    if (!start()) return 0;
+    begin(0x125EC);
+    REG_A[6] = 0xFF0000;
+    set_lo(5, (uint16_t)(ram16(SPRITE_COUNT) << 3));
+    uint32_t a = 0xFF0000 + (int16_t)lo(REG_D[5]);
+    set16(a, 0); set16(a + 2, 0); set16(a + 4, 0); set16(a + 6, 0);
+    ran_to(0x12612);
+    return done();
+}

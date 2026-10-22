@@ -367,6 +367,15 @@ extern int  logic_column_right(void);            /* sub_28624 (logic/views.c) */
 extern int  logic_column_left(void);             /* sub_286E2 (logic/views.c) */
 extern int  logic_column_right_p2(void);         /* sub_28914 (logic/views.c) */
 extern int  logic_column_left_p2(void);          /* sub_289D2 (logic/views.c) */
+extern int  logic_item_touching(void);           /* sub_1AD5E (logic/items.c) */
+extern int  logic_item_effect(void);             /* sub_1A108 (logic/items.c) */
+extern int  logic_loot_sparkle(void);            /* sub_1B502 (logic/items.c) */
+extern int  logic_text_number(void);             /* sub_01550 (logic/screens.c) */
+extern int  logic_column_jobs_clear(void);       /* sub_0181A (logic/screens.c) */
+extern int  logic_jobs_clear(void);              /* sub_013FE (logic/screens.c) */
+extern int  logic_sprites_end(void);             /* sub_125EC (logic/sprites.c) */
+extern int  logic_points_redraw(void);           /* sub_11D36 (logic/hud.c) */
+extern int  logic_points_redraw_p2(void);        /* sub_11D50 (logic/hud.c) */
 /* the story cutscene (logic/cutscene.c) */
 extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
 extern int  logic_cutscene_wait(void);           /* sub_23B28 */

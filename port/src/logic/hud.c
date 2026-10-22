@@ -418,3 +418,21 @@ int logic_add_points(void)
     ran_to(0x11D7E);
     return done();
 }
+
+/* sub_11D36 / sub_11D50: a player's points drawn as they are (no points added), and his
+ * HUD marked to redraw */
+static int points_redraw(int p)
+{
+    if (!start()) return 0;
+    uint32_t b = p ? 0x1A : 0;
+    begin(0x11D36 + b);
+    REG_D[0] = (uint32_t)p;
+    REG_D[1] = 0;
+    call(0x11D6A, 0x11D3A + b);
+    set16(p ? 0xFF6C44 : 0xFF6C2E, 1);
+    set16(p ? 0xFF6C46 : 0xFF6C30, 1);
+    ran_to(0x11D4E + b);
+    return done();
+}
+int logic_points_redraw(void)    { return points_redraw(0); }
+int logic_points_redraw_p2(void) { return points_redraw(1); }

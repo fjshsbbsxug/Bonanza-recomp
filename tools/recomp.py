@@ -747,6 +747,16 @@ LOGIC = {
     0x286E2: "logic_column_left",
     0x28914: "logic_column_right_p2",
     0x289D2: "logic_column_left_p2",
+    # small routines
+    0x1AD5E: "logic_item_touching",
+    0x1A108: "logic_item_effect",
+    0x1B502: "logic_loot_sparkle",
+    0x01550: "logic_text_number",
+    0x0181A: "logic_column_jobs_clear",
+    0x013FE: "logic_jobs_clear",
+    0x125EC: "logic_sprites_end",
+    0x11D36: "logic_points_redraw",
+    0x11D50: "logic_points_redraw_p2",
     # the story cutscene (cutscene.c)
     0x23AB6: "logic_cutscene_frame",
     0x23B28: "logic_cutscene_wait",
