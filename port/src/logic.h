@@ -398,6 +398,12 @@ extern int  logic_intro_end(void);               /* sub_12DE0 */
 extern int  logic_intro_scroll0(void);           /* sub_12E9C */
 extern int  logic_intro_scroll1f8(void);         /* sub_12EBA */
 extern int  logic_intro_scroll100(void);         /* sub_12ED8 */
+/* the screen before a stage (logic/stagein.c) */
+extern int  logic_stagein_building(void);        /* sub_11460 */
+extern int  logic_stagein_targets(void);         /* sub_1180C */
+extern int  logic_stagein_count(void);           /* sub_11842 */
+extern int  logic_stagein_wait(void);            /* sub_118C4 */
+extern int  logic_stagein_fade(void);            /* sub_11946 */
 /* the story cutscene (logic/cutscene.c) */
 extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
 extern int  logic_cutscene_wait(void);           /* sub_23B28 */

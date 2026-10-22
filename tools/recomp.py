@@ -779,6 +779,12 @@ LOGIC = {
     0x12E9C: "logic_intro_scroll0",
     0x12EBA: "logic_intro_scroll1f8",
     0x12ED8: "logic_intro_scroll100",
+    # the screen before a stage (stagein.c)
+    0x11460: "logic_stagein_building",
+    0x1180C: "logic_stagein_targets",
+    0x11842: "logic_stagein_count",
+    0x118C4: "logic_stagein_wait",
+    0x11946: "logic_stagein_fade",
     # the story cutscene (cutscene.c)
     0x23AB6: "logic_cutscene_frame",
     0x23B28: "logic_cutscene_wait",
