@@ -177,6 +177,26 @@ void cpu_call(uint32_t addr, uint32_t ret)
     cpu_call_ret = ret0;
 }
 
+/* the game's code run from REG_PC (set up by a port hook that pushed its own returns)
+ * until it comes back to ret with the stack at sp, as cpu_call() does */
+void cpu_run_to(uint32_t ret, uint32_t sp)
+{
+    uint32_t ret0 = cpu_call_ret;
+    cpu_call_ret = ret;
+    const int more = 1 << 28;
+    int added = more;
+    SET_CYCLES(GET_CYCLES() + more);
+    while (!(REG_PC == ret && REG_SP == sp) && !CPU_STOPPED) {
+        if (GET_CYCLES() <= 0) {
+            SET_CYCLES(GET_CYCLES() + more);
+            added += more;
+        }
+        step();
+    }
+    SET_CYCLES(GET_CYCLES() - added);
+    cpu_call_ret = ret0;
+}
+
 int cpu_stopping;
 static const uint32_t *part_stops;
 static int part_n, part_left;

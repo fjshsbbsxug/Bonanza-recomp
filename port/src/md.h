@@ -90,6 +90,7 @@ uint32_t cpu_get_sp(void);
 /* the game's routine at addr run as a function call from C (logic.c), as a jsr whose
  * next instruction is ret would: back when it returns there */
 void cpu_call(uint32_t addr, uint32_t ret);
+void cpu_run_to(uint32_t ret, uint32_t sp);  /* (after a port hook set REG_PC) */
 /* run the game's code from addr (a part of a routine) until it reaches one of the
  * places stops[] (tools/recomp.py STOPS): the address reached */
 uint32_t cpu_run_part(uint32_t addr, const uint32_t *stops, int n);

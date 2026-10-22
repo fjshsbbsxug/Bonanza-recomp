@@ -3,6 +3,7 @@
  * (table 0x3BB4A, times 0x3BB00). */
 #include "rt.h"
 #include "../video.h"
+#include "setup.h"
 
 #define STEP             0xFF6C5C
 #define SCROLL_A         0xFF6C54   /* the planes' scroll: A's and B's vertical, the */
@@ -12,13 +13,8 @@
 #define SCRIPT_AT        0xFF6C68   /* the script's place, and the frame of its next */
 #define SCRIPT_NEXT      0xFF6C66
 
-static void fade_set(uint16_t wait, uint16_t step, uint16_t steps)
-{
-    stack_put(-4, REG_A[6]);
-    set16(0xFF17AE, wait);
-    set16(0xFF17B0, step);
-    set16(0xFF17B2, steps);
-}
+static int scene1_setup(void);
+static int scene2_setup(void);
 
 /* sub_23AB6: the cutscene's frame: the scroll set, then its step (table 0x23B10) */
 int logic_cutscene_frame(void)
@@ -48,7 +44,7 @@ int logic_cutscene_wait(void)
     set16(SCREEN_WAIT, t);
     if (t) { branched(0x23B2E, 0x23BF2); return done(); }
     ran_to(0x23B32);
-    return jump_to(0x23B32);
+    return scene1_setup();
 }
 
 /* (the scene scrolling down every other frame) */
@@ -83,7 +79,7 @@ int logic_cutscene_scroll(void)
     set16(SCREEN_WAIT, t);
     if (t) { ran_to(0x23C42); return cutscene_scroll(); }
     branched(0x23C3E, 0x23C56);
-    fade_set(0x10, 0x10, 8);
+    fade_speed(0x10, 0x10, 8);
     set16(STEP, 3);
     ran_to(0x23C78);
     return done();
@@ -99,7 +95,7 @@ int logic_cutscene_fade_out(void)
     call(0x02BB4, 0x23C84);
     if (FLAG_Z) { branched(0x23C8A, 0x23D72); return done(); }
     ran_to(0x23C8E);
-    return jump_to(0x23C8E);
+    return scene2_setup();
 }
 
 /* (the second scene's frame from 0x23D96: the figure running (its picture every 4
@@ -193,7 +189,7 @@ int logic_cutscene_scene(void)
     if (!t) {
         branched(0x23D86, 0x23E3E);
         set16(STEP, 5);
-        fade_set(0x10, 0x10, 8);
+        fade_speed(0x10, 0x10, 8);
         ran_to(0x23E60);
         return jump_to(0x23E60);
     }
@@ -347,5 +343,74 @@ int logic_script_none(void)
 {
     if (!start()) return 0;
     begin(REG_PC);
+    return done();
+}
+
+/* (0x23B32: the first scene set up with the screen off: its tiles and two map blocks;
+ * then its colours (sub_018FC: a frame can end there, so the game's code calls it; on at
+ * 0x23BB6): the scroll, a slow fade up, step 1) */
+static int scene1_setup(void)
+{
+    screen_off();
+    call(0x00522, 0x23B44);
+    call(0x01928, 0x23B4A);
+    tiles(0x55100, 0x40000000, 0xBE, 0, 0x23B64);
+    tiles(0x55F14, 0x70200002, 0x37, 0, 0x23B7E);
+    map_rect(0x23C00, 0x23B92);
+    map_rect(0x23BF4, 0x23BA6);
+    set_lo(7, 0x25);
+    ran_to(0x23BB6);
+    REG_A[7] -= 4; set32(REG_A[7], 0x23BB6);
+    return jump_to(0x018FC);
+}
+int logic_cutscene_setup1(void)
+{
+    if (!start()) return 0;
+    begin(0x23BB6);
+    set16(SCROLL_A, 0x150);
+    fade_speed(0x10, 0x10, 8);
+    set16(STEP, 1);
+    screen_on();
+    ran_to(0x23BF2);
+    return done();
+}
+
+/* (0x23C8E: the second scene set up: its tiles and map block, its music, its time
+ * ($1130 frames), the scroll, step 4; then its colours, as above (on at 0x23D60)) */
+static int scene2_setup(void)
+{
+    screen_off();
+    call(0x00522, 0x23CA0);
+    call(0x01928, 0x23CA6);
+    tiles(0x296FA, 0x60000002, 0xE8, 0, 0x23CC0);
+    tiles(0x6C600, 0x40000001, 0x75, 0, 0x23CDA);
+    tiles(0x6A000, 0x4EC00001, 0x8A, 0, 0x23CF4);
+    tiles(0x2C552, 0x50000002, 0x45, 0, 0x23D0E);
+    map_rect(0x23D74, 0x23D22);
+    set_lo(0, 0x86);                                  /* (its music: a frame can end here */
+    ran_to(0x23D32);                                  /*  too; on at 0x23D32) */
+    REG_A[7] -= 4; set32(REG_A[7], 0x23D32);
+    return jump_to(0x02D54);
+}
+int logic_cutscene_setup2a(void)
+{
+    if (!start()) return 0;
+    begin(0x23D32);
+    set16(SCREEN_WAIT, 0x1130);
+    set16(SCROLL_B, 0x1CF);
+    set16(FRAME_COUNT, 0);
+    set16(FIGURE, 0);
+    set16(STEP, 4);
+    set_lo(7, 0x30);
+    ran_to(0x23D60);
+    REG_A[7] -= 4; set32(REG_A[7], 0x23D60);
+    return jump_to(0x018FC);
+}
+int logic_cutscene_setup2(void)
+{
+    if (!start()) return 0;
+    begin(0x23D60);
+    screen_on();
+    ran_to(0x23D72);
     return done();
 }

@@ -97,6 +97,7 @@ uint32_t run_part(uint32_t addr, const uint32_t *stops, int n);
 /* ---- the port's own changes to the game (gamemods.c: Insane mode...) at a place in a
  * routine now in C: as the recompiler's hook there (tools/recomp.py HOOKS) would; only
  * hooks that go on in the routine (0) are expected at these places */
+int  hook_at(uint32_t pc, uint32_t ret);  /* a port hook within a routine: 2 when it ran it */
 static inline void hook(uint32_t pc) { if (game_hooks) (void)game_hook(pc); }
 
 /* ---- checks: registers (bits 0-7 d0-d7, 8-14 a0-a6) and flags a part written in C

@@ -73,6 +73,22 @@ void call(uint32_t addr, uint32_t jsr_at)
     pc_at = (uint32_t)saved_pc;
 }
 
+/* a port hook at pc, within a routine in C (its time counted up to pc first): when it
+ * goes on elsewhere (2), the game's code runs from there until it comes back to ret */
+int hook_at(uint32_t pc, uint32_t ret)
+{
+    if (!game_hooks) return 0;
+    ran_to(pc);
+    USE_CYCLES(cyc);
+    cyc = 0;
+    uint32_t sp = REG_A[7];
+    int h = game_hook(pc);
+    if (h != 2) return h;
+    cpu_run_to(ret, sp);
+    pc_at = ret;
+    return 2;
+}
+
 uint32_t jsr_target(uint32_t at)
 {
     uint16_t op = rom16(at);

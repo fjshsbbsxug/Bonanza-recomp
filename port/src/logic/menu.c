@@ -3,6 +3,7 @@
  * demo's start. Their pictures are drawn by the video routines (draw.c, the segments
  * the recompiler marks); this is what they do between. */
 #include "rt.h"
+#include "setup.h"
 #include "../video.h"
 
 #define TITLE_STATE      0xFF6C5C   /* the title screen's (and the cutscenes') step */
@@ -611,6 +612,8 @@ int logic_option_sound(void)
     return done();
 }
 
+static void pad_mapping(void);
+
 /* sub_03DD2: CONTROL changed by d7 (two ways, round); the buttons' bits (table 0x3E16) */
 int logic_option_control(void)
 {
@@ -623,12 +626,25 @@ int logic_option_control(void)
     if (v == 0xFFFF) { set16(BUTTONS_SWAPPED, 1); ran_to(0x03DEC); branched(0x03DEC, 0x03DFA); }
     else if (branched(0x03DE4, 0x03DEE), v != 2) branched(0x03DF2, 0x03DFA);
     else { set16(BUTTONS_SWAPPED, 0); ran_to(0x03DFA); }
+    pad_mapping();
+    return done();
+}
+
+/* sub_03DFA: the buttons' bits for CONTROL (table 0x3E16) into PAD_MAP */
+static void pad_mapping(void)
+{
     set_lo(0, (uint16_t)(ram16(BUTTONS_SWAPPED) << 2));
     REG_A[0] = 0x03E16 + (uint32_t)(int32_t)(int16_t)lo(REG_D[0]);
     for (int k = 0; k < 3; k++) set8(PAD_MAP + k, (uint8_t)RD8(REG_A[0] + k));
     REG_A[0] += 2;
     REG_A[1] = PAD_MAP + 2;
     ran_to(0x03E14);
+}
+int logic_pad_mapping(void)
+{
+    if (!start()) return 0;
+    begin(0x03DFA);
+    pad_mapping();
     return done();
 }
 
@@ -781,4 +797,183 @@ int logic_demo_go(void)
     ran_to(0x04460);                                  /* (its rts) */
     jumped_to(0x04206);
     return jump_to(0x04206);
+}
+
+/* ---------------------------------------------------------------- the screens' set-ups */
+
+/* sub_0318A (screen mode 1): the title screen set up: the screen off, the sprites and
+ * planes cleared, the title's music, its scroll and the runner's place, 5 credits, its
+ * tiles and colours, its two map blocks; its frame (0x3420) and a slow fade up */
+int logic_title_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x0318A);
+    screen_off();
+    call(0x00522, 0x0319C);
+    call(0x01928, 0x031A2);
+    call(0x006FA, 0x031A8);
+    reg_keep(REG_MODE4, 0x8C00);
+    planes_size(0x9011);
+    screen_on();
+    set_lo(0, 0x85);
+    call(0x02D54, 0x031EE);
+    set16(MENU_FROM_DEMO, 0);
+    set16(0xFF1814, 0);
+    set16(TITLE_SCROLL, 0x150);
+    set16(0xFF6C5A, 0);
+    set16(TITLE_STATE, 0);
+    set16(0xFF35AE, 0);
+    set16(0xFF304E, 0x160);
+    set16(0xFF30FA, 0x140);
+    set16(0xFF3050, 0);
+    set16(0xFF3052, 0);
+    scroll_put(0x40000010, ram16(TITLE_SCROLL));
+    scroll_put(0x40020010, 0);
+    scroll_put(0x70020002, 0);
+    set16(0xFFC078, 5);
+    tiles(0x56336, 0x60000000, 0x3F, 0, 0x03290);
+    tiles(0x55100, 0x40000001, 0xBE, 0, 0x032AA);
+    tiles(0x55F14, 0x60000001, 0x37, 0, 0x032C4);
+    tiles(0x40020, 0x64000002, 0x5F, 0, 0x032DE);
+    set_lo(7, 0x25);                                  /* (its colours: a frame can end */
+    ran_to(0x032EE);                                  /*  here, so the game's code calls */
+    REG_A[7] -= 4; set32(REG_A[7], 0x032EE);          /*  it; on at 0x32EE) */
+    return jump_to(0x018FC);
+}
+int logic_title_setup2(void)
+{
+    if (!start()) return 0;
+    begin(0x032EE);
+    map_rect(0x333C, 0x032FC);
+    map_rect(0x3348, 0x03310);
+    fade_speed(2, 2, 8);
+    screen_next(0x3420);
+    ran_to(0x0333A);
+    return done();
+}
+
+/* sub_035BE (the title's step 4): the screen off a moment; then the opening (mode $1C),
+ * or the start menu (mode 8) when start was pressed */
+int logic_title_end(void)
+{
+    if (!start()) return 0;
+    begin(0x035BE);
+    screen_off();
+    call(0x00522, 0x035D0);
+    screen_on();
+    int pressed = ram16(MENU_FROM_DEMO) != 0;
+    if (!pressed) ran_to(0x035F2); else branched(0x035EE, 0x03606);
+    screen_next(0x2E06);
+    set16(GAME_MODE, pressed ? 8 : 0x1C);
+    if (pressed) set16(MENU_FROM_DEMO, 0);
+    ran_to(pressed ? 0x03620 : 0x03604);
+    return done();
+}
+
+/* sub_0394A (the start menu's step 3): its choice: OPTIONS (mode $10), or a game for one
+ * or two players: the credits (3 for one player's game, else 6 less 2), the players in
+ * it, each one's points and lives; then the stage's screen (mode $18) */
+int logic_menu_go(void)
+{
+    if (!start()) return 0;
+    begin(0x0394A);
+    screen_off();
+    call(0x00522, 0x0395C);
+    screen_on();
+    if (ram16(MENU_ITEM) == 2) {
+        branched(0x0397C, 0x03A0A);
+        screen_next(0x2E06);
+        set16(GAME_MODE, 0x10);
+        ran_to(0x03A1C);
+        return done();
+    }
+    set_lo(7, 3);
+    if (ram16(MENU_ITEM) == 1) branched(0x0398C, 0x0399E);
+    else {
+        set16(0xFFC078, 6);
+        set_lo(7, ram16(MENU_PLAYERS));
+        ran_to(0x0399E);
+    }
+    set16(0xFFC078, (uint16_t)(ram16(0xFFC078) - 2));
+    set16(0xFFC076, lo(REG_D[7]));
+    for (int p = 0; p < 2; p++) {
+        uint32_t o = p ? 0xC : 0;
+        set32(0xFFC0F4 + o, 0);
+        set32(0xFFC0F8 + o, 0);
+        set16(0xFFC0FC + o, 0x20);
+        set16(0xFFC0FE + o, 0xF000);
+        set16(0xFFC054 + 2 * (uint32_t)p, ram16(0xFFC052));
+    }
+    screen_next(0x2E06);
+    set16(GAME_MODE, 0x18);
+    ran_to(0x03A08);
+    return done();
+}
+
+/* sub_03A78 (screen mode 4): the options screen set up: its lines' text (table 0x3FD2),
+ * the level's, the lives' and the sound test's numbers, the control's; its frame
+ * (0x3BA6) and the fade */
+int logic_options_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x03A78);
+    screen_off();
+    call(0x00522, 0x03A8A);
+    reg_keep(REG_MODE4, 0x8C00);
+    planes_size(0x9001);
+    screen_on();
+    call(0x01928, 0x03ACC);
+    set16(MENU_ITEM, 0);
+    REG_A[6] = 0x3FD2;
+    static const struct { uint16_t attr; uint32_t jsr; } line[6] = {
+        {0x8000, 0x03AE2}, {0xA000, 0x03AEC}, {0x8000, 0x03AF6}, {0x8000, 0x03AFC},
+        {0x8000, 0x03B02}, {0x8000, 0x03B08},
+    };
+    for (int k = 0; k < 6; k++) {
+        if (k < 3) set_lo(7, line[k].attr);
+        /* (EXIT: the stage select code's hook draws STAGE after it) */
+        if (k == 5 && hook_at(0x03B08, 0x03B0E) == 2) continue;
+        call(0x011F2, line[k].jsr);
+    }
+    set_lo(0, (uint16_t)(ram16(0xFFC04E) << 2));
+    REG_A[6] = mem32(0x412C + (int16_t)lo(REG_D[0]));
+    set_lo(7, 0xA000);
+    call(0x011F2, 0x03B22);                           /* (Insane mode's hook here never runs:
+                                                       *  the video part 0x3B1E calls it
+                                                       *  directly; the LEVEL line drawn each
+                                                       *  frame, 0x3EAA, shows INSANE) */
+    static const struct { uint32_t num, cmd, jsr; } number[2] = {
+        {0xFFC053, 0x43A00003, 0x03B3E}, {0xFFC051, 0x44A00003, 0x03B5A},
+    };
+    for (int k = 0; k < 2; k++) {
+        REG_A[6] = number[k].num;
+        video_at_long(number[k].cmd);
+        set_lo(7, 0x8000);
+        REG_D[6] = 0;
+        call(0x01268, number[k].jsr);
+    }
+    set_lo(0, (uint16_t)(ram16(0xFFC058) << 2));
+    REG_A[6] = mem32(0x415C + (int16_t)lo(REG_D[0]));
+    set_lo(7, 0x8000);
+    call(0x011F2, 0x03B74);
+    call(0x011F2, 0x03B7A);
+    screen_next(0x3BA6);
+    fade_speed(5, 5, 8);
+    ran_to(0x03BA4);
+    return done();
+}
+
+/* sub_03EAA: the LEVEL line: its name and its value (table 0x412C by $C04E) */
+int logic_options_draw_level(void)
+{
+    if (!start()) return 0;
+    begin(0x03EAA);
+    REG_A[6] = 0x3FE0;
+    call(0x011F2, 0x03EAE);
+    set_lo(0, (uint16_t)(ram16(0xFFC04E) << 2));
+    REG_A[6] = mem32(0x412C + (int16_t)lo(REG_D[0]));
+    if (hook_at(0x03EC4, 0x03ECA) != 2)               /* (Insane mode's hook: INSANE) */
+        call(0x011F2, 0x03EC4);
+    ran_to(0x03ECA);
+    return done();
 }
