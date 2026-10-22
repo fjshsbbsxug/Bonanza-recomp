@@ -278,6 +278,7 @@ const bonanza_sym game_engine_syms[] = {
     {"logic_flat_go_p2", (void *)logic_flat_go_p2},
     {"logic_floor_line", (void *)logic_floor_line},
     {"logic_floor_under", (void *)logic_floor_under},
+    {"logic_games_over", (void *)logic_games_over},
     {"logic_guard_anim_start", (void *)logic_guard_anim_start},
     {"logic_guard_clear", (void *)logic_guard_clear},
     {"logic_guard_event", (void *)logic_guard_event},

@@ -6,6 +6,7 @@
  * game's code would: the C goes there by a jsr of its own, and the rest of the frame
  * (from 0x05312, where that returns) is a second part. */
 #include "rt.h"
+#include "../video.h"
 
 #define NO_PAUSE         0xFF180A   /* (the way out or time up showing: no pausing) */
 #define PAUSE_MSG        0xFF9E08   /* the "PAUSE" message (kind $54) */
@@ -418,5 +419,26 @@ int logic_players_back(void)
             ran_to(0x1A6BC + b);
         }
     }
+    return done();
+}
+
+/* sub_05496: both players' games over: the screen off, the map's column jobs and the
+ * job list cleared, stage 1 again, the music stopped, the palettes cleared; then the
+ * screens from the logo (mode 0) */
+int logic_games_over(void)
+{
+    if (!start()) return 0;
+    begin(0x05496);
+    set16(0xFFC07C, ram16(0xFFC07C) & 0x81BF);
+    video_reg_word(ram16(0xFFC07C));
+    call(0x0181A, 0x054A8);
+    call(0x013FE, 0x054AE);
+    set16(STAGE_ENTRY, 1);
+    set_lo(0, 0xE1);
+    call(0x02D54, 0x054C0);
+    call(0x01928, 0x054C6);
+    set16(GAME_MODE, 0);
+    set32(SCREEN_RUN, 0x2E06);
+    ran_to(0x054DE);
     return done();
 }
