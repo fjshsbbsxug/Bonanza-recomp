@@ -752,6 +752,8 @@ LOGIC = {
     0x28914: "logic_column_right_p2",
     0x289D2: "logic_column_left_p2",
     # small routines
+    0x08E74: "logic_player_start",
+    0x08F26: "logic_player_start_p2",
     0x05496: "logic_games_over",
     0x10912: "logic_hud_fixed",
     0x007A8: "logic_pads_init",

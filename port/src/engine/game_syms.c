@@ -470,6 +470,8 @@ const bonanza_sym game_engine_syms[] = {
     {"logic_player_side_blocked_p2", (void *)logic_player_side_blocked_p2},
     {"logic_player_stand_pose_p1", (void *)logic_player_stand_pose_p1},
     {"logic_player_stand_pose_p2", (void *)logic_player_stand_pose_p2},
+    {"logic_player_start", (void *)logic_player_start},
+    {"logic_player_start_p2", (void *)logic_player_start_p2},
     {"logic_player_state_p1", (void *)logic_player_state_p1},
     {"logic_player_state_p2", (void *)logic_player_state_p2},
     {"logic_player_stop_p1", (void *)logic_player_stop_p1},

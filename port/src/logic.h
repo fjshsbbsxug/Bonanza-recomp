@@ -390,6 +390,8 @@ extern int  logic_vblank_lines2(void);           /* sub_00AB4 (logic/screens.c) 
 extern int  logic_vblank_columns(void);          /* sub_00ABC (logic/screens.c) */
 extern int  logic_hud_fixed(void);               /* sub_10912 (logic/hud.c) */
 extern int  logic_games_over(void);              /* sub_05496 (logic/play.c) */
+extern int  logic_player_start(void);            /* sub_08E74 (logic/play.c) */
+extern int  logic_player_start_p2(void);         /* sub_08F26 (logic/play.c) */
 /* the players' panels (logic/panel.c) */
 extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */

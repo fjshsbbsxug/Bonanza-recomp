@@ -442,3 +442,58 @@ int logic_games_over(void)
     ran_to(0x054DE);
     return done();
 }
+
+/* sub_08E74 (player 2's sub_08F26, 0xB2 bytes on): player p starts (d0 0: at the stage's
+ * start - on stage 6 his text $1A / $38 too): his "ready" text, his state reset, his
+ * script ($B492 / $D996), the stage's start place (table 0x8FD8) and view (0x8FF2), his
+ * size and his wait */
+static int player_start(int p)
+{
+    static const struct {
+        uint32_t clear6, put_script, script, state, place, view, size_x, size_y, wait, grace;
+        uint16_t text6, text, size_y_v, wait_v;
+    } P_[2] = {
+        {0xFF56BE, 0x0AE8A, 0x0B492, 0xFF5688, 0x09846, 0x097F6, 0xFF3706, 0xFF37B2, 0xFF6C0E,
+         0x0B23A, 0x1A, 0x08, 0x0E, 0x10},
+        {0xFF5768, 0x0AEA6, 0x0D996, 0xFF5732, 0x09894, 0x0981E, 0xFF3708, 0xFF37B4, 0xFF6C10,
+         0x0B2BC, 0x38, 0x26, 0x0A, 0x0C},
+    };
+    const uint32_t o = p ? 0xB2 : 0;
+    if (!start()) return 0;
+    begin(0x08E74 + o);
+    if (lo(REG_D[0])) branched(0x08E76 + o, 0x08E96 + o);
+    else if (ram16(STAGE_ENTRY) != 6) branched(0x08E82 + o, 0x08E96 + o);
+    else {
+        set16(P_[p].clear6, 0);
+        set_lo(7, P_[p].text6);
+        call(0x01550, 0x08E90 + o);
+    }
+    set_lo(7, P_[p].text);
+    call(0x01550, 0x08E9A + o);
+    call(P_[p].put_script, 0x08EA0 + o);
+    REG_A[0] = mem32(P_[p].script);
+    set32(P_[p].state + 2, REG_A[0]);
+    set16(P_[p].state, 0);
+    set16(0xFF6C6A + 2 * (uint32_t)p, 0);
+    set_lo(7, (uint16_t)((ram16(STAGE_ENTRY) - 1) * 2));
+    REG_A[6] = 0x8FD8;
+    set_lo(7, mem16(0x8FD8 + (int16_t)lo(REG_D[7])));
+    call(P_[p].place, 0x08ED0 + o);
+    set_lo(7, (uint16_t)((ram16(STAGE_ENTRY) - 1) << 2));
+    REG_A[6] = 0x8FF2 + (uint32_t)(int16_t)lo(REG_D[7]);
+    set16(0xFF1840, mem16(REG_A[6]));
+    REG_A[6] += 2;
+    set16(0xFF1842, mem16(REG_A[6]));
+    set_lo(7, 1);
+    call(P_[p].view, 0x08EF6 + o);
+    set16(P_[p].size_x, 6);
+    set16(P_[p].size_y, P_[p].size_y_v);
+    set16(P_[p].wait, P_[p].wait_v);
+    call(P_[p].grace, 0x08F14 + o);
+    set_lo(7, 0xB4);
+    call(p ? 0x09EF4 : 0x09EDA, 0x08F1E + o);
+    ran_to(0x08F24 + o);
+    return done();
+}
+int logic_player_start(void)    { return player_start(0); }
+int logic_player_start_p2(void) { return player_start(1); }
