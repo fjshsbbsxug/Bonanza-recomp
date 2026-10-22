@@ -462,8 +462,11 @@ int logic_stagein_choose(void)
     if (!start()) return 0;
     begin(0x11106);
     set16(SPRITE_COUNT, 0);
-    set_lo(0, (uint16_t)(ram16(STAGE_ENTRY) << 2));
-    REG_A[0] = mem32(0x1133A + (int16_t)lo(REG_D[0]));
+    uint16_t e = ram16(STAGE_ENTRY);
+    set_lo(0, (uint16_t)(e << 2));
+    flags_of16(lo(REG_D[0]));                         /* (the lsl's: a stage past the table's */
+    FLAG_C = FLAG_X = (e & 0x4000) ? 0x100 : 0;       /*  end goes on at no code, and the */
+    REG_A[0] = mem32(0x1133A + (int16_t)lo(REG_D[0])); /* exception keeps the flags) */
     ran_to(0x11120);
     return jump_to(REG_A[0]);
 }
