@@ -415,6 +415,11 @@ extern int  logic_stagein_count(void);           /* sub_11842 */
 extern int  logic_stagein_wait(void);            /* sub_118C4 */
 extern int  logic_stagein_fade(void);            /* sub_11946 */
 extern int  logic_coffee_frame(void);            /* sub_24938 */
+extern int  logic_intro_setup(void);             /* sub_120E4 (logic/intro.c) */
+extern int  logic_intro_setup2(void);            /* (at 0x121D2) */
+extern int  logic_coffee_tiles4(void);           /* sub_246B6 (logic/stagein.c) */
+extern int  logic_coffee_tiles8(void);           /* sub_24720 (logic/stagein.c) */
+extern int  logic_coffee_tiles12(void);          /* sub_2478A (logic/stagein.c) */
 /* the story cutscene (logic/cutscene.c) */
 extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
 extern int  logic_cutscene_wait(void);           /* sub_23B28 */

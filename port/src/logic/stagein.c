@@ -4,14 +4,15 @@
  * picture loaded with the screen off) stays the game's code. */
 #include "rt.h"
 #include "../video.h"
+#include "setup.h"
 
 #define STEP         0xFF6C1C
 #define WAIT         0xFF6C1A   /* (step 2 on: bytes: the targets shown, frames to the next) */
 #define SHOWN        0xFF6C1A
 #define NEXT_IN      0xFF6C1B
 #define BUTTONS      0xFF17B9   /* (byte) the buttons pressed: A, B, C (bits 4-6), start */
-#define VDP_MODE2    0xFFC07C
-#define VDP_MODE4    0xFFC092
+#define VDP_MODE2    REG_MODE2
+#define VDP_MODE4    REG_MODE4
 
 static int hurried(void)
 {
@@ -255,4 +256,49 @@ int logic_coffee_frame(void)
         ran_to(0x249A2);
     }
     return done();
+}
+
+/* ---------------------------------------------------------------- the coffee break's tiles */
+
+struct tile_load { uint32_t src, cmd; uint16_t n; uint8_t raw; uint32_t jsr; };
+
+static int tile_loads(uint32_t r, const struct tile_load *t, int n, uint32_t rts)
+{
+    if (!start()) return 0;
+    begin(r);
+    for (int k = 0; k < n; k++) tiles(t[k].src, t[k].cmd, t[k].n, t[k].raw, t[k].jsr);
+    ran_to(rts);
+    return done();
+}
+
+/* sub_246B6 / sub_24720 / sub_2478A: the tiles of the coffee breaks after stages 4, 8
+ * and 12 (table 0x246A6 by the stage entry) */
+int logic_coffee_tiles4(void)
+{
+    static const struct tile_load t[] = {
+        {0x5A000, 0x60000000, 0x27, 1, 0x246CA}, {0x61040, 0x70000000, 0x2C, 1, 0x246E4},
+        {0x6AAB0, 0x60200001, 0x8B, 0, 0x246FE}, {0x6B334, 0x6E800003, 0x11, 0, 0x24718},
+    };
+    return tile_loads(0x246B6, t, 4, 0x2471E);
+}
+int logic_coffee_tiles8(void)
+{
+    static const struct tile_load t[] = {
+        {0x60900, 0x55400002, 0x05, 1, 0x24734}, {0x67DE0, 0x56000002, 0x05, 1, 0x2474E},
+        {0x2958C, 0x51E00002, 0x1A, 0, 0x24768}, {0x6BC9E, 0x71A00001, 0x3A, 0, 0x24782},
+    };
+    return tile_loads(0x24720, t, 4, 0x24788);
+}
+int logic_coffee_tiles12(void)
+{
+    static const struct tile_load t[] = {
+        {0x5A000, 0x60000000, 0x27, 1, 0x2479E}, {0x61040, 0x70000000, 0x2C, 1, 0x247B8},
+        {0x5C740, 0x65000000, 0x3F, 1, 0x247D2}, {0x63BA0, 0x75A00000, 0x3F, 1, 0x247EC},
+        {0x6C600, 0x40000001, 0x75, 0, 0x24806}, {0x6CDEC, 0x7AC00001, 0x09, 0, 0x24820},
+        {0x6CEB0, 0x46800002, 0x0C, 0, 0x2483A}, {0x6CF58, 0x70C00003, 0x11, 0, 0x24854},
+        {0x6D08C, 0x48200002, 0x0B, 0, 0x2486E}, {0x6D2EA, 0x44000002, 0x0B, 0, 0x24888},
+        {0x6A000, 0x4EC00001, 0x8A, 0, 0x248A2}, {0x6A7D0, 0x49A00002, 0x18, 0, 0x248BC},
+        {0x6A94A, 0x6B200003, 0x0D, 0, 0x248D6},
+    };
+    return tile_loads(0x2478A, t, 13, 0x248DC);
 }

@@ -4,6 +4,7 @@
  * (tiles and maps loaded with the screen off) stay the game's code. */
 #include "rt.h"
 #include "../video.h"
+#include "setup.h"
 
 #define INTRO_STEP   0xFF6C5C
 #define SCROLL_B_Y   0xFF6C60   /* the planes' scroll: B's vertical, A's horizontal, */
@@ -14,8 +15,8 @@
 #define INTRO_COUNT  0xFF6C1C   /* (the town's palette step) */
 #define START        0xFF17B9   /* (byte) start pressed (bit 7), either pad */
 #define SKIPPED      0xFF5548
-#define VDP_MODE2    0xFFC07C
-#define VDP_MODE4    0xFFC092
+#define VDP_MODE2    REG_MODE2
+#define VDP_MODE4    REG_MODE4
 #define FIGURES      4          /* the brothers, then the three cars: */
 #define FIG_PATH     0xFF3456   /* (longs) each one's path: steps of (dx, dy, frames), */
 #define FIG_DX       0xFF385E   /*   ended by frames -1 */
@@ -143,6 +144,9 @@ int logic_intro_walk(void)
     return jump_to(0x125EC);                          /* (the sprite list's end) */
 }
 
+static int van_setup(void);
+static int alone_setup(void);
+
 /* (steps 1 and 2: the town's palette cycling and the scroll easing in; at the wait's end
  * the next set-up) */
 int logic_intro_town(void)
@@ -151,7 +155,7 @@ int logic_intro_town(void)
     begin(0x128C4);
     if (skip(0x128CC)) return done();
     set16(INTRO_WAIT, (uint16_t)(ram16(INTRO_WAIT) - 1));
-    if (ram16(INTRO_WAIT) & 0x8000) { branched(0x128D6, 0x12962); return jump_to(0x12962); }
+    if (ram16(INTRO_WAIT) & 0x8000) { branched(0x128D6, 0x12962); return van_setup(); }
     if (ram16(INTRO_WAIT) >= 0x30) { branched(0x128E2, 0x128F0); call(0x12E9C, 0x128F0); }
     else { call(0x12ED8, 0x128E6); branched(0x128EC, 0x128F6); }
     set16(INTRO_COUNT, (uint16_t)(ram16(INTRO_COUNT) + 1));
@@ -184,7 +188,7 @@ int logic_intro_van(void)
     begin(0x12A3A);
     if (skip(0x12A42)) return done();
     set16(INTRO_WAIT, (uint16_t)(ram16(INTRO_WAIT) - 1));
-    if (ram16(INTRO_WAIT) & 0x8000) { branched(0x12A4C, 0x12A94); return jump_to(0x12A94); }
+    if (ram16(INTRO_WAIT) & 0x8000) { branched(0x12A4C, 0x12A94); return alone_setup(); }
     if (ram16(INTRO_WAIT) >= 0x30) { branched(0x12A58, 0x12A66); call(0x12EBA, 0x12A66); }
     else { call(0x12ED8, 0x12A5C); branched(0x12A62, 0x12A6C); }
     set16(INTRO_COUNT, (uint16_t)(ram16(INTRO_COUNT) + 1));
@@ -296,3 +300,106 @@ static int scroll_to(uint32_t r, uint16_t a, uint16_t b, uint32_t beq2, uint32_t
 int logic_intro_scroll0(void)   { return scroll_to(0x12E9C, 0, 0, 0, 0x12EB8); }
 int logic_intro_scroll1f8(void) { return scroll_to(0x12EBA, 0x1F8, 0, 0, 0x12ED6); }
 int logic_intro_scroll100(void) { return scroll_to(0x12ED8, 0x100, 0x108, 0x12EEC, 0x12F00); }
+
+/* ---------------------------------------------------------------- the set-ups */
+
+static int overseas(void)
+{
+    REG_D[5] = (REG_D[5] & 0xFFFFFF00u) | (uint8_t)(RD8(0xA10001) & 0x80);
+    return (uint8_t)REG_D[5] != 0;
+}
+
+/* sub_120E4 (screen mode $1C): the opening set up: its tiles and colours, the sky's map
+ * block, the brothers' and the cars' paths (0x12774...) and places; its frame (0x122FE) */
+int logic_intro_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x120E4);
+    screen_off();
+    reg_keep(REG_MODE4, 0x8C00);
+    planes_size(0x9011);
+    call(0x006FA, 0x12120);
+    call(0x00522, 0x12126);
+    tiles(0x5654C, 0x40000000, 0x7F, 0, 0x12140);
+    tiles(0x56BBE, 0x60000000, 0x01, 0, 0x1215A);
+    tiles(0x56BCA, 0x68000000, 0x03, 0, 0x12174);
+    tiles(0x5C740, 0x70000000, 0x7F, 1, 0x1218E);
+    tiles(0x63BA0, 0x40000001, 0x7F, 1, 0x121A8);
+    tiles(0x58B1A, 0x50000001, 0x08, 0, 0x121C2);
+    set_lo(7, 0x2A);                                  /* (its colours: a frame can end */
+    ran_to(0x121D2);                                  /*  here, so the game's code calls */
+    REG_A[7] -= 4; set32(REG_A[7], 0x121D2);          /*  it; on at 0x121D2) */
+    return jump_to(0x018FC);
+}
+int logic_intro_setup2(void)
+{
+    if (!start()) return 0;
+    begin(0x121D2);
+    map_rect(0x122F2, 0x121E0);
+    scroll_put(0x5FC00003, 0xA101);
+    screen_on();
+    set16(SKIPPED, 0);
+    set16(0xFF1814, 0);
+    set16(0xFF0680, 0);
+    for (uint32_t a = 0xFF6C5A; a <= 0xFF6C64; a += 2) set16(a, 0);
+    static const uint32_t path[FIGURES] = {0x12774, 0x12780, 0x127E0, 0x12840};
+    for (int i = 0; i < FIGURES; i++) set32(FIG_PATH + 4 * (uint32_t)i, path[i]);
+    set32(FIG_ANIM, 0); set32(FIG_ANIM + 4, 0); set16(FIG_ANIM + 8, 0);
+    set32(FIG_TIME, 0); set32(FIG_TIME + 4, 0); set16(FIG_TIME + 8, 0);
+    static const uint16_t x[FIGURES] = {0x180, 0xDC, 0xDA, 0xE0}, y[FIGURES] = {0x128, 0xD0, 0xD0, 0xD0};
+    for (int i = 0; i < FIGURES; i++) set16(FIG_X + 2 * (uint32_t)i, x[i]);
+    for (int i = 0; i < FIGURES; i++) set16(FIG_Y + 2 * (uint32_t)i, y[i]);
+    set16(SCREEN_WAIT, 0);
+    reg_keep(REG_MODE4, ram16(REG_MODE4) | 0x8C08);
+    set32(SCREEN_RUN, 0x122FE);
+    ran_to(0x122F0);
+    return done();
+}
+
+/* (0x12962: the van's scene: its map blocks (overseas: one shorter, and a sign); the
+ * scroll, the wait, the palette's step, step 2) */
+static int van_setup(void)
+{
+    map_block(0x2D358, 0x2D260, 0xC000, 0xF, 0xF, 0x12988);
+    if (overseas()) {
+        map_block(0x2DC40, 0x2DB88, 0xE000, 0xF, 8, 0x129C2);
+        map_rect(0x12A2E, 0x129D6);
+        branched(0x129DC, 0x12A0C);
+    } else {
+        branched(0x12998, 0x129E0);
+        map_block(0x2DC40, 0x2DB88, 0xE000, 0xF, 0xF, 0x12A06);
+    }
+    set16(SCROLL_A_X, 0xF8);
+    set16(INTRO_WAIT, 0xC0);
+    set16(INTRO_COUNT, 0x2C);
+    set16(INTRO_STEP, 2);
+    ran_to(0x12A2C);
+    return done();
+}
+
+/* (0x12A94: one brother alone: the screen off, his tiles, the street's map blocks; his
+ * place, step 3 for 360 frames) */
+static int alone_setup(void)
+{
+    screen_off();
+    call(0x00522, 0x12AA6);
+    tiles(0x5A000, 0x70000000, 0x27, 1, 0x12AC0);
+    tiles(0x61040, 0x40000001, 0x2C, 1, 0x12ADA);
+    if (overseas()) {
+        map_block(0x2D708, 0x2D558, 0xE000, 0xF, 8, 0x12B14);
+        map_rect(0x12BA2, 0x12B28);
+        branched(0x12B2E, 0x12B5E);
+    } else {
+        branched(0x12AEA, 0x12B32);
+        map_block(0x2D708, 0x2D558, 0xE000, 0xF, 0xF, 0x12B58);
+    }
+    set16(SCROLL_A_X, 0);
+    screen_on();
+    set16(FIG_X, 0x70);
+    set16(FIG_Y, 0xE8);
+    set32(FIG_ANIM, 0);
+    set16(INTRO_WAIT, 0x168);
+    set16(INTRO_STEP, 3);
+    ran_to(0x12BA0);
+    return done();
+}

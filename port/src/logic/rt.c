@@ -191,11 +191,11 @@ void scramble(uint32_t regs)
     }
 }
 
-static struct { const char *name; uint64_t n; } calls[256];
+static struct { const char *name; uint64_t n; } calls[1024];
 
 void count_named(const char *name)
 {
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < 1024; i++)
         if (calls[i].name == name || !calls[i].name) { calls[i].name = name; calls[i].n++; break; }
 }
 
@@ -221,6 +221,6 @@ int start_named(const char *name)
 
 void logic_report(FILE *f)
 {
-    for (int i = 0; i < 256 && calls[i].name; i++)
+    for (int i = 0; i < 1024 && calls[i].name; i++)
         fprintf(f, "  %-28s %llu\n", calls[i].name, (unsigned long long)calls[i].n);
 }
