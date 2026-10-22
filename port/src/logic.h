@@ -434,12 +434,15 @@ extern int  logic_coffee_tiles4(void);           /* sub_246B6 (logic/stagein.c) 
 extern int  logic_coffee_tiles8(void);           /* sub_24720 (logic/stagein.c) */
 extern int  logic_coffee_tiles12(void);          /* sub_2478A (logic/stagein.c) */
 /* the story cutscene (logic/cutscene.c) */
+extern int  logic_cutscene_setup(void);          /* sub_23948 */
+extern int  logic_cutscene_setup0(void);         /* sub_23960 */
 extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
 extern int  logic_cutscene_wait(void);           /* sub_23B28 */
 extern int  logic_cutscene_fade_up(void);        /* sub_23C0C */
 extern int  logic_cutscene_scroll(void);         /* sub_23C38 */
 extern int  logic_cutscene_fade_out(void);       /* sub_23C7A */
 extern int  logic_cutscene_scene(void);          /* sub_23D80 */
+extern int  logic_cutscene_scene_draw(void);     /* (sub_23D80 at 0x23D96) */
 extern int  logic_cutscene_script(void);         /* sub_23E74 */
 extern int  logic_cutscene_scene_rest(void);       /* (sub_23D80 at 0x23D90) */
 extern int  logic_cutscene_script_after(void);     /* (sub_23E74 at 0x23E98) */

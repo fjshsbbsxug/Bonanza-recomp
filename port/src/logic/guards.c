@@ -442,8 +442,8 @@ static uint32_t run_script(uint16_t o)
  * guards fall, touch the players */
 int logic_guards_update(void)
 {
-    if (!start()) return 0;
-    begin(0x14232);
+    begin_long(0x14232);                              /* (long: in the ending a frame can
+                                                       *  end inside it) */
     REG_D[0] = 0xC;                                   /* o: the first guard */
     set_lo(1, ram16(GUARD_COUNT));
     ran_to(0x1423A);
@@ -461,7 +461,7 @@ int logic_guards_update(void)
         branched(0x14784, 0x1423A);
     }
     ran_to(0x14788);
-    return done();
+    return done_long();
 }
 
 /* ================================================================ looking for the players */

@@ -221,7 +221,14 @@ int logic_cutscene_scene_rest(void)
 }
 static int scene_rest(void)
 {
-    call(0x14232, 0x23D90);
+    ran_to(0x23D96);                                  /* (the guards' frame: a frame can end */
+    REG_A[7] -= 4; set32(REG_A[7], 0x23D96);          /*  inside it here, so the game's code */
+    return jump_to(0x14232);                          /*  calls it; on at 0x23D96) */
+}
+int logic_cutscene_scene_draw(void)
+{
+    if (!start()) return 0;
+    begin(0x23D96);
     return cutscene_scene();
 }
 
@@ -413,4 +420,70 @@ int logic_cutscene_setup2(void)
     screen_on();
     ran_to(0x23D72);
     return done();
+}
+
+/* sub_23948 (the screen before stage 14's: the ending): the screen off, the work memory
+ * cleared (sub_00470: a frame ends inside it; on at 0x23960) */
+int logic_cutscene_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x23948);
+    screen_off();
+    ran_to(0x23960);
+    REG_A[7] -= 4; set32(REG_A[7], 0x23960);
+    return jump_to(0x00470);
+}
+
+/* (0x23960, long) the sprites, palettes and planes cleared, the stage's map, objects and
+ * guards (for the guards running about), the music, the tiles and text; 240 frames, step
+ * 0, the scroll, the script from its start; the two figures' animations going; its frame
+ * (0x23AB6) and colours, the screen on */
+int logic_cutscene_setup0(void)
+{
+    begin_long(0x23960);
+    call(0x00522, 0x23960);
+    call(0x01928, 0x23966);
+    call(0x006FA, 0x2396C);
+    reg_keep(REG_MODE4, 0x8C00);
+    planes_size(0x9011);
+    call(0x0FF22, 0x2399C);
+    call(0x0156C, 0x239A2);
+    call(0x141F8, 0x239A8);
+    set_lo(0, 0xE1);
+    call(0x02D54, 0x239B2);
+    tiles(0x40020, 0x64000002, 0x5F, 0, 0x239CC);
+    REG_A[6] = 0x23A9E;
+    call(0x011B8, 0x239D6);
+    set16(SCREEN_WAIT, 0xF0);
+    set16(STEP, 0);
+    set16(0xFF1814, 0);
+    set16(OBJ_DX, 0);
+    set16(SCROLL_X, 0);
+    set16(SCROLL_A, 0);
+    set16(SCROLL_B, 0);
+    set16(FRAME_COUNT, 0);
+    set16(SCRIPT_AT, 0);
+    REG_A[0] = 0x3BB00;
+    set16(SCRIPT_NEXT, mem16(0x3BB00));
+    scroll_put(0x40000010, ram16(SCROLL_A));
+    scroll_put(0x40020010, ram16(SCROLL_B));
+    scroll_put(0x70020002, ram16(SCROLL_X));
+    set_lo(0, 1);
+    REG_D[1] = 0;
+    REG_A[0] = 0xFF2FA2;
+    ran_to(0x23A6A);
+    for (;;) {
+        set16(0xFF2FA2 + lo(REG_D[1]), 3);
+        set_lo(1, (uint16_t)(lo(REG_D[1]) + 2));
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x23A76); break; }
+        branched(0x23A72, 0x23A6A);
+    }
+    set32(SCREEN_RUN, 0x23AB6);
+    set_lo(7, 0);
+    call(0x018FC, 0x23A84);
+    screen_on();
+    ran_to(0x23A9C);
+    return done_long();
 }

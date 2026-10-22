@@ -40,17 +40,21 @@ void branched(uint32_t a, uint32_t b)
     pc_at = b;
 }
 
+static int kept_end(uint32_t popped);
+static void keep_if(int long_one);
+
 int done(void)
 {
     USE_CYCLES(cyc);
     cyc = 0;
-    return 1;
+    return kept_end(0) ? 1 : 0;
 }
 
 int jump_to(uint32_t addr)
 {
     USE_CYCLES(cyc);
     cyc = 0;
+    if (!kept_end(0)) return 0;
     REG_PC = addr;
     return 2;
 }
@@ -216,13 +220,20 @@ int start_named(const char *name)
     logic_stat_c++;
     count_named(name);
     cyc = 0;
+    keep_if(0);
     return 1;
 }
 
-/* ---- long routines: the machine kept, and put back when one runs past the frame */
+/* ---- the machine kept: a routine in C started by the game's code (not within a call
+ * from C, where no frame ends) near the frame's end, or a long one at any time, keeps the
+ * machine as it was; if it runs past the frame's end, done() / jump_to() put it back and
+ * the game's code runs the routine this time, so the frame ends inside it as on the
+ * console. (A frame has about 128000 cycles; no routine but a long one takes 20000.) */
 
 #include "../vdp.h"
 #include <stddef.h>
+
+#define NEAR_END 20000
 
 static struct {
     m68ki_cpu_core cpu;
@@ -231,44 +242,36 @@ static struct {
     uint8_t md[sizeof(md_t) - offsetof(md_t, ram)];
     uint8_t vdp[offsetof(vdp_t, fbmd)];
 } kept;
-static int long_depth;
+static int kept_active;
+static uint32_t kept_sp;
 uint64_t logic_long_back;                  /* (LOGICSTATS: how often one was put back) */
 
-int start_long_named(const char *name, uint32_t addr)
+static void keep_if(int long_one)
 {
-    static uint32_t bypass_at;
-    if (bypass_at == addr) { bypass_at = 0; return 0; }
-    static int ref = -1;
-    if (ref < 0) ref = getenv("LOGIC_LONG_REF") != 0;
-    if (ref && !logic_off) {               /* (the game's code for it, in one go: from addr */
-        uint32_t sp = REG_A[7];            /*  to its rts) */
-        uint32_t ret = m68ki_read_32(sp);
-        bypass_at = addr;
-        REG_PC = addr;
-        cpu_run_to(ret, sp + 4);
-        return 2;                          /* (done: on at REG_PC, its return) */
-    }
-    if (!start_named(name)) return 0;
-    if (long_depth++) return 1;            /* (within another: that one keeps the machine) */
+    if (cpu_call_ret) return;              /* (within a call from C) */
+    kept_active = 0;                       /* (a routine before it that went on elsewhere) */
+    if (!long_one && GET_CYCLES() >= NEAR_END) return;
+    kept_active = 1;
+    kept_sp = REG_A[7];
     kept.cpu = m68ki_cpu;
     kept.cycles = GET_CYCLES();
     kept.irq_dirty = cpu_irq_dirty;
     kept.call_ret = cpu_call_ret;
     memcpy(kept.md, (uint8_t *)&md + offsetof(md_t, ram), sizeof kept.md);
     memcpy(kept.vdp, &vdp, sizeof kept.vdp);
-    return 1;
 }
 
-/* (the time taken: back to the start when it ran past the frame's end; 1 when not) */
-static int long_end(void)
+/* (at the routine's end, its time taken: 0 when it was put back; popped: its return
+ * already taken off the stack) */
+static int kept_end(uint32_t popped)
 {
-    USE_CYCLES(cyc);
-    cyc = 0;
-    if (--long_depth) return 1;
+    if (!kept_active || cpu_call_ret) return 1;
+    kept_active = 0;
+    if (REG_A[7] != kept_sp + popped) return 1;     /* (it went on elsewhere with a return of its own) */
     if (GET_CYCLES() > 0) return 1;
-    static int keep = -1;                  /* LOGIC_LONG_KEEP=1 (tests): never put back, so */
-    if (keep < 0) keep = getenv("LOGIC_LONG_KEEP") != 0;   /* the C runs: only the frame */
-    if (keep) return 1;                    /* it ran past differs then */
+    static int keep = -1;                  /* LOGIC_LONG_KEEP=1 (tests): never put back */
+    if (keep < 0) keep = getenv("LOGIC_LONG_KEEP") != 0;
+    if (keep) return 1;
     m68ki_cpu = kept.cpu;
     SET_CYCLES(kept.cycles);
     cpu_irq_dirty = kept.irq_dirty;
@@ -278,7 +281,27 @@ static int long_end(void)
     logic_long_back++;
     return 0;
 }
-int done_long(void) { return long_end() ? 1 : 0; }
+
+int start_long_named(const char *name, uint32_t addr)
+{
+    static uint32_t bypass_at;
+    if (bypass_at == addr) { bypass_at = 0; return 0; }
+    static int ref = -1;
+    if (ref < 0) ref = getenv("LOGIC_LONG_REF") != 0;
+    if (logic_off < 0) logic_off = getenv("BONANZA_TRANSLATED") != 0;
+    if (ref && !logic_off) {               /* (the game's code for it, in one go: from addr */
+        uint32_t sp = REG_A[7];            /*  to its rts) */
+        uint32_t ret = m68ki_read_32(sp);
+        bypass_at = addr;
+        REG_PC = addr;
+        cpu_run_to(ret, sp + 4);
+        return 2;                          /* (done: on at REG_PC, its return) */
+    }
+    if (!start_named(name)) return 0;
+    keep_if(1);
+    return 1;
+}
+int done_long(void) { return done(); }
 int rest_long(uint32_t addr)
 {
     USE_CYCLES(cyc);
@@ -286,7 +309,7 @@ int rest_long(uint32_t addr)
     uint32_t sp = REG_A[7];
     REG_PC = addr;
     cpu_run_to(m68ki_read_32(sp), sp + 4);
-    return long_end() ? 2 : 0;
+    return kept_end(4) ? 2 : 0;
 }
 
 void logic_report(FILE *f)

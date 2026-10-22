@@ -815,6 +815,8 @@ LOGIC = {
     0x24720: "logic_coffee_tiles8",
     0x2478A: "logic_coffee_tiles12",
     # the story cutscene (cutscene.c)
+    0x23948: "logic_cutscene_setup",
+    0x23960: "logic_cutscene_setup0",
     0x23AB6: "logic_cutscene_frame",
     0x23B28: "logic_cutscene_wait",
     0x23C0C: "logic_cutscene_fade_up",
@@ -822,6 +824,7 @@ LOGIC = {
     0x23C7A: "logic_cutscene_fade_out",
     0x23D80: "logic_cutscene_scene",
     0x23D90: "logic_cutscene_scene_rest",
+    0x23D96: "logic_cutscene_scene_draw",
     0x23E74: "logic_cutscene_script",
     0x23E98: "logic_cutscene_script_after",
     0x23EC0: "logic_cutscene_end",
