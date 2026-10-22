@@ -185,7 +185,8 @@ builder/      the HTML builder page
     its steps' set-ups, which load tiles and maps with the screen off, stay the game's
     code;
   * `stagein.c`: the screen before each stage (the building, then the things to take
-    counted up one at a time with a sound; A, B or C hurries it; the fade out);
+    counted up one at a time with a sound; A, B or C hurries it; the fade out), and
+    the coffee break's frame;
   * `cutscene.c`: the story scene at the game's end (the van and the guards): its steps,
     fades and scrolls, and its script, whose commands run as the game's code (some
     run past a frame's end, so the game's code calls them and the C goes on where they

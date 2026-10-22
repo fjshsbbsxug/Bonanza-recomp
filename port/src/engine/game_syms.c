@@ -205,6 +205,7 @@ const bonanza_sym game_engine_syms[] = {
     {"logic_climb_go_p2", (void *)logic_climb_go_p2},
     {"logic_climb_p1", (void *)logic_climb_p1},
     {"logic_climb_p2", (void *)logic_climb_p2},
+    {"logic_coffee_frame", (void *)logic_coffee_frame},
     {"logic_column_job_add", (void *)logic_column_job_add},
     {"logic_column_jobs", (void *)logic_column_jobs},
     {"logic_column_jobs_clear", (void *)logic_column_jobs_clear},

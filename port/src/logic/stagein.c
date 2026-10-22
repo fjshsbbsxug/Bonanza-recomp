@@ -200,3 +200,59 @@ int logic_stagein_fade(void)
     ran_to(0x119AE);
     return done();
 }
+
+/* sub_24938: the coffee break's frame (set up at 0x24536, its frame at 0x248DE): the
+ * guards' frame (sub_14232), the 17 objects' pictures, the shadow and highlight every
+ * other frame; at the time's end (or A, B or C) the screen off and the next stage's
+ * screen (mode $18) */
+int logic_coffee_frame(void)
+{
+    if (!start()) return 0;
+    begin(0x24938);
+    set_lo(0, ram16(0xFF17B8));
+    int end = hurried();
+    if (end) branched(0x24946, 0x249A4);
+    else {
+        set16(WAIT, (uint16_t)(ram16(WAIT) - 1));
+        if (!ram16(WAIT)) { end = 1; branched(0x24950, 0x249A4); }
+    }
+    if (end) {
+        set16(VDP_MODE2, ram16(VDP_MODE2) & 0x81BF);
+        video_reg_word(ram16(VDP_MODE2));
+        call(0x00522, 0x249B6);
+        set16(VDP_MODE4, ram16(VDP_MODE4) & 0x8CF7);
+        video_reg_word(ram16(VDP_MODE4));
+        set16(VDP_MODE2, ram16(VDP_MODE2) | 0x8140);
+        video_reg_word(ram16(VDP_MODE2));
+        call(0x01928, 0x249E0);
+        set16(STAGE_ENTRY, (uint16_t)(ram16(STAGE_ENTRY) + 1));
+        set16(GAME_MODE, 0x18);
+        set32(SCREEN_RUN, 0x2E06);
+        ran_to(0x249FE);
+        return done();
+    }
+    call(0x14232, 0x24954);
+    REG_D[0] = 0;
+    REG_D[1] = 0x10;
+    ran_to(0x2495E);
+    for (;;) {
+        call(0x05D88, 0x2495E);
+        set_lo(0, (uint16_t)(lo(REG_D[0]) + 2));
+        uint16_t c = lo(REG_D[1]);
+        set_lo(1, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x2496A); break; }
+        branched(0x24966, 0x2495E);
+    }
+    call(0x125EC, 0x2496A);
+    if (ram8(FRAME_COUNT + 1) & 1) {
+        set16(VDP_MODE4, ram16(VDP_MODE4) | 0x8C08);
+        video_reg_word(ram16(VDP_MODE4));
+        ran_to(0x2498E);
+    } else {
+        branched(0x24978, 0x24990);
+        set16(VDP_MODE4, ram16(VDP_MODE4) & 0x8CF7);
+        video_reg_word(ram16(VDP_MODE4));
+        ran_to(0x249A2);
+    }
+    return done();
+}

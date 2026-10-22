@@ -404,6 +404,7 @@ extern int  logic_stagein_targets(void);         /* sub_1180C */
 extern int  logic_stagein_count(void);           /* sub_11842 */
 extern int  logic_stagein_wait(void);            /* sub_118C4 */
 extern int  logic_stagein_fade(void);            /* sub_11946 */
+extern int  logic_coffee_frame(void);            /* sub_24938 */
 /* the story cutscene (logic/cutscene.c) */
 extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
 extern int  logic_cutscene_wait(void);           /* sub_23B28 */

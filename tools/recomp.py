@@ -785,6 +785,7 @@ LOGIC = {
     0x11842: "logic_stagein_count",
     0x118C4: "logic_stagein_wait",
     0x11946: "logic_stagein_fade",
+    0x24938: "logic_coffee_frame",
     # the story cutscene (cutscene.c)
     0x23AB6: "logic_cutscene_frame",
     0x23B28: "logic_cutscene_wait",
