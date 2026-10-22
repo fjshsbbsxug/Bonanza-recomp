@@ -1402,3 +1402,19 @@ int logic_objects_frame(void)
     }
     return done();
 }
+
+/* sub_198EA / sub_19A18: the object kept at $FF181A / $FF9E06 (if any) taken out of play */
+static int object_out(uint32_t r, uint32_t kept, uint32_t beq, uint32_t rts)
+{
+    if (!start()) return 0;
+    begin(r);
+    set_lo(7, ram16(kept));
+    if (!lo(REG_D[7])) { branched(beq, rts); return done(); }
+    REG_A[6] = OBJ_ACTIVE;
+    set16(OBJ_ACTIVE + (int16_t)lo(REG_D[7]), 0);
+    set16(kept, 0);
+    ran_to(rts);
+    return done();
+}
+int logic_object_out(void)  { return object_out(0x198EA, 0xFF181A, 0x198F0, 0x19904); }
+int logic_object_out2(void) { return object_out(0x19A18, 0xFF9E06, 0x19A1E, 0x19A32); }

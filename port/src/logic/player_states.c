@@ -3059,3 +3059,22 @@ next:
     ran_to(0x0AE88);
     return done();
 }
+
+/* sub_0A99A (player 1's; player 2's copy, sub_0A9CE, stays the game's code): his little
+ * script at a6 started: its place, its first step's wait and values, his state 1 with
+ * its routine (0xAA02); then his frame's start (sub_099D6) */
+int logic_script_start_p1(void)
+{
+    if (!start()) return 0;
+    begin(0x0A99A);
+    set32(0xFF5694, REG_A[6]);
+    set16(0xFF5698, 4);
+    set16(0xFF569A, mem16(REG_A[6]));
+    REG_A[6] += 2;
+    set16(0xFF569C, mem16(REG_A[6]));
+    set16(0xFF5682, 1);
+    set32(0xFF5684, 0xAA02);
+    call(0x099D6, 0x0A9C6);
+    ran_to(0x0A9CC);
+    return done();
+}

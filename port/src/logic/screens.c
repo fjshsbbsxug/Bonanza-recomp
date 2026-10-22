@@ -510,3 +510,16 @@ int logic_work_clear(void)
     }
     return done_long();
 }
+
+/* sub_00522: the screen cleared: the planes (sub_0052E), the scroll (sub_00628), the
+ * sprites (sub_0066A) */
+int logic_screen_clear(void)
+{
+    if (!start()) return 0;
+    begin(0x00522);
+    call(0x0052E, 0x00522);
+    call(0x00628, 0x00524);
+    call(0x0066A, 0x00528);
+    ran_to(0x0052C);
+    return done();
+}

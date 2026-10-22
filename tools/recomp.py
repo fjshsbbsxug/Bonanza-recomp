@@ -756,6 +756,10 @@ LOGIC = {
     0x28914: "logic_column_right_p2",
     0x289D2: "logic_column_left_p2",
     # small routines
+    0x00522: "logic_screen_clear",
+    0x198EA: "logic_object_out",
+    0x19A18: "logic_object_out2",
+    0x0A99A: "logic_script_start_p1",
     0x00470: "logic_work_clear",
     0x02C76: "logic_sound_start",
     0x04602: "logic_stage_views1",
