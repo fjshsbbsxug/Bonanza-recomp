@@ -362,6 +362,10 @@ DRAW = {
 # routine runs as translated (BONANZA_TRANSLATED=1).
 LOGIC = {
     0x02D54: "logic_sound_request",
+    0x02D3A: "logic_z80_reset",
+    0x02D76: "logic_sound_now",
+    0x02D98: "logic_sound_play",
+    0x02DC2: "logic_sound_send",
     0x09EDA: "logic_protect_p1",
     0x09EF4: "logic_protect_p2",
     0x09F0E: "logic_protect2_p1",

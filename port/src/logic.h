@@ -379,6 +379,10 @@ extern int  logic_points_redraw_p2(void);        /* sub_11D50 (logic/hud.c) */
 extern int  logic_players_on(void);              /* sub_1A8F2 (logic/map.c) */
 extern int  logic_guard_clear(void);             /* sub_179B0 (logic/guards.c) */
 extern int  logic_picture_draw(void);            /* sub_05DB0 (logic/sprites.c) */
+extern int  logic_z80_reset(void);               /* sub_02D3A (logic/sound.c) */
+extern int  logic_sound_now(void);               /* sub_02D76 (logic/sound.c) */
+extern int  logic_sound_play(void);              /* sub_02D98 (logic/sound.c) */
+extern int  logic_sound_send(void);              /* sub_02DC2 (logic/sound.c) */
 /* the players' panels (logic/panel.c) */
 extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */
