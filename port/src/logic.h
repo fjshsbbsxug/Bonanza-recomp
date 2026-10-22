@@ -359,6 +359,10 @@ extern int  logic_demo_setup(void);              /* sub_041C4 */
 extern int  logic_demo_setup2(void);             /* sub_041DA */
 extern int  logic_stage_go(void);                /* sub_0442A */
 extern int  logic_demo_go(void);                 /* sub_04200 */
+extern int  logic_column_right(void);            /* sub_28624 (logic/views.c) */
+extern int  logic_column_left(void);             /* sub_286E2 (logic/views.c) */
+extern int  logic_column_right_p2(void);         /* sub_28914 (logic/views.c) */
+extern int  logic_column_left_p2(void);          /* sub_289D2 (logic/views.c) */
 /* the story cutscene (logic/cutscene.c) */
 extern int  logic_cutscene_frame(void);          /* sub_23AB6 */
 extern int  logic_cutscene_wait(void);           /* sub_23B28 */

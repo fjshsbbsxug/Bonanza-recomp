@@ -33,16 +33,120 @@ static uint32_t view_ram(int v, uint32_t a) { return a + (v ? VIEW_RAM : 0); }
 
 /* ---------------------------------------------------------------- the drawing tasks */
 
+#define VIEW_COLUMN_AT  0xFF187E  /* the column's place in the plane, for the left one and */
+#define VIEW_COLUMN2_AT 0xFF1882  /*   the right one ($80 wide, 4 bytes a column) */
+#define VIEW_TILES   0xFF1884    /* (2 x $500 bytes) the column's tiles for the two planes */
+#define MAP_AT       0xFF1838    /* (long) the stage's map, and its blocks' tiles (8 bytes */
+#define BLOCKS       0xFF183C    /*   a block: 2 for each plane, 2 rows) */
+
+/* sub_284B0 (player 2's sub_287A0): the map's column at a0 (15 blocks down) into the tiles
+ * to draw, each block's two columns for each plane */
+static void column_tiles(int v)
+{
+    uint32_t b = v ? 0x2F0 : 0;
+    REG_A[4] = view_ram(v, VIEW_TILES);
+    REG_A[3] = view_ram(v, VIEW_TILES + 0x500);
+    set_lo(7, 0xE);
+    set_lo(6, (uint16_t)(ram16(MAP_WIDTH) * 2));
+    ran_to(0x284C6 + b);
+    for (;;) {
+        set_lo(5, (uint16_t)(mem16(REG_A[0]) << 3));
+        uint32_t t = REG_A[1] + (uint32_t)(int16_t)lo(REG_D[5]);
+        set16(REG_A[4], mem16(t));     set16(REG_A[3], mem16(t + 2));
+        set16(REG_A[4] + 2, mem16(t + 4)); set16(REG_A[3] + 2, mem16(t + 6));
+        REG_A[4] += 4; REG_A[3] += 4;
+        REG_A[0] += (uint32_t)(int16_t)lo(REG_D[6]);
+        uint16_t c = lo(REG_D[7]);
+        set_lo(7, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x284E0 + b); break; }
+        branched(0x284DC + b, 0x284C6 + b);
+    }
+}
+static uint16_t step4(uint16_t at, int dir)          /* (the place in the plane's row) */
+{
+    return (uint16_t)((at & 0xFF80) + ((at + 4 * dir) & 0x7F));
+}
+
+/* sub_28624 / sub_286E2 (player 2's sub_28914 / sub_289D2): the map's column at the right
+ * or the left edge into the tiles to draw (the view's row, a block up or down while it
+ * moves), handed to the line routine; the edges a column on */
+static void column_edge(int v, int left)
+{
+    uint32_t b = (v ? 0x2F0 : 0) + (left ? 0xBE : 0);
+    int dir = left ? -1 : 1;
+    set_lo(6, ram16(view_ram(v, VIEW_ROW)));
+    if (!ram16(view_ram(v, VIEW_HELD))) branched(0x28630 + b, 0x28648 + b);
+    else {
+        set_lo(7, 5);
+        if (!ram16(view_ram(v, VIEW_SPLIT))) branched(0x2863E + b, 0x28646 + b);
+        else { ran_to(0x28642 + b); set_lo(7, 0xFFFB); }
+        set_lo(6, (uint16_t)(lo(REG_D[6]) + lo(REG_D[7])));
+    }
+    set_lo(3, 0);
+    set_lo(5, (uint16_t)(ram16(MAP_WIDTH) * 2));
+    if ((int16_t)lo(REG_D[6]) >= 0) branched(0x28654 + b, 0x2865C + b);
+    else {
+        set_lo(6, (uint16_t)-lo(REG_D[6]));
+        set_lo(5, (uint16_t)-lo(REG_D[5]));
+        ran_to(0x2865C + b);
+    }
+    for (;;) {                                         /* (the row's place in the map) */
+        set_lo(6, (uint16_t)(lo(REG_D[6]) - 1));
+        if ((int16_t)lo(REG_D[6]) < 0) { branched(0x2865E + b, 0x28666 + b); break; }
+        set_lo(3, (uint16_t)(lo(REG_D[3]) + lo(REG_D[5])));
+        ran_to(0x28664 + b);
+        branched(0x28664 + b, 0x2865C + b);
+    }
+    uint32_t col = view_ram(v, left ? VIEW_COLUMN2 : VIEW_COLUMN);
+    set_lo(7, (uint16_t)(ram16(col) * 2 + lo(REG_D[3])));
+    REG_A[0] = ram32(MAP_AT) + (uint32_t)(int16_t)lo(REG_D[7]);
+    REG_A[1] = ram32(BLOCKS);
+    ran_to(0x28684 + b);                               /* (jsr sub_284B0, inline) */
+    jumped_to(0x284B0 + (v ? 0x2F0 : 0));
+    column_tiles(v);
+    ran_to(0x284E2 + (v ? 0x2F0 : 0));
+    jumped_to(0x28684 + b);
+    set32(0xFFC10C + (v ? 4 : 0), v ? 0x8C1A : 0x89C0);
+    set16(0xFFC114 + (v ? 4 : 0), ram16(view_ram(v, left ? VIEW_COLUMN2_AT : VIEW_COLUMN_AT)));
+    uint32_t c1 = view_ram(v, VIEW_COLUMN), c2 = view_ram(v, VIEW_COLUMN2);
+    set16(c1, (uint16_t)(ram16(c1) + dir));
+    set16(c1 + 2, step4(ram16(c1 + 2), dir));
+    set16(c2, (uint16_t)(ram16(c2) + dir));
+    set_lo(7, step4(ram16(c2 + 2), dir));
+    set_lo(6, lo(REG_D[7]) & 0x7F);
+    set16(c2 + 2, lo(REG_D[7]));
+    ran_to(0x286E0 + b);
+}
+static int column_edge_logic(int v, int left)
+{
+    if (!start()) return 0;
+    begin(0x28624 + (v ? 0x2F0 : 0) + (left ? 0xBE : 0));
+    column_edge(v, left);
+    return done();
+}
+int logic_column_right(void)    { return column_edge_logic(0, 0); }
+int logic_column_left(void)     { return column_edge_logic(0, 1); }
+int logic_column_right_p2(void) { return column_edge_logic(1, 0); }
+int logic_column_left_p2(void)  { return column_edge_logic(1, 1); }
+
 /* (task 0: the map's column at the view's edge drawn: sub_28624 / sub_286E2, player 2's
  * sub_28914 / sub_289D2) */
 static void task_column(int v, uint32_t b)
 {
     if (!ram16(view_ram(v, VIEW_LEFT))) {
-        call(v ? 0x28914 : 0x28624, 0x08160 + b);
+        ran_to(0x08166 + b);                          /* (jsr, inline) */
+        jumped_to(0x28624 + (v ? 0x2F0 : 0));
+        column_edge(v, 0);
+        ran_to(0x286E2 + (v ? 0x2F0 : 0));
+        jumped_to(0x08166 + b);
         branched(0x08166 + b, 0x0816E + b);
     } else {
         branched(0x0815C + b, 0x08168 + b);
-        call(v ? 0x289D2 : 0x286E2, 0x08168 + b);
+        ran_to(0x0816E + b);
+        jumped_to(0x286E2 + (v ? 0x2F0 : 0));
+        column_edge(v, 1);
+        ran_to(0x287A0 + (v ? 0x2F0 : 0));
+        jumped_to(0x0816E + b);
     }
     REG_A[0] = view_ram(v, VIEW_TASKS);
     set16(view_ram(v, VIEW_TASKS), 0);

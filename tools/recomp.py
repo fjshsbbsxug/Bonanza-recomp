@@ -739,6 +739,10 @@ LOGIC = {
     0x041DA: "logic_demo_setup2",
     0x0442A: "logic_stage_go",
     0x04200: "logic_demo_go",
+    0x28624: "logic_column_right",
+    0x286E2: "logic_column_left",
+    0x28914: "logic_column_right_p2",
+    0x289D2: "logic_column_left_p2",
     # the story cutscene (cutscene.c)
     0x23AB6: "logic_cutscene_frame",
     0x23B28: "logic_cutscene_wait",
