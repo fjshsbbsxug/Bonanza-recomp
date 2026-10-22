@@ -387,5 +387,5 @@ int logic_stagein_targets_setup(void)
     call(0x018FC, 0x114D6);
     reg_keep(REG_MODE4, ram16(REG_MODE4) | 0x8C08);
     ran_to(0x114F0);
-    return jump_long(0x114F0);
+    return rest_long(0x114F0);
 }

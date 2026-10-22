@@ -685,3 +685,81 @@ int logic_guards_setup(void)
     REG_A[7] -= 4; set32(REG_A[7], 0x14214);
     return jump_to(0x147FA);
 }
+
+/* sub_147FA (long: see begin_long): each of the stage's guards (objects 6 on, GUARD_COUNT
+ * + 1 of them) set up from its kind (table 0x14AB8 by stage, then 0x1CFDE by kind): his
+ * counters cleared; his script's places and his kind's values (size, speed, ...); where
+ * he starts kept as his post; his work space ($40 bytes each from $7D88); the boxes he
+ * looks through around him (by his size: up-left, down-left, up-right, down-right,
+ * ahead); his turn in the frame (by his number, in 4) and his half (in 2) */
+int logic_guards_place(void)
+{
+    begin_long(0x147FA);
+    set_lo(0, (uint16_t)((ram16(STAGE_ENTRY) - 1) << 2));
+    REG_A[0] = mem32(0x14AB8 + (int16_t)lo(REG_D[0]));
+    REG_D[0] = 0xC;
+    set_lo(1, ram16(GUARD_COUNT));
+    static const uint32_t cleared[] = {
+        0xFF6CC4, 0xFF6D10, 0xFF6D5C, 0xFF734C, 0xFF7398, 0xFF73E4, 0xFF7430, 0xFF9284,
+        0xFF92D0, 0xFF931C, 0xFF8DC4,
+    };
+    static const uint32_t script[] = {     /* (longs) */
+        0xFF6F24, 0xFF6FBC, 0xFF7054, 0xFF70EC, 0xFF7184, 0xFF721C, 0xFF72B4, 0xFF6DF4,
+        0xFF8EA8, 0xFF990C,
+    };
+    for (;;) {
+        uint16_t o = lo(REG_D[0]);
+        REG_D[7] = 0;
+        for (unsigned k = 0; k < sizeof cleared / sizeof *cleared; k++) set16(cleared[k] + o, 0);
+        set_lo(7, (uint16_t)(mem16(REG_A[0]) << 2));
+        REG_A[0] += 2;
+        REG_A[6] = mem32(0x1CFDE + (int16_t)lo(REG_D[7]));
+        uint16_t o2 = (uint16_t)(o * 2);
+        for (unsigned k = 0; k < sizeof script / sizeof *script; k++) {
+            set32(script[k] + o2, mem32(REG_A[6]));
+            REG_A[6] += 4;
+        }
+        set_lo(7, mem16(REG_A[6])); REG_A[6] += 2;
+        set16(0xFF7514 + o, lo(REG_D[7]));
+        set16(0xFF7560 + o, lo(REG_D[7]));
+        static const uint32_t values[] = { 0xFF75AC, 0xFF75F8, 0xFF406E, OBJ_SIZE_X, OBJ_SIZE_Y };
+        for (unsigned k = 0; k < 5; k++) { set16(values[k] + o, mem16(REG_A[6])); REG_A[6] += 2; }
+        set16(0xFF7644 + o, mem16(REG_A[6]));
+        set16(0xFF91EC + o, mem16(REG_A[6])); REG_A[6] += 2;
+        set16(0xFF7728 + o, mem16(REG_A[6])); REG_A[6] += 2;
+        set_lo(7, o2);
+        set32(0xFF7774 + o2, mem32(REG_A[6]));
+        set32(0xFF8FD8 + o2, mem32(REG_A[6]));
+        set16(0xFF9108 + o, ram16(OBJ_X + o));        /* (his post) */
+        set16(0xFF9154 + o, ram16(OBJ_Y + o));
+        set16(0xFF91A0 + o, ram16(OBJ_HEIGHT + o));
+        set16(0xFF9238 + o, 1);
+        REG_D[6] = (uint16_t)((uint16_t)(o + 2) << 6);
+        REG_A[6] = 0xFF7D48 + (uint32_t)(int16_t)lo(REG_D[6]);
+        set_lo(6, o2);
+        set32(0xFF7CB0 + o2, REG_A[6]);
+        set32(0xFF9070 + o2, REG_A[6]);
+        uint16_t sx = ram16(OBJ_SIZE_X + o), sy = ram16(OBJ_SIZE_Y + o);
+        static const struct { uint32_t box; int8_t fx, fy; } box[5] = {
+            {0xFF411A, -1, -1}, {0xFF4272, -1, 1}, {0xFF43CA, 1, -1}, {0xFF4522, 1, 1}, {0xFF467A, 0, 1},
+        };
+        for (int k = 0; k < 5; k++) {
+            uint16_t x = box[k].fx < 0 ? (uint16_t)-sx : box[k].fx > 0 ? sx : 0;
+            uint16_t y = box[k].fy < 0 ? (uint16_t)-sy : sy;
+            set16(box[k].box + o2, (uint16_t)(x - 0x20));
+            set16(box[k].box + o2 + 2, (uint16_t)(y - 0x20));
+            set_lo(7, (uint16_t)(y - 0x20));
+        }
+        REG_A[6] = 0xFF9400; REG_A[5] = OBJ_SIZE_Y; REG_A[4] = 0xFF467A;
+        set16(0xFF93B4 + o, (uint16_t)((o - mem16(0x000C)) & 3));
+        set_lo(7, o & 1);
+        set16(0xFF9400 + o, lo(REG_D[7]));
+        set_lo(0, (uint16_t)(o + 2));
+        ran_to(0x14AB2);
+        uint16_t c = lo(REG_D[1]);
+        set_lo(1, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x14AB6); break; }
+        branched(0x14AB2, 0x14814);
+    }
+    return done_long();
+}

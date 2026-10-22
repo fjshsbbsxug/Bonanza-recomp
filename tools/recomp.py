@@ -755,6 +755,7 @@ LOGIC = {
     0x0430A: "logic_stage_setup",
     0x04322: "logic_stage_setup2",
     0x141F8: "logic_guards_setup",
+    0x147FA: "logic_guards_place",
     0x08E74: "logic_player_start",
     0x08F26: "logic_player_start_p2",
     0x05496: "logic_games_over",

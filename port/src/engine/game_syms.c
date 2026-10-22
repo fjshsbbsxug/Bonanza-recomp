@@ -290,6 +290,7 @@ const bonanza_sym game_engine_syms[] = {
     {"logic_guard_turn_step", (void *)logic_guard_turn_step},
     {"logic_guards_forget_p1", (void *)logic_guards_forget_p1},
     {"logic_guards_forget_p2", (void *)logic_guards_forget_p2},
+    {"logic_guards_place", (void *)logic_guards_place},
     {"logic_guards_setup", (void *)logic_guards_setup},
     {"logic_guards_update", (void *)logic_guards_update},
     {"logic_height_step_p1", (void *)logic_height_step_p1},

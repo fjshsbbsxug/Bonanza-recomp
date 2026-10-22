@@ -279,11 +279,14 @@ static int long_end(void)
     return 0;
 }
 int done_long(void) { return long_end() ? 1 : 0; }
-int jump_long(uint32_t addr)
+int rest_long(uint32_t addr)
 {
-    if (!long_end()) return 0;
+    USE_CYCLES(cyc);
+    cyc = 0;
+    uint32_t sp = REG_A[7];
     REG_PC = addr;
-    return 2;
+    cpu_run_to(m68ki_read_32(sp), sp + 4);
+    return long_end() ? 2 : 0;
 }
 
 void logic_report(FILE *f)
