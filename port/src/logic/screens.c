@@ -1,5 +1,6 @@
 /* Screens: the routine run every frame, and waits. */
 #include "rt.h"
+#include "../video.h"
 
 /* sub_04460: a screen's wait: when it runs out, the screen's next routine runs */
 int logic_screen_wait(void)
@@ -386,4 +387,68 @@ int logic_vblank_columns(void)
     if (ram16(0xFF2EF4)) branched(0x00AC8, 0x00AD2);
     else call(0x0135A, 0x00ACC);
     return jump_to(0x00AD2);
+}
+
+/* ---------------------------------------------------------------- the boot's set-up */
+
+/* (0x384, after a cold start's checks) the options' defaults: level NORMAL, 3 lives, the
+ * sound test at 0, CONTROL 0 (the buttons' bits, sub_03DFA); the work memory marked
+ * "init"; then cleared (sub_00470: frames end inside it; on at 0x3BA) */
+int logic_boot_options(void)
+{
+    if (!start()) return 0;
+    begin(0x00384);
+    set16(0xFFC04E, 1);
+    set16(0xFFC050, 0);
+    set16(0xFFC052, 3);
+    set16(0xFFC058, 0);
+    call(0x03DFA, 0x003A4);
+    set32(0xFFC000, 0x696E6974);
+    ran_to(0x003BA);
+    REG_A[7] -= 4; set32(REG_A[7], 0x003BA);
+    return jump_to(0x00470);
+}
+
+/* (0x3BA) stage 1, the split screen's line routine's words (table 0x46A), no columns
+ * routines; the video set up (sub_00484); then the sound driver loaded (sub_02C76: frames
+ * end inside it; on at 0x3F2) */
+int logic_boot_video(void)
+{
+    if (!start()) return 0;
+    begin(0x003BA);
+    set16(STAGE_ENTRY, 1);
+    REG_A[0] = 0x46A; REG_A[1] = 0xFFC0B0;
+    for (int k = 0; k < 3; k++) set16(0xFFC0B0 + 2 * (uint32_t)k, mem16(0x46A + 2 * (uint32_t)k));
+    REG_A[0] = 0x46E; REG_A[1] = 0xFFC0B4;
+    set32(0xFFC10C, 0);
+    set32(0xFFC110, 0);
+    call(0x00484, 0x003E6);
+    ran_to(0x003F2);
+    REG_A[7] -= 4; set32(REG_A[7], 0x003F2);
+    return jump_to(0x02C76);
+}
+
+/* (0x3F2) the controller ports: set up and what is in each (bits $C064, $C065, both
+ * $C066); the sprites and planes cleared, the screen on, the screens from the logo (mode
+ * 0); then the interrupts let in and the idle loop (0x458) */
+int logic_boot_pads(void)
+{
+    if (!start()) return 0;
+    begin(0x003F2);
+    call(0x007A8, 0x003F2);
+    REG_A[6] = 0xA10003;
+    call(0x0093C, 0x003FE);
+    set8(0xFFC064, (uint8_t)REG_D[7]);
+    REG_A[6] = 0xA10005;
+    call(0x0093C, 0x00410);
+    set8(0xFFC065, (uint8_t)REG_D[7]);
+    REG_D[7] = (REG_D[7] & 0xFFFFFF00u) | (uint8_t)(ram8(0xFFC064) + ram8(0xFFC065));
+    set8(0xFFC066, (uint8_t)REG_D[7]);
+    call(0x00522, 0x0042E);
+    set16(0xFFC07C, ram16(0xFFC07C) | 0x8140);
+    video_reg_word(ram16(0xFFC07C));
+    set32(SCREEN_RUN, 0x2E06);
+    set16(GAME_MODE, 0);
+    ran_to(0x00458);
+    return jump_to(0x00458);
 }

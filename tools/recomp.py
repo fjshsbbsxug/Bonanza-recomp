@@ -752,6 +752,9 @@ LOGIC = {
     0x28914: "logic_column_right_p2",
     0x289D2: "logic_column_left_p2",
     # small routines
+    0x00384: "logic_boot_options",
+    0x003BA: "logic_boot_video",
+    0x003F2: "logic_boot_pads",
     0x0430A: "logic_stage_setup",
     0x04322: "logic_stage_setup2",
     0x141F8: "logic_guards_setup",
