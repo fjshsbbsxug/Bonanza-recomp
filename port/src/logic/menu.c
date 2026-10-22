@@ -977,3 +977,74 @@ int logic_options_draw_level(void)
     ran_to(0x03ECA);
     return done();
 }
+
+/* sub_02E34 (screen mode 0): the SEGA logo's screen set up: the screen off, the work
+ * memory cleared (sub_00470: a frame ends inside it; on at 0x2E4C) */
+int logic_logo_setup(void)
+{
+    if (!start()) return 0;
+    begin(0x02E34);
+    screen_off();
+    ran_to(0x02E4C);
+    REG_A[7] -= 4; set32(REG_A[7], 0x02E4C);
+    return jump_to(0x00470);
+}
+
+/* (0x2E4C) the shadow and highlight on, the planes' size, the sprites cleared; then all
+ * of the video memory cleared (a video part, 0x2E7C; on at 0x2EBC) */
+int logic_logo_setup2(void)
+{
+    if (!start()) return 0;
+    begin(0x02E4C);
+    reg_keep(REG_MODE4, 0x8C81);
+    planes_size(0x9001);
+    call(0x006FA, 0x02E76);
+    return jump_to(0x02E7C);
+}
+
+/* (0x2EBC, long) the planes cleared, the text sets 0 and 1, the logo's map (12 x 4,
+ * table 0x30CA, or 0x312A on an overseas console); its shine's place and wait, 300
+ * frames, its frame (0x2F4A), the screen on */
+int logic_logo_setup3(void)
+{
+    begin_long(0x02EBC);
+    call(0x00522, 0x02EBC);
+    REG_D[7] = 0;
+    call(0x01550, 0x02EC4);
+    REG_D[7] = 1;
+    call(0x01550, 0x02ECC);
+    REG_D[5] = 0xB;
+    REG_D[6] = 3;
+    REG_A[0] = 0x30CA;
+    REG_D[0] = (REG_D[0] & 0xFFFFFF00u) | (uint8_t)(RD8(0xA10001) & 0x80);
+    if (!(uint8_t)REG_D[0]) branched(0x02EE4, 0x02EEC);
+    else { REG_A[0] = 0x312A; ran_to(0x02EEC); }
+    REG_D[0] = 0x461C0003;
+    ran_to(0x02EF2);
+    for (;;) {                                        /* (each row) */
+        set_lo(7, lo(REG_D[5]));
+        video_at_long(REG_D[0]);
+        ran_to(0x02EFA);
+        for (;;) {
+            video_put(mem16(REG_A[0]));
+            REG_A[0] += 2;
+            uint16_t c = lo(REG_D[7]);
+            set_lo(7, (uint16_t)(c - 1));
+            if (!c) { ran_to(0x02F04); break; }
+            branched(0x02F00, 0x02EFA);
+        }
+        REG_D[0] += 0x800000;
+        uint16_t c = lo(REG_D[6]);
+        set_lo(6, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x02F0E); break; }
+        branched(0x02F0A, 0x02EF2);
+    }
+    set16(0xFF17C6, 0x28);
+    set16(0xFF17C8, 3);
+    set16(0xFF5546, 0x12C);
+    set16(0xFF1814, 0);
+    screen_on();
+    screen_next(0x2F4A);
+    ran_to(0x02F48);
+    return done_long();
+}

@@ -461,6 +461,9 @@ extern int  logic_script_scroll_stop2(void);     /* sub_3C0C0 */
 extern int  logic_script_figures(void);          /* sub_3BDC8 */
 extern int  logic_script_none(void);             /* sub_3BBDE */
 extern int  logic_pad_mapping(void);             /* sub_03DFA (logic/menu.c) */
+extern int  logic_logo_setup(void);              /* sub_02E34 (logic/menu.c) */
+extern int  logic_logo_setup2(void);             /* sub_02E4C (logic/menu.c) */
+extern int  logic_logo_setup3(void);             /* sub_02EBC (logic/menu.c) */
 extern int  logic_title_setup(void);             /* sub_0318A (logic/menu.c) */
 extern int  logic_title_setup2(void);            /* (at 0x032EE) */
 extern int  logic_title_end(void);               /* sub_035BE (logic/menu.c) */
