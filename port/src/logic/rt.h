@@ -110,6 +110,10 @@ void scramble(uint32_t regs);
 int start_named(const char *name);
 void count_named(const char *name);     /* (LOGICSTATS: a part's calls, by name) */
 #define start() start_named(__func__)
+/* (a routine that reaches outside the machine kept - the sound player, the controller
+ * ports - is never put back: it starts with start_io(); they take a few instructions) */
+int start_io_named(const char *name);
+#define start_io() start_io_named(__func__)
 
 /* ---- a long routine (a screen's set-up): the game lets a frame end inside it, which a
  * routine in C cannot. It starts with begin_long(addr) (in place of start() and begin())

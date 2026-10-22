@@ -417,6 +417,8 @@ extern int  logic_options_end(void);             /* sub_03F8A (logic/menu.c) */
 extern int  logic_vblank_pads(void);             /* sub_00A22 (logic/screens.c) */
 extern int  logic_vblank_screen(void);           /* sub_00BE8 (logic/screens.c) */
 extern int  logic_vblank_end(void);              /* sub_00BF0 (logic/screens.c) */
+extern int  logic_work_clear(void);              /* sub_00470 (logic/screens.c) */
+extern int  logic_sound_start(void);             /* sub_02C76 (logic/sound.c) */
 /* the players' panels (logic/panel.c) */
 extern int  logic_panel_step(void);              /* sub_12F02 */
 extern int  logic_panel_step_p2(void);           /* sub_13354 */

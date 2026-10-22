@@ -5,7 +5,7 @@
  * is waiting to be sent: it goes first. */
 int logic_sound_request(void)
 {
-    if (!start()) return 0;
+    if (!start_io()) return 0;
     uint16_t waiting = ram16(SOUND_REQUEST);
     int music_waiting = (waiting & 0xFFF0) == 0x00E0;
     if (!music_waiting)
@@ -42,7 +42,7 @@ static void z80_reset_pulse(void)
 }
 int logic_z80_reset(void)
 {
-    if (!start()) return 0;
+    if (!start_io()) return 0;
     begin(0x02D3A);
     z80_reset_pulse();
     flags_of16(0x100);
@@ -54,7 +54,7 @@ int logic_z80_reset(void)
  * effect, then no more for 60 frames) */
 int logic_sound_now(void)
 {
-    if (!start()) return 0;
+    if (!start_io()) return 0;
     begin(0x02D76);
     z80_bus_take(0x02D7E, 0x02D86);
     WR8(0xA01C10, (uint8_t)REG_D[0]);
@@ -65,7 +65,7 @@ int logic_sound_now(void)
 }
 int logic_sound_play(void)
 {
-    if (!start()) return 0;
+    if (!start_io()) return 0;
     begin(0x02D98);
     z80_bus_take(0x02DA0, 0x02DA8);
     WR8(0xA01C0A, (uint8_t)REG_D[0]);
@@ -80,7 +80,7 @@ int logic_sound_play(void)
  * interrupts held off, unless one was sent less than 60 frames ago */
 int logic_sound_send(void)
 {
-    if (!start()) return 0;
+    if (!start_io()) return 0;
     begin(0x02DC2);
     if (ram16(0xFF566A)) { flags_of16(ram16(0xFF566A)); branched(0x02DC8, 0x02E04); return done(); }
     set_lo(0, ram16(SOUND_REQUEST));
@@ -97,4 +97,48 @@ int logic_sound_send(void)
     flags_of16(0);
     ran_to(0x02E04);
     return done();
+}
+
+/* sub_02C76 (long, like sub_00470: it always runs across frames): the sound driver into
+ * the Z80's memory (its code from 0x33000, its data from 0x3418C at $1200), its work set
+ * up, then the Z80 reset and let run */
+int logic_sound_start(void)
+{
+    begin_long(0x02C76);
+    WR16(0xA11100, 0x100);
+    ran_to(0x02C82);                                  /* (bsr sub_02D3A, inline) */
+    jumped_to(0x02D3A);
+    z80_reset_pulse();
+    ran_to(0x02D54);
+    jumped_to(0x02C82);
+    for (;;) {
+        if (!(RD8(0xA11100) & 1)) { ran_to(0x02C8C); break; }
+        branched(0x02C8A, 0x02C82);
+    }
+    static const struct { uint32_t from, to; uint16_t n; uint32_t loop, dbra; } copy[2] = {
+        {0x33000, 0xA00000, 0x118A, 0x02C9C, 0x02C9E}, {0x3418C, 0xA01200, 0x6FD, 0x02CB2, 0x02CB4},
+    };
+    for (int k = 0; k < 2; k++) {
+        REG_A[0] = copy[k].from;
+        REG_A[1] = copy[k].to;
+        set_lo(0, copy[k].n);
+        ran_to(copy[k].loop);
+        for (;;) {
+            WR8(REG_A[1], RD8(REG_A[0]));
+            REG_A[0]++; REG_A[1]++;
+            uint16_t c = lo(REG_D[0]);
+            set_lo(0, (uint16_t)(c - 1));
+            if (!c) { ran_to(copy[k].dbra + 4); break; }
+            branched(copy[k].dbra, copy[k].loop);
+        }
+    }
+    static const uint8_t work[10] = {3, 0x80, 0, 0x80, 0, 0, 0xCD, 0x80, 0, 0};
+    for (int i = 0; i < 10; i++) WR8(0xA01C00 + (uint32_t)i, work[i]);
+    WR8(0xA01BFF, 0);
+    WR8(0xA01C10, 0x80);
+    z80_reset_pulse();
+    WR16(0xA11100, 0);
+    flags_of16(0);
+    ran_to(0x02D38);
+    return done_long();
 }

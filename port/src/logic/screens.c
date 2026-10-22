@@ -312,7 +312,7 @@ int logic_jobs_clear(void)
 /* sub_007A8: the three controller ports' TH lines made outputs */
 int logic_pads_init(void)
 {
-    if (!start()) return 0;
+    if (!start_io()) return 0;
     begin(0x007A8);
     REG_D[0] = 0x40;
     WR8(0xA10009, 0x40);
@@ -327,7 +327,7 @@ int logic_pads_init(void)
  * held and the interrupts off meanwhile; d1, d2, a5 kept */
 int logic_pad_detect(void)
 {
-    if (!start()) return 0;
+    if (!start_io()) return 0;
     begin(0x0093C);
     uint32_t d1 = REG_D[1], d2 = REG_D[2], a5 = REG_A[5];
     REG_A[7] -= 12;
@@ -488,4 +488,25 @@ int logic_vblank_end(void)
     set16(0xFF17B4, 0);
     ran_to(0x00C0E);
     return jump_to(0x00C0E);
+}
+
+/* sub_00470 (long: it always runs across frames, so the game's code runs it, but for the
+ * checks with LOGIC_LONG_KEEP / LOGIC_LONG_REF): the work memory cleared, $C000 bytes
+ * from $FF0000 */
+int logic_work_clear(void)
+{
+    begin_long(0x00470);
+    REG_A[0] = 0xFF0000;
+    set_lo(0, 0x2FFF);
+    REG_D[1] = 0;
+    ran_to(0x0047C);
+    for (;;) {
+        set32(REG_A[0], 0);
+        REG_A[0] += 4;
+        uint16_t c = lo(REG_D[0]);
+        set_lo(0, (uint16_t)(c - 1));
+        if (!c) { ran_to(0x00482); break; }
+        branched(0x0047E, 0x0047C);
+    }
+    return done_long();
 }

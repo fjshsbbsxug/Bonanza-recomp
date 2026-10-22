@@ -282,6 +282,13 @@ static int kept_end(uint32_t popped)
     return 0;
 }
 
+int start_io_named(const char *name)
+{
+    if (!start_named(name)) return 0;
+    if (!cpu_call_ret) kept_active = 0;
+    return 1;
+}
+
 int start_long_named(const char *name, uint32_t addr)
 {
     static uint32_t bypass_at;
