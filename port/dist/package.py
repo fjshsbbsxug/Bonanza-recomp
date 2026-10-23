@@ -56,6 +56,7 @@ def kit(args):
     files["recomp/port/ext/musashi/m68kops.c"] = os.path.join(ROOT, "port", "ext", "musashi", "m68kops.c")
     files["recomp/port/ext/z80/z80.c"] = os.path.join(ROOT, "port", "ext", "z80", "z80.c")
     files["recomp/port/src/draw.h"] = os.path.join(ROOT, "port", "src", "draw.h")
+    files["recomp/port/src/logic.h"] = os.path.join(ROOT, "port", "src", "logic.h")
 
     def tree(src, to, ext=(".h",)):
         for name in sorted(os.listdir(src)):
