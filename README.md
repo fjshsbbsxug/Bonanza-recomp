@@ -373,7 +373,9 @@ builder/      the HTML builder page
     It never goes above the top of the level: on the top floor it shows the exit
     floor (roof), and once Robo is up there it stays still and shows him escaping,
     while the lower view shows the floor below instead of the same floor twice
-    (drawn from the map, characters where they really are).
+    (drawn from the map, characters where they really are). Going up the stairs to
+    that floor the lower view still follows him, then slides back down to the floor
+    below.
   * Colour styles (vivid, soft, arcade, grayscale, sepia, night, Game Boy, inverted),
     plus brightness, contrast, saturation and hue.
   * Player characters: separate shirt, pants and skin-tone colours for Robo and Mobo.

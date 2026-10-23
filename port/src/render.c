@@ -505,7 +505,11 @@ int vdp_local_player = -1;
 static int focus;           /* this frame: the view shown at the bottom (0 = player 1) */
 static int room_above_wy;   /* world y of the room-above view's first line */
 static uint32_t stacked_frame;  /* frame (+1) in which the views are stacked (see below) */
-static int stacked_top;         /* world y of the top view's first line then */
+static int stacked_bot;         /* world y of the lower view's first line then */
+static uint32_t settle_frame;   /* 1 player, top floor: frame (+1) of the values below */
+static int settle_wy;           /* world y the lower view shows (following him or settling) */
+static int settle_vs;           /* his camera's world y then */
+static int settle_rise;         /* frames left following him after his camera went up */
 
 /* ---- level map (what the game draws into plane A during play) ----
  *   $FF1838.l  map: words (metatile numbers), $FF2CCC words per row, one row per 16 px
@@ -1140,7 +1144,7 @@ static void plan_line(int y, line_plan *P)
                 /* player 2's screen: his view comes first, so the views are stacked
                  * from his camera of this frame (see room_above below) */
                 stacked_frame = md.frame + 1;
-                stacked_top = wy0 < 0 ? wy0 : 0;
+                stacked_bot = (wy0 < 0 ? wy0 : 0) + VIEW_H;
             }
         }
     }
@@ -1177,7 +1181,7 @@ static void plan_line(int y, line_plan *P)
     P->a_wy = wy0 + y - (in_bot ? VIEW_BOT_Y0 : VIEW_TOP_Y0);
     if (stacked) {
         P->a_map = P->a_map_all = 1;
-        P->a_wy = stacked_top + VIEW_H + (y - real_y0);
+        P->a_wy = stacked_bot + (y - real_y0);
     }
     map_on = P->a_map; map_all = P->a_map_all; map_camx = P->a_camx; map_wy = P->a_wy;
     draw_plane(a, y, width, m, 0);
@@ -1202,11 +1206,37 @@ static void plan_line(int y, line_plan *P)
          * then shows player 1's own floor, he is seen in it (escaping, too). */
         above_roof(0, -1);                    /* (works out roof_row for this level) */
         int top = roof_row > 0 ? roof_row * 16 : 0;
-        room_above_wy = view_rec[focus].vsA - VIEW_H;
+        int vs = view_rec[focus].vsA;
+        room_above_wy = vs - VIEW_H;
         if (room_above_wy < top) {
-            room_above_wy = view_rec[focus].vsA < top ? view_rec[focus].vsA : top;
-            stacked_frame = md.frame + 1;     /* player 1's view: the floor below */
-            stacked_top = room_above_wy;
+            room_above_wy = vs < top ? vs : top;
+            /* player 1's view: the floor below - but while he goes up the stairs to the
+             * top floor it follows him (the game's own camera), and once he is up there
+             * it slides back down to the floor below */
+            int want = room_above_wy + VIEW_H;
+            if (settle_frame != md.frame + 1) {          /* (once a frame) */
+                if (settle_frame != md.frame) {
+                    settle_wy = want;                    /* (not shown last frame) */
+                    settle_rise = 0;
+                } else {
+                    if (vs < settle_vs)
+                        settle_rise = 20;                /* his camera going up */
+                    else if (settle_rise)
+                        settle_rise--;
+                    if (settle_rise)
+                        settle_wy = vs;
+                    else if (settle_wy < want)
+                        settle_wy = settle_wy + 2 < want ? settle_wy + 2 : want;
+                    else
+                        settle_wy = want;
+                }
+                settle_vs = vs;
+                settle_frame = md.frame + 1;
+            }
+            if (settle_wy != vs) {
+                stacked_frame = md.frame + 1;
+                stacked_bot = settle_wy;
+            }
         }
     }
     P->b_wrap = m && playing && in_view && (room_view || map_view);
@@ -1249,7 +1279,7 @@ static void plan_line(int y, line_plan *P)
         /* the characters of player 1's view that are on the floor shown here: the game's
          * sprites where his camera covers it, the rest from the objects */
         if (y == real_y0)
-            shifted_pieces(real_y0, stacked_top + VIEW_H, wy0);
+            shifted_pieces(real_y0, stacked_bot, wy0);
         P->stacked = 1;
         int yb = real_y0 + P->a_wy - wy0;
         if (yb >= real_y0 && yb < real_y0 + VIEW_H)
