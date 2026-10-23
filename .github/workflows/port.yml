@@ -8,7 +8,8 @@ name: Port
 # package (port/dist/package.py, builder/gamecode.js).
 #
 # The pages are uploaded as the "BonanzaBuilders" artifact and, on pushes, published on
-# the Releases page (release "builder").
+# the Releases page (release "builder"). Artifacts only carry files between the jobs, so
+# they are kept a day (the account's artifact storage is small).
 
 on:
   push:
@@ -27,6 +28,11 @@ on:
 
 permissions:
   contents: read
+
+# (a newer push stops a run still going: the release only ever wants the newest)
+concurrency:
+  group: port-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   SDL_URL: https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz
@@ -55,6 +61,7 @@ jobs:
         with:
           name: bonanza-linux-x64
           path: out/bonanza-linux-x64.zip
+          retention-days: 1
 
   windows:
     runs-on: ubuntu-22.04
@@ -73,6 +80,7 @@ jobs:
         with:
           name: bonanza-windows-x64
           path: out/bonanza-windows-x64.zip
+          retention-days: 1
 
   android:
     runs-on: ubuntu-22.04
@@ -105,6 +113,7 @@ jobs:
         with:
           name: bonanza-android
           path: out/bonanza-android.apk
+          retention-days: 1
 
   tinycc:
     runs-on: ubuntu-22.04
@@ -129,6 +138,7 @@ jobs:
         with:
           name: tinycc
           path: out/tcc
+          retention-days: 1
 
   builders:
     needs: [linux, windows, android, tinycc]
@@ -156,6 +166,7 @@ jobs:
         with:
           name: BonanzaBuilders
           path: builders
+          retention-days: 1
 
   # the three builder pages as plain downloads on the Releases page (release "builder",
   # replaced on every push)
