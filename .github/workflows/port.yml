@@ -44,8 +44,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install SDL build dependencies
+        timeout-minutes: 8   # (a stuck package mirror otherwise holds the job for hours)
         run: |
-          sudo apt-get update
+          sudo apt-get -o Acquire::Retries=3 update
           sudo apt-get install -y --no-install-recommends \
             libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
             libxi-dev libxss-dev libxfixes-dev libxkbcommon-dev libwayland-dev wayland-protocols \
@@ -68,7 +69,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install MinGW-w64
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64
+        timeout-minutes: 8
+        run: sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends mingw-w64
       - name: Build the engine
         run: |
           cmake -S port -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake \
